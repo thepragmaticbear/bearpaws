@@ -1,93 +1,198 @@
-# Bearpaws
+# Superpowers
+
+Superpowers is a complete software development methodology for your coding agents, built on top of a set of composable skills and some initial instructions that make sure your agent uses them.
+
+## How it works
+
+It starts from the moment you fire up your coding agent. As soon as it sees that you're building something, it *doesn't* just jump into trying to write code. Instead, it steps back and asks you what you're really trying to do. 
+
+Once it's teased a spec out of the conversation, it shows it to you in chunks short enough to actually read and digest. 
+
+After you've signed off on the design, your agent puts together an implementation plan that's clear enough for an enthusiastic junior engineer with poor taste, no judgement, no project context, and an aversion to testing to follow. It emphasizes true red/green TDD, YAGNI (You Aren't Gonna Need It), and DRY. 
+
+Next up, once you say "go", it launches a *subagent-driven-development* process, having agents work through each engineering task, inspecting and reviewing their work, and continuing forward. It's not uncommon for Claude to be able to work autonomously for a couple hours at a time without deviating from the plan you put together.
+
+There's a bunch more to it, but that's the core of the system. And because the skills trigger automatically, you don't need to do anything special. Your coding agent just has Superpowers.
 
 
+## Sponsorship
 
-## Getting started
+If Superpowers has helped you do stuff that makes money and you are so inclined, I'd greatly appreciate it if you'd consider [sponsoring my opensource work](https://github.com/sponsors/obra).
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Thanks! 
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- Jesse
 
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/fitzgerald.brandoni/bearpaws.git
-git branch -M main
-git push -uf origin main
-```
-
-## Integrate with your tools
-
-* [Set up project integrations](https://gitlab.com/fitzgerald.brandoni/bearpaws/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+**Note:** Installation differs by platform. 
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Claude Code Official Marketplace
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Superpowers is available via the [official Claude plugin marketplace](https://claude.com/plugins/superpowers)
+
+Install the plugin from Anthropic's official marketplace:
+
+```bash
+/plugin install superpowers@claude-plugins-official
+```
+
+### Claude Code (Superpowers Marketplace)
+
+The Superpowers marketplace provides Superpowers and some other related plugins for Claude Code.
+
+In Claude Code, register the marketplace first:
+
+```bash
+/plugin marketplace add obra/superpowers-marketplace
+```
+
+Then install the plugin from this marketplace:
+
+```bash
+/plugin install superpowers@superpowers-marketplace
+```
+
+### OpenAI Codex CLI
+
+- Open plugin search interface
+
+```bash
+/plugins
+```
+
+Search for Superpowers
+
+```bash
+superpowers
+```
+
+Select `Install Plugin`
+
+### OpenAI Codex App
+
+- In the Codex app, click on Plugins in the sidebar.
+- You should see `Superpowers` in the Coding section. 
+- Click the `+` next to Superpowers and follow the prompts.
+
+
+### Cursor (via Plugin Marketplace)
+
+In Cursor Agent chat, install from marketplace:
+
+```text
+/add-plugin superpowers
+```
+
+or search for "superpowers" in the plugin marketplace.
+
+### OpenCode
+
+Tell OpenCode:
+
+```
+Fetch and follow instructions from https://raw.githubusercontent.com/obra/superpowers/refs/heads/main/.opencode/INSTALL.md
+```
+
+**Detailed docs:** [docs/README.opencode.md](docs/README.opencode.md)
+
+### GitHub Copilot CLI
+
+```bash
+copilot plugin marketplace add obra/superpowers-marketplace
+copilot plugin install superpowers@superpowers-marketplace
+```
+
+### Gemini CLI
+
+```bash
+gemini extensions install https://github.com/obra/superpowers
+```
+
+To update:
+
+```bash
+gemini extensions update superpowers
+```
+
+## The Basic Workflow
+
+1. **brainstorming** - Activates before writing code. Refines rough ideas through questions, explores alternatives, presents design in sections for validation. Saves design document.
+
+2. **using-git-worktrees** - Activates after design approval. Creates isolated workspace on new branch, runs project setup, verifies clean test baseline.
+
+3. **writing-plans** - Activates with approved design. Breaks work into bite-sized tasks (2-5 minutes each). Every task has exact file paths, complete code, verification steps.
+
+4. **subagent-driven-development** or **executing-plans** - Activates with plan. Dispatches fresh subagent per task with two-stage review (spec compliance, then code quality), or executes in batches with human checkpoints.
+
+5. **test-driven-development** - Activates during implementation. Enforces RED-GREEN-REFACTOR: write failing test, watch it fail, write minimal code, watch it pass, commit. Deletes code written before tests.
+
+6. **requesting-code-review** - Activates between tasks. Reviews against plan, reports issues by severity. Critical issues block progress.
+
+7. **finishing-a-development-branch** - Activates when tasks complete. Verifies tests, presents options (merge/PR/keep/discard), cleans up worktree.
+
+**The agent checks for relevant skills before any task.** Mandatory workflows, not suggestions.
+
+## What's Inside
+
+### Skills Library
+
+**Testing**
+- **test-driven-development** - RED-GREEN-REFACTOR cycle (includes testing anti-patterns reference)
+
+**Debugging**
+- **systematic-debugging** - 4-phase root cause process (includes root-cause-tracing, defense-in-depth, condition-based-waiting techniques)
+- **verification-before-completion** - Ensure it's actually fixed
+
+**Collaboration** 
+- **brainstorming** - Socratic design refinement
+- **writing-plans** - Detailed implementation plans
+- **executing-plans** - Batch execution with checkpoints
+- **dispatching-parallel-agents** - Concurrent subagent workflows
+- **requesting-code-review** - Pre-review checklist
+- **receiving-code-review** - Responding to feedback
+- **using-git-worktrees** - Parallel development branches
+- **finishing-a-development-branch** - Merge/PR decision workflow
+- **subagent-driven-development** - Fast iteration with two-stage review (spec compliance, then code quality)
+
+**Meta**
+- **writing-skills** - Create new skills following best practices (includes testing methodology)
+- **using-superpowers** - Introduction to the skills system
+
+## Philosophy
+
+- **Test-Driven Development** - Write tests first, always
+- **Systematic over ad-hoc** - Process over guessing
+- **Complexity reduction** - Simplicity as primary goal
+- **Evidence over claims** - Verify before declaring success
+
+Read [the original release announcement](https://blog.fsck.com/2025/10/09/superpowers/).
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+The general contribution process for Superpowers is below. Keep in mind that we don't generally accept contributions of new skills and that any updates to skills must work across all of the coding agents we support.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+1. Fork the repository
+2. Switch to the 'dev' branch
+3. Create a branch for your work
+4. Follow the `writing-skills` skill for creating and testing new and modified skills
+5. Submit a PR, being sure to fill in the pull request template.
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+See `skills/writing-skills/SKILL.md` for the complete guide.
+
+## Updating
+
+Superpowers updates are somewhat coding-agent dependent, but are often automatic.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT License - see LICENSE file for details
+
+## Community
+
+Superpowers is built by [Jesse Vincent](https://blog.fsck.com) and the rest of the folks at [Prime Radiant](https://primeradiant.com).
+
+- **Discord**: [Join us](https://discord.gg/35wsABTejz) for community support, questions, and sharing what you're building with Superpowers
+- **Issues**: https://github.com/obra/superpowers/issues
+- **Release announcements**: [Sign up](https://primeradiant.com/superpowers/) to get notified about new versions
