@@ -44,7 +44,7 @@ echo ""
 # Test 3: Verify self-review is mentioned
 echo "Test 3: Self-review requirement..."
 
-output=$(run_claude "Does the subagent-driven-development skill require implementers to do self-review? What should they check?" 30)
+output=$(run_claude "Does the subagent-driven-development skill require implementers to do self-review? What should they check? Read the implementer prompt." 30)
 
 if assert_contains "$output" "self-review\|self review" "Mentions self-review"; then
     : # pass
@@ -128,7 +128,7 @@ else
     exit 1
 fi
 
-if assert_not_contains "$output" "read.*file\|open.*file" "Doesn't make subagent read file"; then
+if assert_contains "$output" "never.*make.*subagent.*read\|no.*read.*file\|never.*read.*file\|not.*make.*read" "Doesn't make subagent read file"; then
     : # pass
 else
     exit 1

@@ -89,8 +89,21 @@ Look for:
 
 Output your review in the format specified in the template."
 
+# Portable timeout: prefer GNU timeout (Linux) → gtimeout (macOS coreutils) → no-op fallback
+portable_timeout() {
+    local duration=$1
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$duration" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$duration" "$@"
+    else
+        "$@"
+    fi
+}
+
 echo "================================================================================"
-cd "$SCRIPT_DIR/../.." && timeout 120 claude -p "$PROMPT" --permission-mode bypassPermissions 2>&1 | tee "$OUTPUT_FILE" || {
+cd "$SCRIPT_DIR/../.." && portable_timeout 120 claude -p "$PROMPT" --permission-mode bypassPermissions 2>&1 | tee "$OUTPUT_FILE" || {
     echo ""
     echo "================================================================================"
     echo "EXECUTION FAILED (exit code: $?)"

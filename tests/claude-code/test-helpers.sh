@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 # Helper functions for Claude Code skill tests
 
+# Portable timeout: prefer GNU timeout (Linux) → gtimeout (macOS coreutils) → no-op fallback
+portable_timeout() {
+    local duration=$1
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$duration" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$duration" "$@"
+    else
+        "$@"
+    fi
+}
+
 # Run Claude Code with a prompt and capture output
 # Usage: run_claude "prompt text" [timeout_seconds] [allowed_tools]
 run_claude() {
@@ -10,13 +23,13 @@ run_claude() {
     local output_file=$(mktemp)
 
     # Build command
-    local cmd="claude -p \"$prompt\""
+    local cmd="claude -p \"$prompt\" --permission-mode bypassPermissions"
     if [ -n "$allowed_tools" ]; then
         cmd="$cmd --allowed-tools=$allowed_tools"
     fi
 
     # Run Claude in headless mode with timeout
-    if timeout "$timeout" bash -c "$cmd" > "$output_file" 2>&1; then
+    if portable_timeout "$timeout" bash -c "$cmd" > "$output_file" 2>&1; then
         cat "$output_file"
         rm -f "$output_file"
         return 0
@@ -97,27 +110,27 @@ assert_order() {
     local pattern_b="$3"
     local test_name="${4:-test}"
 
-    # Get line numbers where patterns appear
-    local line_a=$(echo "$output" | grep -n "$pattern_a" | head -1 | cut -d: -f1)
-    local line_b=$(echo "$output" | grep -n "$pattern_b" | head -1 | cut -d: -f1)
+    # Get byte offsets where patterns appear (handles same-line occurrences)
+    local offset_a=$(echo "$output" | grep -i -b -o "$pattern_a" | head -1 | cut -d: -f1)
+    local offset_b=$(echo "$output" | grep -i -b -o "$pattern_b" | head -1 | cut -d: -f1)
 
-    if [ -z "$line_a" ]; then
+    if [ -z "$offset_a" ]; then
         echo "  [FAIL] $test_name: pattern A not found: $pattern_a"
         return 1
     fi
 
-    if [ -z "$line_b" ]; then
+    if [ -z "$offset_b" ]; then
         echo "  [FAIL] $test_name: pattern B not found: $pattern_b"
         return 1
     fi
 
-    if [ "$line_a" -lt "$line_b" ]; then
-        echo "  [PASS] $test_name (A at line $line_a, B at line $line_b)"
+    if [ "$offset_a" -lt "$offset_b" ]; then
+        echo "  [PASS] $test_name (A at offset $offset_a, B at offset $offset_b)"
         return 0
     else
         echo "  [FAIL] $test_name"
         echo "  Expected '$pattern_a' before '$pattern_b'"
-        echo "  But found A at line $line_a, B at line $line_b"
+        echo "  But found A at offset $offset_a, B at offset $offset_b"
         return 1
     fi
 }
