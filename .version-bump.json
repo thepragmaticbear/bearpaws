@@ -2,8 +2,6 @@
   "files": [
     { "path": "package.json", "field": "version" },
     { "path": ".claude-plugin/plugin.json", "field": "version" },
-    { "path": ".cursor-plugin/plugin.json", "field": "version" },
-    { "path": ".codex-plugin/plugin.json", "field": "version" },
     { "path": ".claude-plugin/marketplace.json", "field": "plugins.0.version" },
     { "path": "gemini-extension.json", "field": "version" }
   ],
@@ -14,7 +12,9 @@
       "node_modules",
       ".git",
       ".version-bump.json",
-      "scripts/bump-version.sh"
+      "scripts/bump-version.sh",
+      "docs/bearpaws/specs",
+      "docs/bearpaws/plans"
     ]
   }
 }

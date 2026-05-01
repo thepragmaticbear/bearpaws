@@ -1,6 +1,5 @@
 {
-  "name": "superpowers",
-  "version": "5.0.7",
-  "type": "module",
-  "main": ".opencode/plugins/superpowers.js"
+  "name": "bearpaws",
+  "version": "0.1.0",
+  "type": "module"
 }
