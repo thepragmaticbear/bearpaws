@@ -251,7 +251,7 @@ totals."
 **Files:**
 - Modify: `skills/writing-skills/SKILL.md` (append a new "## XML schema" section)
 
-- [ ] **Step 2.1: Read current writing-skills/SKILL.md tail to find the right insertion point**
+- [x] **Step 2.1: Read current writing-skills/SKILL.md tail to find the right insertion point**
 
 ```bash
 tail -50 skills/writing-skills/SKILL.md
@@ -259,7 +259,7 @@ tail -50 skills/writing-skills/SKILL.md
 
 Expected: ends with conventions/checklists. Append the new section *after* the last existing section heading.
 
-- [ ] **Step 2.2: Append the schema reference**
+- [x] **Step 2.2: Append the schema reference**
 
 Open `skills/writing-skills/SKILL.md` and append at the end:
 
@@ -339,7 +339,7 @@ Any tag outside this list fails the schema-validator test in `tests/schema-valid
 If you find legitimate skill content that has no home in the whitelist: **grow the whitelist with documented justification** in this file. Do NOT add ad-hoc tags. The schema's value is uniform parseability; ad-hoc tags defeat that.
 ```
 
-- [ ] **Step 2.3: Verify the file is valid markdown**
+- [x] **Step 2.3: Verify the file is valid markdown**
 
 ```bash
 wc -l skills/writing-skills/SKILL.md
@@ -347,7 +347,7 @@ wc -l skills/writing-skills/SKILL.md
 
 Expected: line count grew by ~70-80 lines.
 
-- [ ] **Step 2.4: Commit**
+- [x] **Step 2.4: Commit**
 
 ```bash
 git add skills/writing-skills/SKILL.md
