@@ -122,7 +122,7 @@ These tasks add tooling without changing skill behavior. They must land before T
 - Create: `tests/token-measurement/measure.sh`
 - Create: `tests/token-measurement/README.md`
 
-- [ ] **Step 1.1: Write the script**
+- [x] **Step 1.1: Write the script**
 
 ```bash
 mkdir -p tests/token-measurement
@@ -181,7 +181,7 @@ EOF
 chmod +x tests/token-measurement/measure.sh
 ```
 
-- [ ] **Step 1.2: Smoke-test the script against current state**
+- [x] **Step 1.2: Smoke-test the script against current state**
 
 ```bash
 tests/token-measurement/measure.sh | python3 -m json.tool
@@ -189,7 +189,7 @@ tests/token-measurement/measure.sh | python3 -m json.tool
 
 Expected: valid JSON with `bootstrap_additional_context_bytes` ≈ 5292 (matches the locked v0.1.0 baseline), `skills_skill_md_total_bytes` ≈ 108393, `skills_shared_total_bytes: 0`.
 
-- [ ] **Step 1.3: Write the README**
+- [x] **Step 1.3: Write the README**
 
 ```bash
 cat > tests/token-measurement/README.md <<'EOF'
@@ -227,7 +227,7 @@ diff <(jq -S . /tmp/before.json) <(jq -S . /tmp/after.json)
 EOF
 ```
 
-- [ ] **Step 1.4: Commit**
+- [x] **Step 1.4: Commit**
 
 ```bash
 git add tests/token-measurement/
