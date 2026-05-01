@@ -18,6 +18,9 @@
 | `using-bearpaws/SKILL.md` raw | 5,090 | 1,272 |
 | All 14 `SKILL.md` files combined | 108,393 | 27,098 |
 | `test-driven-development/SKILL.md` | 9,867 | 2,466 |
+| Skill-triggering pass rate (post-cleanup) | 5/6 | — |
+
+Skill-triggering failure: `writing-plans` — agent invokes `brainstorming` first (correct per skill priority: process skills before implementation skills). Same result as v0.1.0 tag baseline. Not a regression.
 
 Phase 1 targets: bootstrap ≥40% shrink (`additionalContext` 5,292 → ≤3,175 bytes), `test-driven-development` ≥30% shrink (9,867 → ≤6,907 bytes), measured by the script built in Task 2.
 
@@ -85,7 +88,7 @@ From spec §6, the risks Phase 1 must validate:
 
 **Files:** none (read-only test execution).
 
-- [ ] **Step 0.1: Run skill-triggering suite against the current `main` (post-Phase-0-cleanup)**
+- [x] **Step 0.1: Run skill-triggering suite against the current `main` (post-Phase-0-cleanup)**
 
 ```bash
 cd /Users/brandon/Downloads/bearpaws
@@ -94,11 +97,11 @@ tests/skill-triggering/run-all.sh 2>&1 | tee /tmp/bearpaws-baseline-phase1-start
 
 Expected: same 5/6 (or 6/6) result as v0.1.0 release notes record. Capture the summary block at the bottom of the log — it lists `✅` or `❌` per skill.
 
-- [ ] **Step 0.2: Record the baseline in this plan**
+- [x] **Step 0.2: Record the baseline in this plan**
 
 Edit this file's "Baseline metrics" table at the top to add a `Skill-triggering pass rate` row with the actual result from Step 0.1. If the result diverges from 5/6 (e.g. 4/6 or 6/6), that's significant — investigate before proceeding.
 
-- [ ] **Step 0.3: Commit the baseline**
+- [x] **Step 0.3: Commit the baseline**
 
 ```bash
 git add docs/bearpaws/plans/2026-05-01-bearpaws-phase-1-vertical-slice.md
