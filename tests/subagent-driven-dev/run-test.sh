@@ -4,7 +4,7 @@
 #
 # Example:
 #   ./run-test.sh go-fractals
-#   ./run-test.sh svelte-todo --plugin-dir /path/to/superpowers
+#   ./run-test.sh svelte-todo --plugin-dir /path/to/bearpaws
 
 set -e
 
@@ -43,7 +43,7 @@ fi
 
 # Create timestamped output directory
 TIMESTAMP=$(date +%s)
-OUTPUT_BASE="/tmp/superpowers-tests/$TIMESTAMP/subagent-driven-development"
+OUTPUT_BASE="/tmp/bearpaws-tests/$TIMESTAMP/subagent-driven-development"
 OUTPUT_DIR="$OUTPUT_BASE/$TEST_NAME"
 mkdir -p "$OUTPUT_DIR"
 
