@@ -9,6 +9,15 @@
 
 set -e
 
+# Portable timeout: prefer GNU timeout (Linux) → gtimeout (macOS coreutils) → no-op fallback
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="timeout 300"
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout 300"
+else
+    TIMEOUT_CMD=""
+fi
+
 SKILL_NAME="$1"
 PROMPT_FILE="$2"
 MAX_TURNS="${3:-3}"
@@ -68,11 +77,12 @@ echo "Running claude -p with explicit skill request..."
 echo "Prompt: $PROMPT"
 echo ""
 
-timeout 300 claude -p "$PROMPT" \
+env -u CLAUDECODE $TIMEOUT_CMD claude -p "$PROMPT" \
     --plugin-dir "$PLUGIN_DIR" \
     --dangerously-skip-permissions \
     --max-turns "$MAX_TURNS" \
     --output-format stream-json \
+    --verbose \
     > "$LOG_FILE" 2>&1 || true
 
 echo ""
