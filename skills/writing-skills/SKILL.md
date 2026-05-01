@@ -653,3 +653,76 @@ Same cycle: RED (baseline) → GREEN (write skill) → REFACTOR (close loopholes
 Same benefits: Better quality, fewer surprises, bulletproof results.
 
 If you follow TDD for code, follow it for skills. It's the same discipline applied to documentation.
+
+## XML schema (Phase 1+)
+
+Bearpaws skill bodies use a structural XML format with a closed tag whitelist. YAML frontmatter is unchanged (it's loader metadata). Markdown is allowed *inside* element content.
+
+### Tag whitelist
+
+| Tag | Purpose |
+|---|---|
+| `<skill>` | Root element. Wraps the entire skill body. |
+| `<purpose>` | One-paragraph what-this-skill-does. |
+| `<triggers>` | When the agent should reach for this skill. Contains `<rule>` children. |
+| `<rules>` / `<rule>` | Non-negotiable directives. One per `<rule>`. |
+| `<process>` / `<step>` | Ordered workflow. `<step>` children are sequential. |
+| `<flow format="dot\|mermaid">` | Diagram block. Markdown content (fenced code) inside. |
+| `<example type="good\|bad">` | Example with explicit polarity. Markdown allowed inside. |
+| `<antipattern>` | Common mistake to avoid. |
+| `<warning level="hard\|soft">` | Hard = critical behavioral imperative; soft = caution. |
+| `<gate name="...">` | Named blocking gate that must pass before proceeding. |
+| `<subagent-stop>` | "Skip this skill if dispatched as a subagent." |
+| `<include ref="_shared/...">` | Lazy-load shared content; agent calls Read when invoking the skill. |
+| `<see file="...">` | Pointer to auxiliary content; load only if explicitly relevant. |
+| `<placeholder name="...">` | Template variable. |
+
+Any tag outside this list fails the schema-validator test in `tests/schema-validator/`.
+
+### `<include>` vs. `<see>`
+
+- `<include ref="_shared/red-flags-tdd"/>` — *agent reads this file when invoking the skill*. Use for content extracted for dedup. Extraction rule: **>25 lines AND >=2 consumers**.
+- `<see file="references/anthropic-best-practices.md"/>` — *auxiliary; consult only if explicitly relevant*. Use for heavy refs that should not pre-load. Demotion rule: **>150 lines AND used in <30% of skill invocations**.
+
+### Skill-body shape
+
+```xml
+<skill>
+  <purpose>One paragraph.</purpose>
+
+  <triggers>
+    <rule>Use when X</rule>
+    <rule>Use before Y</rule>
+  </triggers>
+
+  <warning level="hard">
+    Don't do Z without W.
+  </warning>
+
+  <process>
+    <step>First, ...</step>
+    <step>Then, ...</step>
+  </process>
+
+  <flow format="dot">
+    ```dot
+    digraph foo { ... }
+    ```
+  </flow>
+
+  <example type="bad">
+    <!-- markdown allowed inside -->
+  </example>
+
+  <include ref="_shared/red-flags-process"/>
+  <see file="references/deep-dive.md"/>
+</skill>
+```
+
+### Bootstrap exception
+
+`skills/using-bearpaws/SKILL.md` is the bootstrap. It cannot use `<include>` because at session start the agent has not yet been taught the convention — the include would be circular. `<see>` is fine in the bootstrap (opt-in pointer).
+
+### When the schema is too rigid
+
+If you find legitimate skill content that has no home in the whitelist: **grow the whitelist with documented justification** in this file. Do NOT add ad-hoc tags. The schema's value is uniform parseability; ad-hoc tags defeat that.
