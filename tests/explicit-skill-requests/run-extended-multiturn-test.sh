@@ -12,7 +12,7 @@ OUTPUT_DIR="/tmp/bearpaws-tests/${TIMESTAMP}/explicit-skill-requests/extended-mu
 mkdir -p "$OUTPUT_DIR"
 
 PROJECT_DIR="$OUTPUT_DIR/project"
-mkdir -p "$PROJECT_DIR/docs/superpowers/plans"
+mkdir -p "$PROJECT_DIR/docs/bearpaws/plans"
 
 echo "=== Extended Multi-Turn Test ==="
 echo "Output dir: $OUTPUT_DIR"
