@@ -46,8 +46,8 @@ description: Use when about to deploy a Cloud Run service or job — running gcl
     ```
     </step>
     <step>Capture the URL from the deploy output. Hit it (or the IAM-protected equivalent) and confirm a known-good response.</step>
-    <step>Tail logs for ~60s: `gcloud run services logs tail $SERVICE --region=$REGION`. Watch for crash loops, missing-secret errors, permission errors.</step>
-    <step>Check error rate in Cloud Run metrics for the new revision (Cloud Console or `gcloud monitoring`). If error rate spikes, roll back: `gcloud run services update-traffic $SERVICE --to-revisions=$PREV_REV=100`.</step>
+    <step>Tail logs for ~60s: `gcloud beta run services logs tail $SERVICE --project=$PROJECT_ID` (or fall back to `gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name="$SERVICE"' --limit=50 --freshness=5m --project=$PROJECT_ID`). Watch for crash loops, missing-secret errors, permission errors.</step>
+    <step>Check error rate for the new revision in the Cloud Run console (Metrics tab) or via `gcloud monitoring dashboards`/`metrics-scopes`. If error rate spikes, roll back: `gcloud run services update-traffic $SERVICE --to-revisions=$PREV_REV=100 --region=$REGION`.</step>
   </process>
 
   <example type="bad">

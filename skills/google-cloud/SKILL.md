@@ -1,6 +1,6 @@
 ---
 name: google-cloud
-description: Use when working on Google Cloud Platform projects, choosing GCP services, configuring IAM, or debugging GCP-related issues
+description: Use as a reference for GCP mental model — service choice, IAM (ADC, service accounts, Workload Identity Federation), project/billing/quota structure, gcloud CLI mechanics. The *what and why*. Pair with working-on-google-cloud for hands-on workflow
 ---
 
 <skill>

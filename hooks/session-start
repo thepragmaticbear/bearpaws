@@ -14,8 +14,15 @@ if [ -d "$legacy_skills_dir" ]; then
     warning_message="\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER:⚠️ **WARNING:** Bearpaws now uses Claude Code's skills system. Custom skills in ~/.config/bearpaws/skills will not be read. Move custom skills to ~/.claude/skills instead. To make this message go away, remove ~/.config/bearpaws/skills</important-reminder>"
 fi
 
-# Read using-bearpaws content
-using_bearpaws_content=$(cat "${PLUGIN_ROOT}/skills/using-bearpaws/SKILL.md" 2>&1 || echo "Error reading using-bearpaws skill")
+# Read using-bearpaws content. Fail loudly if missing/empty/unreadable —
+# Claude Code surfaces a non-zero exit as a hook error rather than silently
+# injecting a garbage bootstrap.
+SKILL_FILE="${PLUGIN_ROOT}/skills/using-bearpaws/SKILL.md"
+if [ ! -r "$SKILL_FILE" ] || [ ! -s "$SKILL_FILE" ]; then
+    echo "bearpaws session-start: ${SKILL_FILE} missing, empty, or unreadable" >&2
+    exit 1
+fi
+using_bearpaws_content=$(cat "$SKILL_FILE")
 
 # Escape string for JSON embedding using bash parameter substitution.
 # Each ${s//old/new} is a single C-level pass - orders of magnitude

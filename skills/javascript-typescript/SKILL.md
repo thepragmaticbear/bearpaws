@@ -1,6 +1,6 @@
 ---
 name: javascript-typescript
-description: Use when working on JavaScript or TypeScript projects, debugging type errors, or making decisions about types, patterns, or module systems
+description: Use as a reference for JS/TS language mechanics — ES2022+ idioms, TS 5.x type system, behavior-changing tsconfig flags, ESM/CJS interop, Node vs. browser vs. worker resolution. Pair with writing-typescript for active authoring decisions
 ---
 
 <skill>

@@ -12,6 +12,7 @@ description: "You MUST use this before any creative work - creating features, bu
   <triggers>
     <rule>Use before any creative work: new features, components, modifications.</rule>
     <rule>Use before any implementation skill — brainstorming produces the spec.</rule>
+    <rule>If the prompt has a project context (existing codebase) and you haven't onboarded this session, invoke `bp:onboarding-to-a-project` first. Standard flow: onboarding identifies key files & stack → brainstorming designs against those conventions → implementation. For purely abstract design questions with no specific project, brainstorming is the entry point.</rule>
   </triggers>
 
   <gate name="no-implementation">

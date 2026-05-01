@@ -1,6 +1,6 @@
 ---
 name: working-with-vite
-description: Use when setting up a new Vite project, adding features to Vite config, or troubleshooting Vite dev/build issues
+description: Use when actively initializing a Vite project, modifying vite.config, debugging "module not found"/alias errors, or wiring Vitest/proxy — hands-on workflow. Pair with vite for mechanics reference
 ---
 
 <skill>

@@ -9,7 +9,7 @@
     {
       "name": "bp",
       "description": "Bearpaws — a Claude Code skills library for Google Cloud, ADK, Vite, JS/TS, and Cloud Run development. Forked from superpowers v5.0.7.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "./",
       "author": {
         "name": "Brandon Fitzgerald",

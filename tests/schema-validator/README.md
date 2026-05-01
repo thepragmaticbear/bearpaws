@@ -12,16 +12,15 @@ Exit 0 = pass. Exit 1 = at least one violation; first lines of output identify f
 
 ## What's checked
 
-- Every `*.md` and `*.html` under `skills/` (excluding `skills/_shared/`).
+- Every `skills/*/SKILL.md`. Supporting files (HTML templates, external Anthropic docs, code examples) are intentionally excluded since they may legitimately contain non-schema tags.
 - Opening tags only (e.g. `<warning level="hard">`); attributes ignored.
 - Self-closing tags (`<see file="..."/>`) treated like opening tags.
 
 ## What's NOT checked
 
-- Schema *correctness* (e.g. `<step>` inside `<triggers>`). Phase 1 does not need a full grammar — the whitelist alone catches the common drift modes.
+- Schema *correctness* (e.g. `<step>` inside `<triggers>`). The whitelist alone catches the common drift modes; a full grammar is out of scope for v1.x.
+- Files outside `skills/*/SKILL.md` — supporting files in `skills/<name>/references/`, `examples/`, or `scripts/` may contain HTML, code, or external-doc tags that aren't part of the schema.
 
-## Migration backlog (as of Phase 1 start)
+## Status
 
-The validator deliberately fails on the current `skills/` tree — every legacy tag listed in the failure output is a Phase 1 or Phase 2 migration target. As migrations land, the violation count drops to zero.
-
-Current baseline: 121 violations. Most are from HTML in reference files (`visual-companion.md`, `frame-template.html`, `anthropic-best-practices.md`); the SKILL.md-specific legacy tags (`<SUBAGENT-STOP>`, `<EXTREMELY-IMPORTANT>`, `<HARD-GATE>`, `<Good>`, `<Bad>`) are the primary migration targets.
+Pass at v1.0.0 and v1.1.0: 0 violations across all 25 SKILL.md files.

@@ -1,6 +1,6 @@
 ---
 name: vite
-description: Use when working on a project that uses Vite as its build tool or dev server, or when configuring Vite plugins, optimizations, or build settings
+description: Use as a reference for Vite mechanics — dev server vs. build pipeline, plugin model and ordering, HMR, import.meta.env conventions, SSR mode. The *how Vite works*. Pair with working-with-vite for hands-on workflow
 ---
 
 <skill>

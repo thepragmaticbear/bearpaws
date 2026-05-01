@@ -1,6 +1,6 @@
 ---
 name: working-on-google-cloud
-description: Use when deploying to GCP, setting up infrastructure, configuring services, or debugging GCP deployment issues
+description: Use when actively bootstrapping a GCP project (set project, enable APIs, ADC), running gcloud commands, troubleshooting a permissions error, or making cost/region decisions — hands-on workflow. Pair with google-cloud for the *what/why* reference
 ---
 
 <skill>

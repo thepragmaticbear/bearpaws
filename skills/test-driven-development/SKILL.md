@@ -126,7 +126,6 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
   Can't check all boxes? You skipped TDD. Start over.
 
-  <include ref="_shared/red-flags-skill-discipline"/>
   <see file="testing-anti-patterns.md"/>
 
 </skill>

@@ -1,6 +1,6 @@
 ---
 name: google-adk
-description: Use when building AI agents with Google Agent Development Kit (ADK), configuring agent tools, or designing multi-agent systems with ADK
+description: Use as a reference for Google ADK architecture — LlmAgent shapes, Tool/FunctionTool/built-ins, sessions/state/memory, callbacks, runners, Vertex AI Agent Engine vs. Cloud Run targets. Pair with building-with-adk for active scaffolding
 ---
 
 <skill>
@@ -16,29 +16,31 @@ description: Use when building AI agents with Google Agent Development Kit (ADK)
   </triggers>
 
   <rules>
-    <rule>**Agent = LLM + tools + instructions** — an `Agent` wraps a model with system instructions and a set of tools it can invoke. The agent loop: receive input → think → call tools → respond.</rule>
-    <rule>**Tools are Python functions** — decorated with `@tool` or registered via `FunctionTool`. Docstrings become the tool description the LLM sees. Type hints become parameter schemas.</rule>
-    <rule>**Session state** — `ctx.session.state` is a dict persisted across turns within a session. Use for conversation memory, user preferences, accumulated data.</rule>
-    <rule>**Multi-agent via delegation** — agents can have `sub_agents`. Parent delegates to child via natural language routing or explicit transfer. Each sub-agent has its own tools and instructions.</rule>
-    <rule>**Callbacks for control** — `before_tool_call`, `after_tool_call`, `before_agent_call` callbacks intercept the agent loop for logging, validation, or overriding behavior.</rule>
-    <rule>**Model selection** — `model="gemini-2.0-flash"` for fast/cheap, `model="gemini-2.5-pro"` for complex reasoning. Specify in Agent constructor.</rule>
-    <rule>**Structured output** — use `output_schema` parameter with a Pydantic model to get typed JSON responses from the agent.</rule>
-    <rule>**Grounding** — `google_search` tool for real-time web info. Vertex AI Search for enterprise corpus. RAG via custom retrieval tools.</rule>
+    <rule>**Agent = LLM + tools + instructions** — `LlmAgent` (alias `Agent`) wraps a model with system instructions and a set of tools. Loop: receive input → think → call tools → respond.</rule>
+    <rule>**Tools are plain Python functions** — pass them directly in `tools=[fn]` and ADK auto-wraps them. Use `FunctionTool(fn)` for explicit registration; `LongRunningFunctionTool(fn)` for async/long-running. Docstrings become the tool description the LLM sees; type hints become parameter schemas. There is no `@tool` decorator.</rule>
+    <rule>**Session state** — `tool_context.state` (or `callback_context.state`) is a dict persisted across turns within a session. Use for conversation memory, user preferences, accumulated data.</rule>
+    <rule>**Multi-agent via delegation** — agents can have `sub_agents`. Parent delegates via LLM-driven routing or `transfer_to_agent`. Each sub-agent has its own tools and instructions.</rule>
+    <rule>**Callbacks for control** — `before_tool_callback`, `after_tool_callback`, `before_agent_callback`, `after_agent_callback`, `before_model_callback`, `after_model_callback` intercept the loop for logging, validation, or overriding.</rule>
+    <rule>**Model selection** — `model="gemini-flash-latest"` for fast/cheap (alias; can shift between stable and preview revisions, pin a dated ID for production reproducibility); `model="gemini-2.5-pro"` for complex reasoning. Verify the current SOTA Pro model in Google's model catalog before pinning.</rule>
+    <rule>**Structured output** — use `output_schema` with a Pydantic model to get typed JSON responses from the agent.</rule>
+    <rule>**Grounding** — `google_search` built-in tool for real-time web info. Vertex AI Search for enterprise corpus. RAG via custom retrieval tools.</rule>
   </rules>
 
   ## Core architecture
 
-  ```
-  Agent(
-    name="agent-name",
-    model="gemini-2.0-flash",
-    instruction="You are a helpful assistant that...",
-    tools=[tool_a, tool_b],
-    sub_agents=[specialist_agent],
+  ```python
+  from google.adk.agents import LlmAgent
+
+  root_agent = LlmAgent(
+      name="agent-name",
+      model="gemini-flash-latest",
+      instruction="You are a helpful assistant that...",
+      tools=[tool_a, tool_b],
+      sub_agents=[specialist_agent],
   )
   ```
 
-  **Runner** executes the agent loop: `Runner(agent=agent, session_service=session_service)`. Call `runner.run(user_id, session_id, message)` to get a streaming or complete response.
+  **Runner** executes the agent loop: `Runner(agent=root_agent, session_service=session_service)`. Call `runner.run_async(user_id, session_id, new_message)` to stream events.
 
   **Session service** — `InMemorySessionService` for dev, `DatabaseSessionService` for persistence, `VertexAiSessionService` for managed deployment.
 
@@ -46,11 +48,11 @@ description: Use when building AI agents with Google Agent Development Kit (ADK)
 
   | Pattern | Use case |
   |---|---|
-  | `@tool` decorator | Simple stateless function tools |
-  | `FunctionTool(fn)` | Programmatic registration |
-  | `ToolContext` param | Access session state, auth tokens within tool |
-  | `long_running=True` | Async operations that take time |
-  | `auth_config` | Tools requiring user OAuth (Google APIs, etc.) |
+  | Plain function in `tools=[fn]` | Auto-wrapped — the default path for most tools |
+  | `FunctionTool(fn)` | Explicit registration when you need a handle |
+  | `LongRunningFunctionTool(fn)` | Async / long-running operations |
+  | `ToolContext` param | Access `state`, auth tokens, artifacts within a tool |
+  | `auth_config=` on a tool | Tools requiring user OAuth (Google APIs, etc.) |
 
   ## Multi-agent patterns
 
@@ -65,9 +67,9 @@ description: Use when building AI agents with Google Agent Development Kit (ADK)
 
   | Target | Method |
   |---|---|
-  | Local dev | `adk web` or `adk run` CLI |
-  | Vertex AI Agent Engine | `agent_engines.create(agent=agent)` — fully managed |
-  | Cloud Run | Containerize with `adk deploy cloud_run` or custom Dockerfile |
-  | Custom server | Use `Runner` in FastAPI/Flask, manage sessions yourself |
+  | Local dev | `adk web` (browser UI) or `adk run` (CLI) |
+  | Vertex AI Agent Engine | Wrap with `app = reasoning_engines.AdkApp(agent=root_agent, ...)`, then `vertexai.agent_engines.create(agent_engine=app, requirements=[...])` — fully managed |
+  | Cloud Run | `adk deploy cloud_run --project=PROJECT_ID --region=REGION` or a custom Dockerfile |
+  | Custom server | Wrap `Runner` in FastAPI/Flask, manage sessions yourself |
 
 </skill>

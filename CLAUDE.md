@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bearpaws is a Claude Code (and Gemini CLI) skills plugin that is a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original. The fork's primary goal is **token-efficiency**: delivering the same behavioral performance (skill triggering, compliance, code quality) while significantly reducing per-session token consumption through structured compression, deferred loading, and tighter prompt engineering.
 
-Skills cover TDD, debugging, planning, code review, and parallel execution, plus domain-knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
+Skills cover TDD, debugging, planning, code review, and parallel execution, plus domain-knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run, plus a stack-agnostic onboarding skill for projects outside those domains. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
 
 ## Repository layout
 
@@ -24,11 +24,11 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 
 ## How the bootstrap works
 
-The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) registers the [hooks/hooks.json](hooks/hooks.json) `SessionStart` hook (matchers: `startup|clear|compact`). That hook calls [hooks/run-hook.cmd](hooks/run-hook.cmd) → [hooks/session-start](hooks/session-start), which:
+The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) registers the [hooks/hooks.json](hooks/hooks.json) `SessionStart` hook (matchers: `startup|clear`). That hook calls [hooks/run-hook.cmd](hooks/run-hook.cmd) → [hooks/session-start](hooks/session-start), which:
 
-1. Reads [skills/using-bearpaws/SKILL.md](skills/using-bearpaws/SKILL.md).
-2. Wraps it in an `<EXTREMELY_IMPORTANT>` block (Phase 0; replaced with `<warning level="hard">` in Phase 1 per the XML-schema spec).
-3. Emits JSON in the shape Claude Code expects: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`.
+1. Reads [skills/using-bearpaws/SKILL.md](skills/using-bearpaws/SKILL.md). Fails loudly (exit 1, stderr) if the file is missing/empty/unreadable rather than emitting a garbage bootstrap silently.
+2. Wraps it in a `<warning level="hard">` block (per the XML schema in the design spec §2).
+3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Copilot CLI / SDK-standard: top-level `additionalContext`.
 
 [hooks/run-hook.cmd](hooks/run-hook.cmd) is a bash/cmd polyglot so the same file works on macOS/Linux and Windows. Hook scripts under [hooks/](hooks/) are intentionally **extensionless** — Claude Code's Windows auto-detection prepends `bash` to anything ending in `.sh`, which would double-wrap the call.
 
@@ -89,7 +89,7 @@ Constraints worth knowing before editing frontmatter:
 - Frontmatter total ≤ 1024 chars; `name` is letters/numbers/hyphens only.
 - Heavy reference material (>100 lines) and reusable scripts go in sibling files; keep `SKILL.md` focused on the rule.
 
-See [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md) and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. The XML-schema migration described in [docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md](docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md) §2 lands in Phase 1; until then, skill bodies remain in the legacy markdown-with-ad-hoc-tags form inherited from superpowers.
+See [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md) and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All 24 skill bodies are in the XML schema described in [docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md](docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md) §2 — the schema validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
 
 ## Commit conventions
 

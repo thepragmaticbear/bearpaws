@@ -17,7 +17,7 @@ description: Use when working on Google Cloud Run — gcloud run commands, servi
   <rules>
     <rule>Cloud Run *services* serve HTTP requests; *jobs* run to completion. Long-running batch work = job. Always-on API = service.</rule>
     <rule>Each `gcloud run deploy` creates a new immutable *revision*. Traffic routing is independent — 100% to latest by default, or split via `--no-traffic` + `gcloud run services update-traffic`.</rule>
-    <rule>Default scaling is request-based; CPU is allocated only during requests. For background work or to avoid cold starts, use `--cpu-boost` or `--cpu-always-allocated`.</rule>
+    <rule>Default scaling is request-based; CPU is allocated only during requests. For background work, set `--no-cpu-throttling` (CPU stays on between requests). For faster cold-start CPU, add `--cpu-boost`.</rule>
     <rule>Concurrency default is 80 simultaneous requests per instance; tune down for memory-heavy or CPU-bound work.</rule>
     <rule>`--min-instances=0` is cheaper but cold-starts; `--min-instances=1+` removes cold-start at the cost of always-on billing.</rule>
     <rule>Runtime service account != deployer service account. Bind only the runtime SA to the resources the service actually accesses.</rule>

@@ -1,6 +1,6 @@
 ---
 name: writing-typescript
-description: Use when writing new TypeScript code, designing type hierarchies, or making module/export decisions in a TypeScript project
+description: Use when actively writing or refactoring TypeScript — choosing unknown/any/generics, narrowing types (predicates, satisfies, discriminated unions), Result vs. throw error handling, structuring tsconfig for a new project — hands-on authoring
 ---
 
 <skill>

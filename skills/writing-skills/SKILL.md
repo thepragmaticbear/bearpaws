@@ -188,7 +188,7 @@ Bearpaws skill bodies use a structural XML format with a closed tag whitelist. Y
 | `<warning level="hard\|soft">` | Hard = critical behavioral imperative; soft = caution. |
 | `<gate name="...">` | Named blocking gate that must pass before proceeding. |
 | `<subagent-stop>` | "Skip this skill if dispatched as a subagent." |
-| `<include ref="_shared/...">` | Structural dedup marker for extracted shared content. Advisory — agent may or may not auto-read. |
+| `<include ref="...">` | Structural dedup marker for extracted shared content. **Advisory only** — agents do not auto-read it. Reserve for content reused by ≥2 skills and >25 lines. |
 | `<see file="...">` | Pointer to auxiliary content; load only if explicitly relevant. |
 | `<placeholder name="...">` | Template variable. |
 
@@ -196,7 +196,7 @@ Any tag outside this list fails the schema-validator test in `tests/schema-valid
 
 ### `<include>` vs. `<see>`
 
-- `<include ref="_shared/red-flags-tdd"/>` — *structural dedup marker*. Agent may or may not auto-read (Phase 1 finding: agents treat this as advisory, not imperative). Use for content extracted for dedup. Extraction rule: **>25 lines AND >=2 consumers**.
+- `<include ref="references/red-flags-tdd"/>` — *structural dedup marker*. Agent does **not** auto-read (Phase 1 finding: agents treat the tag as advisory annotation, not an imperative `Read` call). Use only when the extraction rule is met: **>25 lines AND ≥2 consumers**. As of v1.1.0, no skill uses `<include>`; the tag remains in the schema for future use.
 - `<see file="references/anthropic-best-practices.md"/>` — *auxiliary; consult only if explicitly relevant*. Use for heavy refs that should not pre-load. Demotion rule: **>150 lines AND used in <30% of skill invocations**.
 
 ### Skill-body shape
@@ -229,7 +229,6 @@ Any tag outside this list fails the schema-validator test in `tests/schema-valid
     <!-- markdown allowed inside -->
   </example>
 
-  <include ref="_shared/red-flags-process"/>
   <see file="references/deep-dive.md"/>
 </skill>
 ```

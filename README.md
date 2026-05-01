@@ -1,8 +1,12 @@
 # Bearpaws
 
-A Claude Code (and Gemini CLI) skills plugin focused on **token-efficiency** — delivering the same behavioral performance as [superpowers](https://github.com/obra/superpowers) while significantly reducing per-session token consumption.
+> **A hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 by Jesse Vincent and contributors (MIT).** Bearpaws preserves the original license and credits the upstream authors; it is not affiliated with or endorsed by the superpowers project.
 
-**24 skills** covering TDD, debugging, planning, code review, parallel execution, and domain knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run. All skill bodies use a structured XML schema with lazy-loaded references.
+A Claude Code (and Gemini CLI) skills plugin focused on **token-efficiency** — delivering the same behavioral performance as superpowers while significantly reducing per-session token consumption.
+
+**25 skills** covering TDD, debugging, planning, code review, parallel execution, plus a stack-agnostic onboarding skill and domain knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run. All skill bodies use a structured XML schema with lazy-loaded references.
+
+**How skills compose.** Standard flow when there's a project: (1) `bp:onboarding-to-a-project` identifies key files and stack from manifests, README, and similar files; (2) `bp:brainstorming` designs against those discovered conventions; (3) other process skills (writing-plans, TDD, debugging, code review) carry implementation; (4) domain skills (`cloud-run`, `vite`, `google-adk`, etc.) layer on as needed. Onboarding → brainstorming → implementation. Onboarding is skipped only for purely abstract design questions with no project context.
 
 ## Install (Claude Code)
 
@@ -31,7 +35,19 @@ gemini extensions link /path/to/bearpaws
 
 ## Skills
 
-### Process skills (14)
+### Bootstrap (1)
+
+| Skill | Purpose |
+|---|---|
+| `bp:using-bearpaws` | Auto-loaded by the `SessionStart` hook. Establishes skill-discovery discipline (Red Flags, lazy-load contract, skill-priority order). Never invoked directly. |
+
+### Always-first (1)
+
+| Skill | Purpose |
+|---|---|
+| `bp:onboarding-to-a-project` | **First on any work that touches the codebase.** Detect stack from manifests, read CLAUDE.md/AGENTS.md, sample existing files, find the test command. Skipped for pure ideation. |
+
+### Process skills (13)
 
 | Skill | Purpose |
 |---|---|
@@ -68,12 +84,14 @@ gemini extensions link /path/to/bearpaws
 
 Bearpaws delivers the same skill-triggering reliability as superpowers with significantly less context:
 
-| Metric | superpowers v5.0.7 | Bearpaws v1.0.0 | Delta |
+| Metric | superpowers v5.0.7 | Bearpaws v1.1.0 | Delta |
 |---|---:|---:|---|
-| Bootstrap injected per session | 5,292 bytes | 2,907 bytes | -45% |
-| Process skill bodies | 108,393 bytes | 53,477 bytes | -51% |
-| Average bytes per skill | 7,742 | 3,748 | -52% |
-| Skills | 14 | 24 | +71% |
+| Bootstrap injected per session | 5,292 bytes (~1,323 tokens) | 4,295 bytes (~1,022 tokens) | -19% bytes / -23% tokens |
+| Process skill bodies (14, apples-to-apples) | 108,393 bytes (~27,098 tokens) | ~53,800 bytes (~12,800 tokens) | -50% bytes / -53% tokens |
+| All SKILL.md (now 25 skills, +11 net-new) | — | 101,579 bytes (~24,200 tokens) | net-new domain + onboarding skills add coverage |
+| Skills | 14 | 25 | +79% |
+
+Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer. Byte and token reductions stay within ~2 percentage points of each other across the suite. The bootstrap is paid every session; non-bootstrap skills load on-demand via the `Skill` tool.
 
 ## Tests
 

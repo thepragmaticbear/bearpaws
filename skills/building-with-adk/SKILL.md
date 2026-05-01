@@ -1,6 +1,6 @@
 ---
 name: building-with-adk
-description: Use when creating a new ADK agent, adding tools to an existing agent, or deploying ADK agents to production
+description: Use when actively scaffolding a new ADK agent project, adding a tool, wiring sub-agents/runners, or deploying to Cloud Run/Agent Engine — hands-on workflow. Pair with google-adk for the architecture reference
 ---
 
 <skill>
@@ -44,34 +44,37 @@ description: Use when creating a new ADK agent, adding tools to an existing agen
   ## Tool implementation pattern
 
   ```python
-  from google.adk.tools import tool, ToolContext
+  from google.adk.tools import ToolContext
 
-  @tool
-  def search_database(query: str, limit: int = 10, ctx: ToolContext = None) -> dict:
+  def search_database(query: str, tool_context: ToolContext, limit: int = 10) -> dict:
       """Search the product database.
 
       Args:
           query: Search query string.
           limit: Maximum results to return.
       """
-      # Access session state if needed
-      user_prefs = ctx.session.state.get("preferences", {})
+      # Access session state via the ToolContext
+      user_prefs = tool_context.state.get("preferences", {})
 
       results = db.search(query, limit=limit, **user_prefs)
       return {"results": results, "count": len(results)}
   ```
 
+  Plain function — pass it directly into `tools=[search_database]`. ADK auto-wraps; no `@tool` decorator exists.
+
   ## Multi-agent setup
 
   ```python
-  researcher = Agent(
+  from google.adk.agents import LlmAgent
+
+  researcher = LlmAgent(
       name="researcher",
-      model="gemini-2.0-flash",
+      model="gemini-flash-latest",
       instruction="Research topics using available tools. Return structured findings.",
       tools=[web_search, document_search],
   )
 
-  root_agent = Agent(
+  root_agent = LlmAgent(
       name="coordinator",
       model="gemini-2.5-pro",
       instruction="Coordinate research and writing. Delegate research to specialist.",
@@ -85,7 +88,7 @@ description: Use when creating a new ADK agent, adding tools to an existing agen
     <rule>Keep tool docstrings clear and concise — the LLM uses them to decide when to call the tool.</rule>
     <rule>Test tools as standalone functions before wiring to agent — isolate logic from agent loop.</rule>
     <rule>Use `InMemorySessionService` for local dev, switch to persistent service for deployment.</rule>
-    <rule>Set `GOOGLE_API_KEY` in `.env` for local dev. In production, use ADC (Application Default Credentials).</rule>
+    <rule>Set `GOOGLE_API_KEY` in `.env` for AI Studio / Gemini API. To use Vertex AI instead, set `GOOGLE_GENAI_USE_VERTEXAI=TRUE` and authenticate via ADC (`gcloud auth application-default login`).</rule>
   </rules>
 
   <antipattern>
