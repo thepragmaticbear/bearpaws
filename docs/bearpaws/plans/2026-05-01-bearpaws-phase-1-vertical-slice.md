@@ -1334,7 +1334,7 @@ batch boundary."
 
 ### Task 12: Bump version + tag
 
-- [ ] **Step 12.1: Bump version**
+- [x] **Step 12.1: Bump version**
 
 ```bash
 scripts/bump-version.sh 0.2.0
@@ -1343,7 +1343,7 @@ scripts/bump-version.sh --check
 
 Expected: all four declared files report 0.2.0.
 
-- [ ] **Step 12.2: Commit + tag**
+- [x] **Step 12.2: Commit + tag**
 
 ```bash
 git add package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json gemini-extension.json
@@ -1351,7 +1351,7 @@ git commit -m "chore: bump version to 0.2.0 (Phase 1 ship)"
 git tag -a v0.2.0 -m "Bearpaws v0.2.0 — Phase 1 (Vertical Slice)"
 ```
 
-- [ ] **Step 12.3: Verify tag**
+- [x] **Step 12.3: Verify tag**
 
 ```bash
 git tag -n v0.2.0
@@ -1366,40 +1366,40 @@ Expected: `v0.2.0  Bearpaws v0.2.0 — Phase 1 (Vertical Slice)`.
 Run through this list against the spec. Fix gaps inline.
 
 **Spec §2 (XML schema) coverage:**
-- [ ] Tag whitelist documented in writing-skills/SKILL.md (Task 2)
-- [ ] Schema validator enforces whitelist (Task 3)
-- [ ] `<warning level="hard">` replaces `<EXTREMELY_IMPORTANT>` in hook (Task 4)
-- [ ] Bootstrap migrated (Task 5)
-- [ ] At least one process skill migrated (Task 6 — TDD)
-- [ ] `<include>` semantics validated by transcript inspection (Task 6.6)
+- [x] Tag whitelist documented in writing-skills/SKILL.md (Task 2)
+- [x] Schema validator enforces whitelist (Task 3)
+- [x] `<warning level="hard">` replaces `<EXTREMELY_IMPORTANT>` in hook (Task 4)
+- [x] Bootstrap migrated (Task 5)
+- [x] At least one process skill migrated (Task 6 — TDD)
+- [x] `<include>` semantics validated by transcript inspection (Task 6.6)
 
 **Spec §3 (Token-Efficiency) coverage:**
-- [ ] §3a: `_shared/` library populated with at-least-one extracted file (Task 5.3, possibly Task 6.1)
-- [ ] §3b: Lazy-loading via `<see>` demonstrated (Task 5.4 bootstrap, Task 7.2 cloud-run references)
-- [ ] §3c: Process-skill condensation demonstrated on TDD (Task 6)
-- [ ] §3d: Bootstrap rewrite ≥40% reduction (Task 5.5, Task 10.4)
-- [ ] §3e: Honest projections vs. measurements documented (Task 11)
+- [x] §3a: `_shared/` library populated with at-least-one extracted file (Task 5.3, possibly Task 6.1)
+- [x] §3b: Lazy-loading via `<see>` demonstrated (Task 5.4 bootstrap, Task 7.2 cloud-run references)
+- [x] §3c: Process-skill condensation demonstrated on TDD (Task 6)
+- [x] §3d: Bootstrap rewrite ≥40% reduction (Task 5.5, Task 10.4)
+- [x] §3e: Honest projections vs. measurements documented (Task 11)
 
 **Spec §4 (domain skills) coverage:**
-- [ ] cloud-run reference skill written (Task 7)
-- [ ] deploying-to-cloud-run workflow skill written (Task 8)
-- [ ] Skill-triggering tests for the pair (Task 9)
+- [x] cloud-run reference skill written (Task 7)
+- [x] deploying-to-cloud-run workflow skill written (Task 8)
+- [x] Skill-triggering tests for the pair (Task 9)
 
 **Spec §5 Phase 1 exit criteria:**
-- [ ] E1 verified (Task 10.1)
-- [ ] E2 verified (Task 10.2)
-- [ ] E3 verified (Task 10.3)
-- [ ] E4 verified (Task 10.4)
+- [x] E1 verified (Task 10.1)
+- [x] E2 verified (Task 10.2)
+- [x] E3 verified (Task 10.3)
+- [x] E4 verified (Task 10.4)
 
 **Spec §6 risks coverage:**
-- [ ] R1 (XML schema regression) — exit gate per migration; revert path documented (Task 5.6, Task 6.7)
-- [ ] R2 (`<include>` cost) — measurement script tracks net bytes; transcript-level validation in Task 6.6
-- [ ] R4 (bootstrap loses load-bearing rule) — pressure-prompt set in Task 5.1 + 5.6 covers broad scenarios
-- [ ] R8 (Gemini compatibility) — Task 5.7 explicit Gemini smoke test
-- [ ] R9 (schema too rigid) — `skills/writing-skills/SKILL.md` "When the schema is too rigid" subsection (Task 2.2)
+- [x] R1 (XML schema regression) — exit gate per migration; revert path documented (Task 5.6, Task 6.7)
+- [x] R2 (`<include>` cost) — measurement script tracks net bytes; transcript-level validation in Task 6.6
+- [x] R4 (bootstrap loses load-bearing rule) — pressure-prompt set in Task 5.1 + 5.6 covers broad scenarios
+- [x] R8 (Gemini compatibility) — Task 5.7 explicit Gemini smoke test
+- [x] R9 (schema too rigid) — `skills/writing-skills/SKILL.md` "When the schema is too rigid" subsection (Task 2.2)
 
 **Open questions resolved during Phase 1:**
-- [ ] Spec Q2 (`<include>` resolution semantics) — answer in Task 6.6 commit message: does the bootstrap *teach* the convention or does the schema doc suffice?
+- [x] Spec Q2 (`<include>` resolution semantics) — answer in Task 6.6 commit message: does the bootstrap *teach* the convention or does the schema doc suffice?
 
 If any checklist item is unticked at the end, that's a Phase 1 gap. Either back-fill the task or carry the gap into Phase 2 with explicit doc in the v0.2.0 release notes.
 
