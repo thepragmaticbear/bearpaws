@@ -1258,15 +1258,15 @@ Phase 2 Track B."
 
 **Source: spec §5 Phase 1 exit criteria**
 
-- [ ] **Step 10.1: E1 — Bootstrap eval ≥ baseline**
+- [x] **Step 10.1: E1 — Bootstrap eval ≥ baseline**
 
 Re-run the pressure-prompt set from Task 5.1 against the post-migration bootstrap. All 5 prompts must produce equivalent or better behavior than baseline.
 
-- [ ] **Step 10.2: E2 — TDD eval ≥ baseline**
+- [x] **Step 10.2: E2 — TDD eval ≥ baseline**
 
 Re-run the existing skill-triggering test for TDD plus the pressure prompts captured in Task 6.2. All must match baseline.
 
-- [ ] **Step 10.3: E3 — Cloud Run pair triggers on naive prompts**
+- [x] **Step 10.3: E3 — Cloud Run pair triggers on naive prompts**
 
 ```bash
 tests/skill-triggering/run-test.sh cloud-run tests/skill-triggering/prompts/cloud-run.txt
@@ -1275,7 +1275,7 @@ tests/skill-triggering/run-test.sh deploying-to-cloud-run tests/skill-triggering
 
 Both PASS.
 
-- [ ] **Step 10.4: E4 — Bootstrap shrink ≥ 40%**
+- [x] **Step 10.4: E4 — Bootstrap shrink ≥ 40%**
 
 ```bash
 bootstrap_now=$(tests/token-measurement/measure.sh | jq -r .bootstrap_additional_context_bytes)
@@ -1293,13 +1293,13 @@ If any of E1–E4 fails: do NOT proceed to Task 11. Investigate, fix, re-run. Th
 **Files:**
 - Create: `docs/bearpaws/release-notes/0.2.0.md`
 
-- [ ] **Step 11.1: Capture final measurements**
+- [x] **Step 11.1: Capture final measurements**
 
 ```bash
 tests/token-measurement/measure.sh > /tmp/phase1-final.json
 ```
 
-- [ ] **Step 11.2: Write the release notes**
+- [x] **Step 11.2: Write the release notes**
 
 Following the v0.1.0 release notes shape. Include:
 - Phase 1 deliverables shipped (bootstrap migration, TDD migration, Cloud Run pair, schema validator, measurement script).
@@ -1309,7 +1309,7 @@ Following the v0.1.0 release notes shape. Include:
 - Schema-validator current violation count (drops as Phase 2 migrations land).
 - Known follow-ups carried into Phase 2 (the 12 process skills + 8 domain skills not yet migrated).
 
-- [ ] **Step 11.3: Commit**
+- [x] **Step 11.3: Commit**
 
 ```bash
 git add docs/bearpaws/release-notes/0.2.0.md
