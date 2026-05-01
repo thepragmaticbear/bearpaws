@@ -8,30 +8,37 @@ A Claude Code (and Gemini CLI) skills plugin focused on **token-efficiency** —
 
 **How skills compose.** Standard flow when there's a project: (1) `bp:onboarding-to-a-project` identifies key files and stack from manifests, README, and similar files; (2) `bp:brainstorming` designs against those discovered conventions; (3) other process skills (writing-plans, TDD, debugging, code review) carry implementation; (4) domain skills (`cloud-run`, `vite`, `google-adk`, etc.) layer on as needed. Onboarding → brainstorming → implementation. Onboarding is skipped only for purely abstract design questions with no project context.
 
-## Install (Claude Code)
-
-Register the plugin via the dev marketplace in `~/.claude/settings.json`:
-
-```json
-{
-  "plugins": {
-    "bearpaws@bearpaws-dev": true
-  },
-  "marketplaces": {
-    "bearpaws-dev": "/path/to/bearpaws"
-  }
-}
+```mermaid
+flowchart TD
+    Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>auto-loaded by SessionStart hook<br/>Red Flags + skill priority + lazy-load contract]
+    Bootstrap --> Check{Project<br/>context?}
+    Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>identify key files, stack, conventions<br/>read manifests, README, CLAUDE.md, sample files]
+    Check -->|NO &mdash; purely abstract design| Brainstorm
+    Onboard --> Brainstorm[bp:brainstorming<br/>design against discovered conventions]
+    Brainstorm --> Process[Process skills<br/>writing-plans &middot; test-driven-development<br/>systematic-debugging &middot; requesting-code-review<br/>verification-before-completion &middot; finishing-a-development-branch]
+    Process --> Domain[Domain skills, when applicable<br/>cloud-run &middot; deploying-to-cloud-run<br/>vite &middot; working-with-vite<br/>google-adk &middot; building-with-adk<br/>javascript-typescript &middot; writing-typescript<br/>google-cloud &middot; working-on-google-cloud]
 ```
 
-Or pass it on the command line: `claude --plugin-dir /path/to/bearpaws`.
+## Install (Claude Code)
+
+You can install the plugin via the Claude Code CLI:
+
+```bash
+claude plugin marketplace add /path/to/bearpaws
+claude plugin install bp@bearpaws-dev
+```
+
+Or pass it on the command line without installing: `claude --plugin-dir /path/to/bearpaws`.
 
 ## Install (Gemini CLI)
 
-Bearpaws ships a `gemini-extension.json` for use as a Gemini CLI extension:
+You can install the plugin via the Gemini CLI:
 
 ```bash
-gemini extensions link /path/to/bearpaws
+gemini extensions install /path/to/bearpaws
 ```
+
+Or link it for local development so updates are reflected immediately: `gemini extensions link /path/to/bearpaws`.
 
 ## Skills
 
