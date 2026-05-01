@@ -61,7 +61,7 @@ digraph process {
     "Read plan, extract all tasks with full text, note context, create TodoWrite" [shape=box];
     "More tasks remain?" [shape=diamond];
     "Dispatch final code reviewer subagent for entire implementation" [shape=box];
-    "Use bearpaws:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
+    "Use bp:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
     "Read plan, extract all tasks with full text, note context, create TodoWrite" -> "Dispatch implementer subagent (./implementer-prompt.md)";
     "Dispatch implementer subagent (./implementer-prompt.md)" -> "Implementer subagent asks questions?";
@@ -80,7 +80,7 @@ digraph process {
     "Mark task complete in TodoWrite" -> "More tasks remain?";
     "More tasks remain?" -> "Dispatch implementer subagent (./implementer-prompt.md)" [label="yes"];
     "More tasks remain?" -> "Dispatch final code reviewer subagent for entire implementation" [label="no"];
-    "Dispatch final code reviewer subagent for entire implementation" -> "Use bearpaws:finishing-a-development-branch";
+    "Dispatch final code reviewer subagent for entire implementation" -> "Use bp:finishing-a-development-branch";
 }
 ```
 
@@ -265,13 +265,13 @@ Done!
 ## Integration
 
 **Required workflow skills:**
-- **bearpaws:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
-- **bearpaws:writing-plans** - Creates the plan this skill executes
-- **bearpaws:requesting-code-review** - Code review template for reviewer subagents
-- **bearpaws:finishing-a-development-branch** - Complete development after all tasks
+- **bp:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
+- **bp:writing-plans** - Creates the plan this skill executes
+- **bp:requesting-code-review** - Code review template for reviewer subagents
+- **bp:finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
-- **bearpaws:test-driven-development** - Subagents follow TDD for each task
+- **bp:test-driven-development** - Subagents follow TDD for each task
 
 **Alternative workflow:**
-- **bearpaws:executing-plans** - Use for parallel session instead of same-session execution
+- **bp:executing-plans** - Use for parallel session instead of same-session execution

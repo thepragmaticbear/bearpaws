@@ -11,7 +11,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Bearpaws works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (such as Claude Code). If subagents are available, use bearpaws:subagent-driven-development instead of this skill.
+**Note:** Tell your human partner that Bearpaws works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (such as Claude Code). If subagents are available, use bp:subagent-driven-development instead of this skill.
 
 ## The Process
 
@@ -33,7 +33,7 @@ For each task:
 
 After all tasks complete and verified:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use bearpaws:finishing-a-development-branch
+- **REQUIRED SUB-SKILL:** Use bp:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
 
 ## When to Stop and Ask for Help
@@ -65,6 +65,6 @@ After all tasks complete and verified:
 ## Integration
 
 **Required workflow skills:**
-- **bearpaws:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
-- **bearpaws:writing-plans** - Creates the plan this skill executes
-- **bearpaws:finishing-a-development-branch** - Complete development after all tasks
+- **bp:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
+- **bp:writing-plans** - Creates the plan this skill executes
+- **bp:finishing-a-development-branch** - Complete development after all tasks

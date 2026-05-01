@@ -1,6 +1,6 @@
 # Bearpaws Phase 1 — Vertical Slice Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use bearpaws:subagent-driven-development (recommended) or bearpaws:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use bp:subagent-driven-development (recommended) or bp:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prove the XML schema, `_shared/` library, lazy-load convention, and eval workflow on a controlled vertical slice — the bootstrap (`using-bearpaws`), one process skill (`test-driven-development`), and one fresh domain pair (`cloud-run` + `deploying-to-cloud-run`) — and ship `bearpaws@0.2.0` only after all four Phase 1 exit criteria are met.
 

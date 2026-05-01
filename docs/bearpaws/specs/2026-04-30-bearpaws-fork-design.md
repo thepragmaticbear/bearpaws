@@ -64,7 +64,7 @@ Approach: **Approach 2 — Identity-First, Parallel Tracks** (vertical-slice val
 
 ### Plugin identity
 
-- **Plugin slug:** `bearpaws`. External skill invocations: `bearpaws:writing-plans`, etc.
+- **Plugin slug:** `bearpaws`. External skill invocations: `bp:writing-plans`, etc.
 - **Hook namespace:** `bearpaws-session-start`.
 - **Repo name:** `bearpaws` (top-level directory). Top-level `CLAUDE.md` and `README.md` rewritten for the new identity. README carries an attribution paragraph: *"Forked from superpowers at v5.0.7. License preserved."*
 
@@ -79,7 +79,7 @@ Approach: **Approach 2 — Identity-First, Parallel Tracks** (vertical-slice val
 | `scripts/bump-version.sh` + `.version-bump.json` (path list updated) | Any Cursor/Codex-specific test fixtures (audit during Phase 0) |
 | `tests/` — both harnesses | |
 | `agents/code-reviewer.md` | |
-| `commands/` (renamed: `bearpaws:brainstorm`, etc.) | |
+| `commands/` (renamed: `bp:brainstorm`, etc.) | |
 
 ### Top-level layout
 
@@ -323,7 +323,7 @@ Goal: Bearpaws exists as a working plugin with the new identity. Zero content ch
 | Hook namespace renamed to `bearpaws-session-start` | Script content unchanged |
 | `skills/using-superpowers/` → `skills/using-bearpaws/` | Content unchanged |
 | Per-platform reference docs trimmed | Drop `copilot-tools.md`, `codex-tools.md`; keep Gemini |
-| `commands/` renamed to `bearpaws:` slash commands | Same content |
+| `commands/` renamed to `bp:` slash commands | Same content |
 | README + CLAUDE.md rewritten | README carries superpowers attribution paragraph |
 
 **Exit criteria:** All existing skill-triggering tests pass against the renamed plugin in a fresh Claude Code session. Plugin loads in Gemini CLI without error.

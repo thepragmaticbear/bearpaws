@@ -48,7 +48,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ## Tests
 
-Tests are behavioral, not unit — they invoke the `claude` CLI in headless mode and assert against transcripts. Requires the local plugin to be registered (e.g. `"bearpaws@bearpaws-dev": true` in `~/.claude/settings.json`, or pass `--plugin-dir` explicitly).
+Tests are behavioral, not unit — they invoke the `claude` CLI in headless mode and assert against transcripts. Requires the local plugin to be registered (e.g. `"bp@bearpaws-dev": true` in `~/.claude/settings.json`, or pass `--plugin-dir` explicitly).
 
 ```bash
 tests/claude-code/run-skill-tests.sh                                          # fast skill-content tests (~2 min)
@@ -62,7 +62,7 @@ tests/skill-triggering/run-all.sh                                             # 
 
 ## When editing skills
 
-Skills are behavior-shaping code, not prose. Use the `bearpaws:writing-skills` skill — it applies TDD to skill content:
+Skills are behavior-shaping code, not prose. Use the `bp:writing-skills` skill — it applies TDD to skill content:
 
 1. Run a baseline pressure scenario in a fresh subagent (RED).
 2. Capture the exact rationalization the agent uses to skip the right behavior.

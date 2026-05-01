@@ -1,6 +1,6 @@
 # Go Fractals CLI - Implementation Plan
 
-Execute this plan using the `bearpaws:subagent-driven-development` skill.
+Execute this plan using the `bp:subagent-driven-development` skill.
 
 ## Context
 
