@@ -512,7 +512,7 @@ whole tree is migrated (Phase 2 exit)."
 **Files:**
 - Modify: `hooks/session-start` (one-line change to the wrapper string)
 
-- [ ] **Step 4.1: Read the current wrapper construction**
+- [x] **Step 4.1: Read the current wrapper construction**
 
 ```bash
 grep -n "EXTREMELY_IMPORTANT" hooks/session-start
@@ -523,13 +523,13 @@ Expected: one line, around line 35:
 session_context="<EXTREMELY_IMPORTANT>\nYou have bearpaws.\n\n...${using_bearpaws_escaped}\n\n${warning_escaped}\n</EXTREMELY_IMPORTANT>"
 ```
 
-- [ ] **Step 4.2: Change the wrapper to `<warning level="hard">`**
+- [x] **Step 4.2: Change the wrapper to `<warning level="hard">`**
 
 ```bash
 sed -i '' 's|<EXTREMELY_IMPORTANT>|<warning level="hard">|g; s|</EXTREMELY_IMPORTANT>|</warning>|g' hooks/session-start
 ```
 
-- [ ] **Step 4.3: Verify the bootstrap still produces valid JSON**
+- [x] **Step 4.3: Verify the bootstrap still produces valid JSON**
 
 ```bash
 CLAUDE_PLUGIN_ROOT=$(pwd) bash hooks/session-start | python3 -c "
@@ -544,7 +544,7 @@ print(f'OK bootstrap bytes: {len(ctx)}')
 
 Expected: bytes essentially unchanged (-/+ a few because `<warning level="hard">` and `<EXTREMELY_IMPORTANT>` differ in length).
 
-- [ ] **Step 4.4: Pressure-test that `<warning level="hard">` is treated as imperative**
+- [x] **Step 4.4: Pressure-test that `<warning level="hard">` is treated as imperative**
 
 This is the first eval gate. The protocol:
 
@@ -560,7 +560,7 @@ Pressure prompts to run (all should result in a skill invocation):
 
 Run all three. If any produces a no-skill-invocation response, the wrapper change regressed and Task 4 is blocked.
 
-- [ ] **Step 4.5: Commit only if Step 4.4 passes**
+- [x] **Step 4.5: Commit only if Step 4.4 passes**
 
 ```bash
 git add hooks/session-start
