@@ -1,20 +1,20 @@
 {
-  "name": "superpowers",
-  "description": "Core skills library for Claude Code: TDD, debugging, collaboration patterns, and proven techniques",
-  "version": "5.0.7",
+  "name": "bearpaws",
+  "description": "Bearpaws — a Claude Code skills library for Google Cloud, ADK, Vite, JS/TS, and Cloud Run development. Forked from superpowers v5.0.7.",
+  "version": "0.1.0",
   "author": {
-    "name": "Jesse Vincent",
-    "email": "jesse@fsck.com"
+    "name": "Brandon Fitzgerald",
+    "email": "47871143+brandonfla@users.noreply.github.com"
   },
-  "homepage": "https://github.com/obra/superpowers",
-  "repository": "https://github.com/obra/superpowers",
+  "homepage": "https://github.com/<TBD>/bearpaws",
+  "repository": "https://github.com/<TBD>/bearpaws",
   "license": "MIT",
   "keywords": [
     "skills",
-    "tdd",
-    "debugging",
-    "collaboration",
-    "best-practices",
-    "workflows"
+    "google-cloud",
+    "cloud-run",
+    "vite",
+    "typescript",
+    "adk"
   ]
 }
