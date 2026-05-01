@@ -14,7 +14,9 @@
       ".version-bump.json",
       "scripts/bump-version.sh",
       "docs/bearpaws/specs",
-      "docs/bearpaws/plans"
+      "docs/bearpaws/plans",
+      "docs/bearpaws/release-notes",
+      "README.md"
     ]
   }
 }
