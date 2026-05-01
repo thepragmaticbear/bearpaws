@@ -33,7 +33,11 @@ for skill in "${SKILLS[@]}"; do
 
     echo "Testing: $skill"
 
-    if "$SCRIPT_DIR/run-test.sh" "$skill" "$prompt_file" 3 2>&1 | tee /tmp/skill-test-$skill.log; then
+    set +e
+    "$SCRIPT_DIR/run-test.sh" "$skill" "$prompt_file" 3 2>&1 | tee /tmp/skill-test-$skill.log
+    test_exit=${PIPESTATUS[0]}
+    set -e
+    if [ "$test_exit" -eq 0 ]; then
         PASSED=$((PASSED + 1))
         RESULTS+=("✅ $skill")
     else
