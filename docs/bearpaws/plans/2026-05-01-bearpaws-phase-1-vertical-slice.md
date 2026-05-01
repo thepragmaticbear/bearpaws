@@ -975,13 +975,13 @@ matches baseline."
 **Files:**
 - Create: `skills/cloud-run/SKILL.md`
 
-- [ ] **Step 7.1: Read the spec scope for `cloud-run`**
+- [x] **Step 7.1: Read the spec scope for `cloud-run`**
 
 Spec §4 #5 gives the exact triggers and scope. Re-read before writing.
 
 Triggers per spec: `gcloud run`, `Dockerfile` in a GCP project context, `service.yaml`, `cloudrun.yaml`. Scope: services vs. jobs; revision/traffic model; cold starts and instance scaling; concurrency; secrets; VPC connectors; min/max instances; identity; auth modes. Out of scope: App Engine, GKE, Cloud Functions.
 
-- [ ] **Step 7.2: Write the skill**
+- [x] **Step 7.2: Write the skill**
 
 ```markdown
 ---
@@ -1040,7 +1040,7 @@ description: Use when working on Google Cloud Run — gcloud run commands, servi
 </skill>
 ```
 
-- [ ] **Step 7.3: Create the references file with `<see>` pointers (optional but recommended)**
+- [x] **Step 7.3: Create the references file with `<see>` pointers (optional but recommended)**
 
 ```bash
 mkdir -p skills/cloud-run/references
@@ -1057,7 +1057,7 @@ Use these as primary references; this skill curates the in-flight working knowle
 EOF
 ```
 
-- [ ] **Step 7.4: Schema-validate**
+- [x] **Step 7.4: Schema-validate**
 
 ```bash
 tests/schema-validator/run-validator.sh
@@ -1065,7 +1065,7 @@ tests/schema-validator/run-validator.sh
 
 Expected: PASS (or only legacy violations from un-migrated skills; no new violations from cloud-run).
 
-- [ ] **Step 7.5: Commit**
+- [x] **Step 7.5: Commit**
 
 ```bash
 git add skills/cloud-run/
@@ -1089,7 +1089,7 @@ Skill-triggering test for cloud-run added in a separate commit (Task 9)."
 **Files:**
 - Create: `skills/deploying-to-cloud-run/SKILL.md`
 
-- [ ] **Step 8.1: Write the skill**
+- [x] **Step 8.1: Write the skill**
 
 The shape mirrors the spec §4: workflow-heavy, has a `<gate name="checklist-complete">` blocking the actual deploy command until the checklist is walked.
 
@@ -1154,7 +1154,7 @@ description: Use when about to deploy a Cloud Run service or job — running gcl
 </skill>
 ```
 
-- [ ] **Step 8.2: Schema-validate**
+- [x] **Step 8.2: Schema-validate**
 
 ```bash
 tests/schema-validator/run-validator.sh
@@ -1162,7 +1162,7 @@ tests/schema-validator/run-validator.sh
 
 Expected: PASS for the new skill; same legacy-tag violations from un-migrated skills.
 
-- [ ] **Step 8.3: Commit**
+- [x] **Step 8.3: Commit**
 
 ```bash
 git add skills/deploying-to-cloud-run/
