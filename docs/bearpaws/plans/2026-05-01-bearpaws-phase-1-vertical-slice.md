@@ -1187,7 +1187,7 @@ Skill-triggering test added in the next task."
 - Create: `tests/skill-triggering/prompts/deploying-to-cloud-run.txt`
 - Modify: `tests/skill-triggering/run-all.sh` (extend `SKILLS` array)
 
-- [ ] **Step 9.1: Write a naive prompt for `cloud-run` triggering**
+- [x] **Step 9.1: Write a naive prompt for `cloud-run` triggering**
 
 ```bash
 cat > tests/skill-triggering/prompts/cloud-run.txt <<'EOF'
@@ -1197,7 +1197,7 @@ EOF
 
 This prompt names a Cloud Run-specific decision. The agent should invoke `cloud-run` (the reference skill) to find the right rule.
 
-- [ ] **Step 9.2: Write a naive prompt for `deploying-to-cloud-run`**
+- [x] **Step 9.2: Write a naive prompt for `deploying-to-cloud-run`**
 
 ```bash
 cat > tests/skill-triggering/prompts/deploying-to-cloud-run.txt <<'EOF'
@@ -1207,7 +1207,7 @@ EOF
 
 This prompt is the workflow trigger — about to deploy, asking for the checklist + post-deploy steps. Should invoke `deploying-to-cloud-run`.
 
-- [ ] **Step 9.3: Extend `run-all.sh`**
+- [x] **Step 9.3: Extend `run-all.sh`**
 
 ```bash
 # Edit tests/skill-triggering/run-all.sh, add to the SKILLS array:
@@ -1217,7 +1217,7 @@ This prompt is the workflow trigger — about to deploy, asking for the checklis
 
 Use the Edit tool, not sed, to keep the diff reviewable. Insert both names after `requesting-code-review` so the order matches the file structure.
 
-- [ ] **Step 9.4: Run both new tests**
+- [x] **Step 9.4: Run both new tests**
 
 ```bash
 tests/skill-triggering/run-test.sh cloud-run tests/skill-triggering/prompts/cloud-run.txt
@@ -1226,7 +1226,7 @@ tests/skill-triggering/run-test.sh deploying-to-cloud-run tests/skill-triggering
 
 Expected: both PASS. If either fails, the skill description in the frontmatter isn't matching the prompt — tighten the description until it does. Don't change the prompt to match the description (the prompt represents naive user intent).
 
-- [ ] **Step 9.5: Run the full suite to check we didn't regress others**
+- [x] **Step 9.5: Run the full suite to check we didn't regress others**
 
 ```bash
 tests/skill-triggering/run-all.sh
@@ -1234,7 +1234,7 @@ tests/skill-triggering/run-all.sh
 
 Expected: at least 7/8 (the original 5/6 with writing-plans known-flaky from v0.1.0 baseline, plus 2/2 from this task). If a previously-passing skill now fails, investigate before proceeding.
 
-- [ ] **Step 9.6: Commit**
+- [x] **Step 9.6: Commit**
 
 ```bash
 git add tests/skill-triggering/

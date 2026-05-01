@@ -1,0 +1,1 @@
+I'm setting up a Cloud Run service and I'm not sure if I should use --allow-unauthenticated or not. The service is internal but I'm not sure how to lock it down properly.
