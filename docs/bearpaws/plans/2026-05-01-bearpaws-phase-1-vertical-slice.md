@@ -857,7 +857,7 @@ If any eval scenario regresses and the regression cannot be fixed in this task: 
 - Create: `skills/_shared/tdd-cycle-flow.md` (extracted RED-GREEN-REFACTOR diagram, IF used by ≥2 skills)
 - Modify: `skills/test-driven-development/SKILL.md` (rewrite in XML schema)
 
-- [ ] **Step 6.1: Verify dedup eligibility for `tdd-cycle-flow.md`**
+- [x] **Step 6.1: Verify dedup eligibility for `tdd-cycle-flow.md`** *(only 1 consumer; kept inline)*
 
 ```bash
 grep -l "RED.*GREEN.*REFACTOR\|red.*green.*refactor" skills/*/SKILL.md
@@ -867,7 +867,7 @@ If only `test-driven-development/SKILL.md` matches: extraction rule (≥2 consum
 
 If two or more match: proceed with extraction.
 
-- [ ] **Step 6.2: Capture baseline behavior**
+- [x] **Step 6.2: Capture baseline behavior**
 
 ```bash
 mkdir -p /tmp/phase1-tdd-baseline
@@ -882,7 +882,7 @@ mkdir -p /tmp/phase1-tdd-baseline
 
 Use the existing `tests/skill-triggering/prompts/test-driven-development.txt` as one of the prompts; it's already a known-good baseline scenario.
 
-- [ ] **Step 6.3: Rewrite `skills/test-driven-development/SKILL.md` in XML schema**
+- [x] **Step 6.3: Rewrite `skills/test-driven-development/SKILL.md` in XML schema**
 
 Target: ≤6,907 bytes (30% reduction from 9,867).
 
@@ -912,7 +912,7 @@ Structure:
 
 Convert each existing section into the right tag. Compress prose without removing behavioral imperatives. Keep RED-GREEN-REFACTOR concrete (i.e., still has actual code/command examples).
 
-- [ ] **Step 6.4: Run schema validator + token measurement**
+- [x] **Step 6.4: Run schema validator + token measurement**
 
 ```bash
 tests/schema-validator/run-validator.sh
@@ -921,7 +921,7 @@ tests/token-measurement/measure.sh | jq '.per_skill_skill_md_bytes."test-driven-
 
 Expected: validator reports fewer violations; TDD bytes ≤ 6,907.
 
-- [ ] **Step 6.5: Run skill-triggering test for TDD**
+- [x] **Step 6.5: Run skill-triggering test for TDD**
 
 ```bash
 tests/skill-triggering/run-test.sh test-driven-development tests/skill-triggering/prompts/test-driven-development.txt
@@ -929,7 +929,7 @@ tests/skill-triggering/run-test.sh test-driven-development tests/skill-triggerin
 
 Expected: PASS (matches v0.1.0 baseline).
 
-- [ ] **Step 6.6: Verify `<include>` actually loads when TDD is invoked**
+- [x] **Step 6.6: Verify `<include>` actually loads when TDD is invoked** *(FINDING: agent does NOT auto-Read the included file; see commit message)*
 
 This is the validation for risk R2 (`<include>` tool-call cost). After the test in Step 6.5 runs, inspect the session log:
 
@@ -940,11 +940,11 @@ grep -E '"name":"Read"|red-flags-skill-discipline' "$LATEST/claude-output.json" 
 
 Expected: there's a `Read` tool invocation against `skills/_shared/red-flags-skill-discipline.md` somewhere after the `Skill` invocation — that's the `<include>` resolving. If the file is never read, `<include>` semantics aren't working as designed; demote the content back inline and document the finding.
 
-- [ ] **Step 6.7: Re-run pressure prompts, compare to baseline**
+- [x] **Step 6.7: Re-run pressure prompts, compare to baseline**
 
 Same comparison protocol as Task 5.6.
 
-- [ ] **Step 6.8: Commit**
+- [x] **Step 6.8: Commit**
 
 ```bash
 git add skills/test-driven-development/SKILL.md skills/_shared/
