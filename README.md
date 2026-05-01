@@ -1,8 +1,8 @@
 # Bearpaws
 
-A Claude Code (and Gemini CLI) plugin that ships a library of behavior-shaping skills — TDD, debugging, planning, code review — plus domain-knowledge skills for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run.
+A Claude Code (and Gemini CLI) skills plugin focused on **token-efficiency** — delivering the same behavioral performance as [superpowers](https://github.com/obra/superpowers) while significantly reducing per-session token consumption. Skills cover TDD, debugging, planning, code review, and parallel execution, plus domain-knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run.
 
-> **Status:** v0.1.0. Phase 0 of a four-phase fork program (see [docs/bearpaws/specs/](docs/bearpaws/specs/)). Skill bodies are still in legacy markdown form; XML-schema migration arrives in Phase 1, domain skills in Phase 2.
+> **Status:** v0.1.0. Phase 0 of a four-phase fork program (see [docs/bearpaws/specs/](docs/bearpaws/specs/)). Skill bodies are still in legacy markdown form; XML-schema migration and token-budget optimizations arrive in Phase 1, domain skills in Phase 2.
 
 ## Install (Claude Code)
 
@@ -32,6 +32,10 @@ tests/skill-triggering/run-all.sh           # ~2 min — verifies skills auto-tr
 tests/claude-code/run-skill-tests.sh        # ~2 min — fast skill-content tests
 tests/claude-code/run-skill-tests.sh --integration   # 10–30 min — full integration suite
 ```
+
+## Why fork?
+
+Superpowers is excellent at shaping agent behavior, but its skill payloads are verbose — every session pays a high token cost for context that could be expressed more concisely. Bearpaws aims to preserve the same pass rate on skill-triggering and behavioral compliance tests while cutting token overhead through structured compression, deferred loading, and tighter prompt engineering. The goal is **same performance, fewer tokens**.
 
 ## Attribution
 
