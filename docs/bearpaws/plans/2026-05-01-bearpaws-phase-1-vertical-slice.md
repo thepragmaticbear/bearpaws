@@ -373,7 +373,7 @@ No change to existing writing-skills content; new section appended."
 - Create: `tests/schema-validator/run-validator.sh`
 - Create: `tests/schema-validator/README.md`
 
-- [ ] **Step 3.1: Write the validator**
+- [x] **Step 3.1: Write the validator**
 
 ```bash
 mkdir -p tests/schema-validator
@@ -435,7 +435,7 @@ EOF
 chmod +x tests/schema-validator/run-validator.sh
 ```
 
-- [ ] **Step 3.2: Run against current state — expect violations**
+- [x] **Step 3.2: Run against current state — expect violations**
 
 ```bash
 tests/schema-validator/run-validator.sh
@@ -443,7 +443,7 @@ tests/schema-validator/run-validator.sh
 
 Expected: **FAIL** with violations for current legacy tags (`<EXTREMELY-IMPORTANT>`, `<EXTREMELY_IMPORTANT>`, `<HARD-GATE>`, `<SUBAGENT-STOP>`, `<Good>`, `<Bad>`). This is correct behavior — these tags are exactly what Phase 1+ migrations will replace.
 
-- [ ] **Step 3.3: Capture the current violations as the migration backlog**
+- [x] **Step 3.3: Capture the current violations as the migration backlog**
 
 ```bash
 tests/schema-validator/run-validator.sh > /tmp/phase1-validator-baseline.txt 2>&1 || true
@@ -452,7 +452,7 @@ wc -l /tmp/phase1-validator-baseline.txt
 
 Record the violation count in this plan's notes — it should monotonically decrease as migrations land.
 
-- [ ] **Step 3.4: Write the README**
+- [x] **Step 3.4: Write the README**
 
 ```bash
 cat > tests/schema-validator/README.md <<'EOF'
@@ -485,7 +485,7 @@ The validator deliberately fails on the current `skills/` tree — every legacy 
 EOF
 ```
 
-- [ ] **Step 3.5: Commit**
+- [x] **Step 3.5: Commit**
 
 ```bash
 git add tests/schema-validator/
