@@ -613,7 +613,7 @@ The skill-triggering test runner can execute these for prompts 1, 2, 5 (it parse
 
 Pass criterion: prompts 1, 2, 5 invoke `Skill`. Prompt 4 produces a polite-but-firm refusal (or a clarifying question that doesn't drop the skill). Any single failure = revert + investigate.
 
-- [ ] **Step 5.1: Capture baseline behavior on the current bootstrap**
+- [x] **Step 5.1: Capture baseline behavior on the current bootstrap**
 
 For each prompt above, run a fresh `claude` session and capture the response.
 
@@ -648,7 +648,7 @@ Then for each `pN.json` log, check:
 
 Record results in `/tmp/phase1-bootstrap-baseline/summary.txt`.
 
-- [ ] **Step 5.2: Confirm the keep/move split for Red Flags rows**
+- [x] **Step 5.2: Confirm the keep/move split for Red Flags rows**
 
 The current `skills/using-bearpaws/SKILL.md` Red Flags table (lines 78-95) has 12 rows. Spec §3d targets keeping 6-8 in the bootstrap and moving the rest to `_shared/`. The split below is the starting recommendation; if the eval (Step 5.6) shows a kept row never closes a real rationalization, demote it in a follow-up.
 
@@ -676,7 +676,7 @@ The current `skills/using-bearpaws/SKILL.md` Red Flags table (lines 78-95) has 1
 
 Rationale for the split: the kept rows close *task-shape* rationalizations (the agent thinking "this isn't really a task" / "I'll skip the check just this once"). The moved rows close *meta-cognitive* rationalizations (the agent thinking about its own knowledge or productivity), which are less frequent in practice. If the eval shows a meta-cognitive prompt slips through after the move, restore the relevant row.
 
-- [ ] **Step 5.3: Create `skills/_shared/red-flags-skill-discipline.md`**
+- [x] **Step 5.3: Create `skills/_shared/red-flags-skill-discipline.md`**
 
 ```bash
 mkdir -p skills/_shared
@@ -694,7 +694,7 @@ These thoughts mean STOP — you're rationalizing past skill discipline. The boo
 EOF
 ```
 
-- [ ] **Step 5.4: Rewrite `skills/using-bearpaws/SKILL.md` in XML schema**
+- [x] **Step 5.4: Rewrite `skills/using-bearpaws/SKILL.md` in XML schema**
 
 The new file structure (target ~60 lines after frontmatter):
 
@@ -779,7 +779,7 @@ description: Use when starting any conversation - establishes how to find and us
 
 The 8 inline Red Flags rows are the ones from Step 5.2 (kept set). Authoring decisions like exact wording for triggers / process steps come from the existing v0.1.0 content, compressed but with the same behavioral imperatives. The pattern: ≤60 lines after frontmatter, same rules, fewer prose flourishes.
 
-- [ ] **Step 5.5: Run schema validator and token measurement**
+- [x] **Step 5.5: Run schema validator and token measurement**
 
 ```bash
 tests/schema-validator/run-validator.sh
@@ -795,7 +795,7 @@ Expected: `bootstrap_additional_context_bytes` ≤ 3175 (i.e. ≥40% reduction f
 
 If shrink target missed: that's E4-failing. Compress further or split additional content into `_shared/` or `<see>`. Do NOT ship below the target.
 
-- [ ] **Step 5.6: Re-run the pressure-prompt set against the migrated bootstrap**
+- [x] **Step 5.6: Re-run the pressure-prompt set against the migrated bootstrap**
 
 ```bash
 mkdir -p /tmp/phase1-bootstrap-after
@@ -806,7 +806,7 @@ Compare each pN.json with the baseline. Pass criterion: prompts 1, 2, 5 invoke `
 
 If any prompt regresses (skill no longer invoked when it was before, or vice-versa in a worse way): identify the load-bearing piece of content that was removed, restore it, re-run.
 
-- [ ] **Step 5.7: Gemini CLI smoke test**
+- [ ] **Step 5.7: Gemini CLI smoke test** *(skipped — requires Gemini CLI; user can validate separately)*
 
 ```bash
 gemini extensions link "$(pwd)"
@@ -815,7 +815,7 @@ gemini -p "What is the name of the skills plugin loaded in this session?"
 
 Expected: response mentions Bearpaws (matches v0.1.0 baseline behavior). If Gemini parses `<warning level="hard">` differently and breaks: that's R8 — fall back to a Gemini-specific transformation in `hooks/run-hook.cmd`. Document the fix; don't revert the schema.
 
-- [ ] **Step 5.8: Commit**
+- [x] **Step 5.8: Commit**
 
 ```bash
 git add skills/_shared/ skills/using-bearpaws/SKILL.md
