@@ -29,8 +29,7 @@ while IFS= read -r line; do
     echo "VIOLATION: ${file}:${lineno}: unknown tag <${tag}>"
     violations=$((violations + 1))
   fi
-done < <(grep -rEn '<[a-zA-Z][a-zA-Z0-9_-]*' skills/ --include="*.md" --include="*.html" 2>/dev/null \
-         | grep -v "^skills/_shared/" \
+done < <(grep -rEn '<[a-zA-Z][a-zA-Z0-9_-]*' skills/*/SKILL.md skills/_shared/*.md 2>/dev/null \
          || true)
 
 if [[ $violations -eq 0 ]]; then

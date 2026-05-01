@@ -28,10 +28,12 @@ When reviewing completed work, you will:
    - Verify that the code integrates well with existing systems
    - Assess scalability and extensibility considerations
 
-4. **Documentation and Standards**:
-   - Verify that code includes appropriate comments and documentation
-   - Check that file headers, function documentation, and inline comments are present and accurate
-   - Ensure adherence to project-specific coding standards and conventions
+4. **Domain-Specific Review**:
+   When the code touches one of the following technology domains, apply the corresponding domain knowledge:
+   - **Google Cloud / Cloud Run**: IAM least-privilege, runtime service account vs. deployer SA, secrets via Secret Manager (not env vars), region selection, min-instance and concurrency settings, ingress controls
+   - **Google ADK**: Agent shape selection (single/sequential/parallel/loop), proper Tool/FunctionTool wiring, session and state management, runner selection, deployment target fit
+   - **Vite**: Plugin ordering, `import.meta.env` conventions, dev vs. build pipeline differences, alias/resolve configuration, base path for production
+   - **TypeScript**: `strict` mode compliance, `unknown` over `any`, discriminated unions over type assertions, `satisfies` for config objects, proper `moduleResolution` and `verbatimModuleSyntax` settings
 
 5. **Issue Identification and Recommendations**:
    - Clearly categorize issues as: Critical (must fix), Important (should fix), or Suggestions (nice to have)
