@@ -1,6 +1,6 @@
-# Testing Superpowers Skills
+# Testing Bearpaws Skills
 
-This document describes how to test Superpowers skills, particularly the integration tests for complex skills like `subagent-driven-development`.
+This document describes how to test Bearpaws skills, particularly the integration tests for complex skills like `subagent-driven-development`.
 
 ## Overview
 
@@ -33,9 +33,9 @@ cd tests/claude-code
 
 ### Requirements
 
-- Must run from the **superpowers plugin directory** (not from temp directories)
+- Must run from the **bearpaws plugin directory** (not from temp directories)
 - Claude Code must be installed and available as `claude` command
-- Local dev marketplace must be enabled: `"superpowers@superpowers-dev": true` in `~/.claude/settings.json`
+- Local dev marketplace must be enabled: `"bearpaws@bearpaws-dev": true` in `~/.claude/settings.json`
 
 ## Integration Test: subagent-driven-development
 
@@ -183,7 +183,7 @@ ls -lt "$SESSION_DIR"/*.jsonl | head -5
 
 **Solutions**:
 1. Ensure you're running FROM the superpowers directory: `cd /path/to/superpowers && tests/...`
-2. Check `~/.claude/settings.json` has `"superpowers@superpowers-dev": true` in `enabledPlugins`
+2. Check `~/.claude/settings.json` has `"bearpaws@bearpaws-dev": true` in `enabledPlugins`
 3. Verify skill exists in `skills/` directory
 
 ### Permission Errors
