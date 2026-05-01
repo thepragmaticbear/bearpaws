@@ -22,9 +22,9 @@ mkdir -p "$SUPERPOWERS_SKILLS_DIR/priority-test"
 cat > "$SUPERPOWERS_SKILLS_DIR/priority-test/SKILL.md" <<'EOF'
 ---
 name: priority-test
-description: Superpowers version of priority test skill
+description: Bearpaws version of priority test skill
 ---
-# Priority Test Skill (Superpowers Version)
+# Priority Test Skill (Bearpaws Version)
 
 This is the SUPERPOWERS version of the priority test skill.
 
@@ -66,9 +66,9 @@ echo ""
 echo "Test 1: Verifying test fixtures..."
 
 if [ -f "$SUPERPOWERS_SKILLS_DIR/priority-test/SKILL.md" ]; then
-    echo "  [PASS] Superpowers version exists"
+    echo "  [PASS] Bearpaws version exists"
 else
-    echo "  [FAIL] Superpowers version missing"
+    echo "  [FAIL] Bearpaws version missing"
     exit 1
 fi
 
@@ -114,7 +114,7 @@ output=$(timeout 60s opencode run --print-logs "Use the use_skill tool to load t
 if echo "$output" | grep -qi "PRIORITY_MARKER_PERSONAL_VERSION"; then
     echo "  [PASS] Personal version loaded (overrides superpowers)"
 elif echo "$output" | grep -qi "PRIORITY_MARKER_SUPERPOWERS_VERSION"; then
-    echo "  [FAIL] Superpowers version loaded instead of personal"
+    echo "  [FAIL] Bearpaws version loaded instead of personal"
     exit 1
 else
     echo "  [WARN] Could not verify priority marker in output"
@@ -143,7 +143,7 @@ elif echo "$output" | grep -qi "PRIORITY_MARKER_PERSONAL_VERSION"; then
     echo "  [FAIL] Personal version loaded instead of project"
     exit 1
 elif echo "$output" | grep -qi "PRIORITY_MARKER_SUPERPOWERS_VERSION"; then
-    echo "  [FAIL] Superpowers version loaded instead of project"
+    echo "  [FAIL] Bearpaws version loaded instead of project"
     exit 1
 else
     echo "  [WARN] Could not verify priority marker in output"
@@ -156,7 +156,7 @@ echo ""
 echo "Test 4: Testing superpowers: prefix forces superpowers version..."
 
 cd "$TEST_HOME/test-project"
-output=$(timeout 60s opencode run --print-logs "Use the use_skill tool to load superpowers:priority-test specifically. Show me the exact content including any PRIORITY_MARKER text." 2>&1) || {
+output=$(timeout 60s opencode run --print-logs "Use the use_skill tool to load bearpaws:priority-test specifically. Show me the exact content including any PRIORITY_MARKER text." 2>&1) || {
     exit_code=$?
     if [ $exit_code -eq 124 ]; then
         echo "  [FAIL] OpenCode timed out after 60s"
