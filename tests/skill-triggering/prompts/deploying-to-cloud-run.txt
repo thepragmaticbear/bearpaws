@@ -1,0 +1,1 @@
+I'm ready to deploy my Cloud Run service to production. Walk me through the deploy command and what to check after.
