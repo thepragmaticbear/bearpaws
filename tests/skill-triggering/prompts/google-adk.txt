@@ -1,0 +1,1 @@
+I'm building an AI agent with Google's ADK that needs to search a database and generate reports. It should be able to delegate research tasks to a sub-agent. How do I structure the multi-agent setup?

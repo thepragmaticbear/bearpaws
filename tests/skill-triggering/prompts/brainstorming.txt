@@ -1,0 +1,1 @@
+I want to build a notification system for our app. Users should get real-time alerts when someone comments on their posts, and we need email digests too. Let's figure out the best approach before we start coding.

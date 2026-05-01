@@ -1,0 +1,1 @@
+I want to create a new ADK agent project from scratch. It needs two custom tools - one for querying our product catalog and one for placing orders. Then I need to deploy it to Cloud Run.

@@ -3,68 +3,41 @@ name: executing-plans
 description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
 ---
 
-# Executing Plans
+<skill>
 
-## Overview
+  <purpose>
+    Load plan, review critically, execute all tasks, report when complete. For inline execution without subagents. If subagents are available, use bp:subagent-driven-development instead — quality is significantly higher.
+  </purpose>
 
-Load plan, review critically, execute all tasks, report when complete.
+  <triggers>
+    <rule>Use when you have a written implementation plan and the user chose inline execution.</rule>
+    <rule>Use when subagents are unavailable but a plan needs executing.</rule>
+  </triggers>
 
-**Announce at start:** "I'm using the executing-plans skill to implement this plan."
+  <warning level="soft">
+    Announce at start: "I'm using the executing-plans skill to implement this plan."
+  </warning>
 
-**Note:** Tell your human partner that Bearpaws works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (such as Claude Code). If subagents are available, use bp:subagent-driven-development instead of this skill.
+  <process>
+    <step>**Load and review** — Read plan. Review critically for questions or concerns. If concerns: raise with human partner before starting. If clear: create TodoWrite and proceed.</step>
+    <step>**Execute tasks** — For each task: mark in_progress, follow steps exactly (plan has bite-sized steps), run verifications as specified, mark completed.</step>
+    <step>**Complete development** — After all tasks verified, invoke bp:finishing-a-development-branch.</step>
+  </process>
 
-## The Process
+  <rules>
+    <rule>Follow plan steps exactly — don't skip verifications.</rule>
+    <rule>Stop when blocked — don't guess. Ask for clarification.</rule>
+    <rule>Never start implementation on main/master without explicit user consent.</rule>
+  </rules>
 
-### Step 1: Load and Review Plan
-1. Read plan file
-2. Review critically - identify any questions or concerns about the plan
-3. If concerns: Raise them with your human partner before starting
-4. If no concerns: Create TodoWrite and proceed
+  <gate name="blockers">
+    STOP executing immediately when: hit a blocker (missing dep, test fails, instruction unclear), plan has critical gaps, or verification fails repeatedly. Ask for help rather than guessing.
+  </gate>
 
-### Step 2: Execute Tasks
+  ## Integration
 
-For each task:
-1. Mark as in_progress
-2. Follow each step exactly (plan has bite-sized steps)
-3. Run verifications as specified
-4. Mark as completed
+  - **bp:using-git-worktrees** — set up isolated workspace before starting
+  - **bp:writing-plans** — creates the plan this skill executes
+  - **bp:finishing-a-development-branch** — complete development after all tasks
 
-### Step 3: Complete Development
-
-After all tasks complete and verified:
-- Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use bp:finishing-a-development-branch
-- Follow that skill to verify tests, present options, execute choice
-
-## When to Stop and Ask for Help
-
-**STOP executing immediately when:**
-- Hit a blocker (missing dependency, test fails, instruction unclear)
-- Plan has critical gaps preventing starting
-- You don't understand an instruction
-- Verification fails repeatedly
-
-**Ask for clarification rather than guessing.**
-
-## When to Revisit Earlier Steps
-
-**Return to Review (Step 1) when:**
-- Partner updates the plan based on your feedback
-- Fundamental approach needs rethinking
-
-**Don't force through blockers** - stop and ask.
-
-## Remember
-- Review plan critically first
-- Follow plan steps exactly
-- Don't skip verifications
-- Reference skills when plan says to
-- Stop when blocked, don't guess
-- Never start implementation on main/master branch without explicit user consent
-
-## Integration
-
-**Required workflow skills:**
-- **bp:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
-- **bp:writing-plans** - Creates the plan this skill executes
-- **bp:finishing-a-development-branch** - Complete development after all tasks
+</skill>

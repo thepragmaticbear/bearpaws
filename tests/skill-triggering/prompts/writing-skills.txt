@@ -1,0 +1,1 @@
+I've developed a technique for handling database migrations that I keep reusing across projects. I want to document it as a reusable skill so future sessions can find and apply it. How should I structure and test the skill?

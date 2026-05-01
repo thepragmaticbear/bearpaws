@@ -1,6 +1,6 @@
 # Red Flags — skill discipline (extended)
 
-These thoughts mean STOP — you're rationalizing past skill discipline. The bootstrap (`using-bearpaws`) keeps the highest-leverage rows inline; this file holds the longer tail. Skills consume it via `<include ref="_shared/red-flags-skill-discipline"/>`. The bootstrap reaches it via `<see>` (bootstrap exception: cannot use `<include>` because the agent has not yet been taught the convention at session start).
+These thoughts mean STOP — you're rationalizing past skill discipline. The bootstrap (`using-bearpaws`) keeps the highest-leverage rows inline; this file holds the longer tail. Referenced via `<include>` (structural dedup marker — advisory, not auto-resolved) or `<see>` (opt-in pointer).
 
 | Thought | Reality |
 |---------|---------|

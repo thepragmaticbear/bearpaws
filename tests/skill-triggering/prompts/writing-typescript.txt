@@ -1,0 +1,1 @@
+I'm designing the types for a new feature - a notification system with different notification types (email, push, in-app) each with different payload shapes. What's the best way to structure the TypeScript types so invalid states are impossible?
