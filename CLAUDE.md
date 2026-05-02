@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Bearpaws is a Claude Code (and Gemini CLI) skills plugin that is a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original. The fork's primary goal is **token-efficiency**: delivering the same behavioral performance (skill triggering, compliance, code quality) while significantly reducing per-session token consumption through structured compression, deferred loading, and tighter prompt engineering.
+Bearpaws is a Claude Code, Gemini CLI, Devin for Terminal, and Windsurf Cascade skills plugin that is a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original. The fork's primary goal is **token-efficiency**: delivering the same behavioral performance (skill triggering, compliance, code quality) while significantly reducing per-session token consumption through structured compression, deferred loading, and tighter prompt engineering.
 
 Skills cover TDD, debugging, planning, code review, and parallel execution, plus domain-knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run, plus a stack-agnostic onboarding skill for projects outside those domains. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
 
@@ -13,8 +13,10 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
-- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap.
+- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap (Claude Code, Cursor, Devin, Copilot CLI).
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace.
+- [.devin/](.devin/) — Devin for Terminal config: `hooks.v1.json` (SessionStart hook) and `skills/` (symlinks into `skills/`).
+- [.windsurf/](.windsurf/) — Windsurf Cascade config: `rules/bearpaws.md` (always-on bootstrap rule) and `skills/` (symlinks into `skills/`).
 - [gemini-extension.json](gemini-extension.json) — Gemini CLI extension manifest.
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.

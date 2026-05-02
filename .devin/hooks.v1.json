@@ -1,0 +1,14 @@
+{
+  "SessionStart": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash \"${DEVIN_PROJECT_DIR}/hooks/session-start\"",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}

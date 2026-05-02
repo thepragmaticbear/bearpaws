@@ -23,6 +23,7 @@ description: Use when starting any conversation - establishes how to find and us
 
   <process>
     <step>**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content loads — follow it directly. Never `Read` skill files.</step>
+    <step>**In Devin for Terminal / Windsurf Cascade:** Use the `skill` tool (slash command `/skill-name`). Skills live in `.devin/skills/` or `.windsurf/skills/`.</step>
     <step>**In Gemini CLI:** Skills activate via `activate_skill`. Gemini loads metadata at session start, full content on demand.</step>
     <step>Even a 1% chance a skill might apply means invoke the skill to check.</step>
     <step>If an invoked skill turns out to be wrong for the situation, you don't need to use it.</step>

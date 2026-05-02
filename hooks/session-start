@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # SessionStart hook for bearpaws plugin
+# Platforms: Claude Code (CLAUDE_PLUGIN_ROOT), Cursor (CURSOR_PLUGIN_ROOT),
+#            Devin for Terminal (DEVIN_PROJECT_DIR), Copilot CLI (COPILOT_CLI),
+#            and any SDK-standard platform (additionalContext).
 
 set -euo pipefail
 
@@ -42,9 +45,7 @@ warning_escaped=$(escape_for_json "$warning_message")
 session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n${using_bearpaws_escaped}\n\n${warning_escaped}\n</warning>"
 
 # Output context injection as JSON.
-# Cursor hooks expect additional_context (snake_case).
-# Claude Code hooks expect hookSpecificOutput.additionalContext (nested).
-# Copilot CLI (v1.0.11+) and others expect additionalContext (top-level, SDK standard).
+# Each platform expects a different JSON shape for SessionStart output.
 # Claude Code reads BOTH additional_context and hookSpecificOutput without
 # deduplication, so we must emit only the field the current platform consumes.
 #
@@ -56,6 +57,9 @@ if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
 elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
   # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+elif [ -n "${DEVIN_PROJECT_DIR:-}" ]; then
+  # Devin for Terminal sets DEVIN_PROJECT_DIR; uses SDK-standard top-level additionalContext
+  printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
 else
   # Copilot CLI (sets COPILOT_CLI=1) or unknown platform — SDK standard format
   printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
