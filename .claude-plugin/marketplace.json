@@ -1,6 +1,8 @@
 {
   "name": "bearpaws",
-  "description": "Marketplace for the Bearpaws skills library",
+  "metadata": {
+    "description": "Marketplace for the Bearpaws skills library"
+  },
   "owner": {
     "name": "Brandon Fitzgerald",
     "email": "47871143+brandonfla@users.noreply.github.com"
