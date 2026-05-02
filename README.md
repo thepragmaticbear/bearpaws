@@ -10,7 +10,7 @@ Claude Code and Gemini CLI are the primary supported targets. Codex, Devin for T
 
 ```mermaid
 flowchart TD
-    Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>loaded by agent bootstrap context<br/>Red Flags + skill priority + lazy-load contract]
+    Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>loaded by agent bootstrap context<br/>Red Flags + skill priority + lazy-load contract<br/>fallback brevity policy]
     Bootstrap --> Check{Project<br/>context?}
     Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>identify key files, stack, conventions<br/>read manifests, README, CLAUDE.md, sample files]
     Check -->|NO &mdash; purely abstract design| Brainstorm
@@ -98,7 +98,7 @@ The `using-bearpaws` skill is the intended bootstrap for the rest of the skills.
 
 | Skill | Purpose |
 |---|---|
-| `bp:using-bearpaws` | Loaded by the target agent's bootstrap or context mechanism. Establishes skill-discovery discipline (Red Flags, lazy-load contract, skill-priority order). Never invoked directly. |
+| `bp:using-bearpaws` | Loaded by the target agent's bootstrap or context mechanism. Establishes skill-discovery discipline (Red Flags, lazy-load contract, skill-priority order) and a fallback brevity policy for output not governed by process skills. Never invoked directly. |
 
 ### Always-first (1)
 
@@ -126,12 +126,12 @@ The `using-bearpaws` skill is the intended bootstrap for the rest of the skills.
 
 ## Token efficiency
 
-Our aim is to mitigate token usage and enforce token efficiency while preserving practical skill-triggering usefulness. The numbers below are approximations from a single point-in-time measurement against the superpowers v5.0.7 fork point and will drift as either project changes — treat them as direction, not commitments.
+Our aim is to mitigate token usage and enforce token efficiency while preserving practical skill-triggering usefulness. The numbers below are point-in-time measurements against superpowers `main` and will drift as either project changes — treat them as direction, not commitments.
 
-| Metric | superpowers v5.0.7 | Bearpaws | Approx. delta |
+| Metric | superpowers (main) | Bearpaws | Approx. delta |
 |---|---:|---:|---|
-| Bootstrap injected per session | ~5.3 KB (~1.3K tokens) | ~4.3 KB (~1.0K tokens) | ~20% smaller |
-| Process skill bodies (apples-to-apples subset) | ~108 KB (~27K tokens) | ~54 KB (~13K tokens) | roughly half |
+| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~5.2 KB (~1.2K tokens) | ~10% smaller |
+| Process skill bodies (apples-to-apples subset) | ~101 KB (~24K tokens) | ~51 KB (~12K tokens) | roughly half |
 
 Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer; treat them as ballpark figures, not exact savings. The bootstrap is paid every session; non-bootstrap skills load on demand through the target agent's skill mechanism, so the dominant cost is the bootstrap plus whatever skills the agent actually pulls in.
 

@@ -11,7 +11,7 @@
     {
       "name": "bp",
       "description": "Bearpaws began as a hard fork of superpowers v5.0.7; now an independent low-token Claude Code skills library for TDD, debugging, planning, code review, and parallel execution.",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "source": "./",
       "author": {
         "name": "Brandon Fitzgerald",

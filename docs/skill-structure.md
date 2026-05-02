@@ -118,7 +118,7 @@ This convention is central to Bearpaws' token-efficiency goal.
 
 `skills/using-bearpaws/SKILL.md` is special.
 
-It is injected at session start for supported agents and teaches the agent how to discover and invoke the other skills. It also defines skill priority and the lazy-load contract.
+It is injected at session start for supported agents and teaches the agent how to discover and invoke the other skills. It also defines skill priority, the lazy-load contract, and the fallback brevity policy for output not governed by process skills.
 
 Because the bootstrap teaches the conventions, it should be preserved especially carefully. Avoid changing it unless there is explicit behavioral evidence and a fresh-session verification plan.
 

@@ -61,6 +61,31 @@ description: Use when starting any conversation - establishes how to find and us
 
   Onboarding tells you the *project's specific* conventions; brainstorming reconciles them with the work to be done before code is written. Onboarding → brainstorming → implementation is the standard flow.
 
+  ## Brevity Policy
+
+  When no process skill governs the current output, prefer concise, low-commentary responses.
+
+  Default behavior:
+  - Answer directly.
+  - Do not restate the prompt.
+  - Skip preamble and post-hoc summaries unless asked.
+  - Prefer actionable output over commentary.
+  - For routine progress updates, use one line; expand only when something unexpected happens.
+  - Ask at most one clarification question when blocked.
+
+  Skill precedence:
+  - Active process skills define their own verbosity expectations.
+  - If a skill requires detailed plans, verification, debugging analysis, or acceptance criteria, follow the skill.
+  - Do not shorten outputs in ways that reduce correctness, safety, or usefulness.
+
+  Never compress:
+  - safety-critical warnings
+  - migration risks
+  - acceptance criteria
+  - code review findings needed to prevent defects
+  - test failures and error output
+  - verification results
+
   ## Skill types
 
   Rigid (TDD, debugging) — follow exactly. Flexible (patterns) — adapt to context. The skill itself tells you which.
