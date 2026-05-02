@@ -1,6 +1,6 @@
 ---
 name: onboarding-to-a-project
-description: Use FIRST whenever there's an existing project context — before brainstorming or implementation. Identifies key files, stack, and conventions from manifests, README, CLAUDE.md, and similar files. The standard flow is onboarding → brainstorming → implementation. Skip only for purely abstract design discussion with no project to onboard to, or if already onboarded this project earlier in the session
+description: Applies when a session involves an existing codebase or project context and onboarding should occur prior to brainstorming or implementation. Skip for purely abstract design discussion with no project to onboard to, or if the project was already onboarded earlier in the session
 ---
 
 <skill>

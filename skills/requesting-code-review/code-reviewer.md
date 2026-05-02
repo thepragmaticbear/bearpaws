@@ -124,5 +124,5 @@ Document what you specifically tried to break: edge cases traced, error paths fo
 - Say "looks good" without checking
 - Mark nitpicks as Critical
 - Give feedback on code you didn't review
-- Be vague ("improve error handling", "tried to break it")
+- Don't be vague ("improve error handling", "tried to break it")
 - Avoid giving a clear verdict

@@ -86,6 +86,9 @@ if [[ -f "$skill_file" ]]; then
       gate_violations=$((gate_violations + 1))
     fi
   done
+else
+  echo "GATE VIOLATION: ${skill_file}: file not found"
+  gate_violations=$((gate_violations + 1))
 fi
 
 # User-message template must contain all four gate-section markers
@@ -101,6 +104,9 @@ if [[ -f "$template_file" ]]; then
       gate_violations=$((gate_violations + 1))
     fi
   done
+else
+  echo "GATE VIOLATION: ${template_file}: file not found"
+  gate_violations=$((gate_violations + 1))
 fi
 
 if [[ $gate_violations -gt 0 ]]; then
