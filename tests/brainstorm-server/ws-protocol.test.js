@@ -17,10 +17,12 @@ const path = require('path');
 
 // The module under test — will be the new zero-dep server file
 const SERVER_PATH = path.join(__dirname, '../../skills/brainstorming/scripts/server.cjs');
+const ALT_SERVER_PATH = path.join(__dirname, '../../../skills/brainstorming/scripts/server.cjs');
+const FINAL_SERVER_PATH = require('fs').existsSync(SERVER_PATH) ? SERVER_PATH : ALT_SERVER_PATH;
 let ws;
 
 try {
-  ws = require(SERVER_PATH);
+  ws = require(FINAL_SERVER_PATH);
 } catch (e) {
   // Module doesn't exist yet (TDD — tests written before implementation)
   console.error(`Cannot load ${SERVER_PATH}: ${e.message}`);

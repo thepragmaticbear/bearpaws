@@ -16,6 +16,9 @@ const path = require('path');
 const assert = require('assert');
 
 const SERVER_PATH = path.join(__dirname, '../../skills/brainstorming/scripts/server.cjs');
+// Alternative path for when running from installed platform directories
+const ALT_SERVER_PATH = path.join(__dirname, '../../../skills/brainstorming/scripts/server.cjs');
+const FINAL_SERVER_PATH = fs.existsSync(SERVER_PATH) ? SERVER_PATH : ALT_SERVER_PATH;
 const TEST_PORT = 3334;
 const TEST_DIR = '/tmp/brainstorm-test';
 const CONTENT_DIR = path.join(TEST_DIR, 'content');
@@ -46,7 +49,7 @@ async function fetch(url) {
 }
 
 function startServer() {
-  return spawn('node', [SERVER_PATH], {
+  return spawn('node', [FINAL_SERVER_PATH], {
     env: { ...process.env, BRAINSTORM_PORT: TEST_PORT, BRAINSTORM_DIR: TEST_DIR }
   });
 }
@@ -386,9 +389,10 @@ async function runTests() {
     console.log('\n--- Helper.js Verification ---');
 
     await test('helper.js defines required APIs', () => {
-      const helperContent = fs.readFileSync(
-        path.join(__dirname, '../../skills/brainstorming/scripts/helper.js'), 'utf-8'
-      );
+      const helperPath = fs.existsSync(path.join(__dirname, '../../skills/brainstorming/scripts/helper.js'))
+        ? path.join(__dirname, '../../skills/brainstorming/scripts/helper.js')
+        : path.join(__dirname, '../../../skills/brainstorming/scripts/helper.js');
+      const helperContent = fs.readFileSync(helperPath, 'utf-8');
       assert(helperContent.includes('toggleSelect'), 'Should define toggleSelect');
       assert(helperContent.includes('sendEvent'), 'Should define sendEvent');
       assert(helperContent.includes('selectedChoice'), 'Should track selectedChoice');
@@ -400,9 +404,10 @@ async function runTests() {
     console.log('\n--- Frame Template Verification ---');
 
     await test('frame template has required structure', () => {
-      const template = fs.readFileSync(
-        path.join(__dirname, '../../skills/brainstorming/scripts/frame-template.html'), 'utf-8'
-      );
+      const templatePath = fs.existsSync(path.join(__dirname, '../../skills/brainstorming/scripts/frame-template.html'))
+        ? path.join(__dirname, '../../skills/brainstorming/scripts/frame-template.html')
+        : path.join(__dirname, '../../../skills/brainstorming/scripts/frame-template.html');
+      const template = fs.readFileSync(templatePath, 'utf-8');
       assert(template.includes('indicator-bar'), 'Should have indicator bar');
       assert(template.includes('indicator-text'), 'Should have indicator text');
       assert(template.includes('<!-- CONTENT -->'), 'Should have content placeholder');

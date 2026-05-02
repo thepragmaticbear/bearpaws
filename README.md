@@ -40,46 +40,44 @@ gemini extensions install /path/to/bearpaws
 
 Or link it for local development so updates are reflected immediately: `gemini extensions link /path/to/bearpaws`.
 
-## Install (Devin for Terminal)
+## Install (Devin for Terminal & Windsurf Cascade)
 
-Devin reads skills from `.devin/skills/` in your project. Copy or symlink the bearpaws skills into your project:
+**Quick install (recommended):**
 
 ```bash
-# Symlink all bearpaws skills into your project (updates automatically when bearpaws updates)
+# Install for both platforms
+./install.sh --all
+
+# Or install for specific platforms
+./install.sh --devin      # Devin for Terminal only
+./install.sh --windsurf   # Windsurf Cascade only
+
+# Global installation for Devin (available in all projects)
+./install.sh --devin --global
+```
+
+The install script automatically creates the necessary symlinks and sets up the bootstrap rules. The repository is now "ready out of the box" — no manual setup required.
+
+**Manual install (if you prefer):**
+
+For Devin for Terminal:
+```bash
 mkdir -p .devin/skills
-for skill in /path/to/bearpaws/skills/*/; do
+for skill in skills/*/; do
   ln -sfn "$skill" ".devin/skills/$(basename "$skill")"
 done
 ```
 
-Or for global availability across all projects, symlink into `~/.config/devin/skills/`:
-
+For Windsurf Cascade:
 ```bash
-mkdir -p ~/.config/devin/skills
-for skill in /path/to/bearpaws/skills/*/; do
-  ln -sfn "$skill" "$HOME/.config/devin/skills/$(basename "$skill")"
-done
-```
-
-The `using-bearpaws` skill bootstraps the rest — Devin will invoke it autonomously at session start. For SessionStart context injection when working in the bearpaws repo itself, `.devin/hooks.v1.json` is included.
-
-## Install (Windsurf Cascade)
-
-Cascade reads skills from `.windsurf/skills/` in your project. Copy or symlink the bearpaws skills, then add the bootstrap rule:
-
-```bash
-# Symlink all bearpaws skills into your project
 mkdir -p .windsurf/skills
-for skill in /path/to/bearpaws/skills/*/; do
+for skill in skills/*/; do
   ln -sfn "$skill" ".windsurf/skills/$(basename "$skill")"
 done
-
-# Copy the always-on bootstrap rule (or symlink it)
-mkdir -p .windsurf/rules
-cp /path/to/bearpaws/.windsurf/rules/bearpaws.md .windsurf/rules/bearpaws.md
+# Bootstrap rule is already included via @include
 ```
 
-The `.windsurf/rules/bearpaws.md` rule is `trigger: always_on` — it injects the skill-discovery bootstrap at every session, replacing the SessionStart hook used by Claude Code and Devin.
+The `using-bearpaws` skill bootstraps the rest — both platforms will invoke it autonomously at session start. SessionStart hooks are included for working in the bearpaws repo itself.
 
 ## Skills
 
