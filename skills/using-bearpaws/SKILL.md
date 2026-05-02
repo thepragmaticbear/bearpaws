@@ -58,9 +58,8 @@ description: Use when starting any conversation - establishes how to find and us
   1. **`bp:onboarding-to-a-project`** — first, whenever there's an existing project context. Identify the key files and stack from manifests, READMEs, and a sample of similar files. Skip only for purely abstract design discussion with no codebase ("how would I architect a system that does X?" with no project named).
   2. **`bp:brainstorming`** — next, for any creative/design work. Brainstorming designs *against the conventions you discovered in onboarding*, not against your training-data prior.
   3. **Other process skills** (writing-plans, TDD, debugging, code review, verification) — stack-agnostic, apply during implementation.
-  4. **Domain skills** (`cloud-run`, `vite`, `google-adk`, `javascript-typescript`, etc.) — layer ON TOP of the discovered conventions, not as a replacement.
 
-  Domain skills describe *general* mechanics; onboarding tells you the *project's specific* conventions; brainstorming reconciles the two before code is written. Onboarding → brainstorming → implementation is the standard flow.
+  Onboarding tells you the *project's specific* conventions; brainstorming reconciles them with the work to be done before code is written. Onboarding → brainstorming → implementation is the standard flow.
 
   ## Skill types
 

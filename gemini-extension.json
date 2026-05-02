@@ -1,6 +1,6 @@
 {
   "name": "bearpaws",
-  "description": "Bearpaws — a Gemini CLI extension for Google Cloud, ADK, Vite, JS/TS, and Cloud Run development. Forked from superpowers v5.0.7.",
+  "description": "Bearpaws — a Gemini CLI extension with skills for TDD, debugging, planning, code review, and parallel execution. Forked from superpowers v5.0.7.",
   "version": "1.1.0",
   "contextFileName": "GEMINI.md"
 }

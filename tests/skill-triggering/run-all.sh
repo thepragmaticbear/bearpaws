@@ -17,16 +17,6 @@ SKILLS=(
     "dispatching-parallel-agents"
     "executing-plans"
     "requesting-code-review"
-    "cloud-run"
-    "deploying-to-cloud-run"
-    "vite"
-    "working-with-vite"
-    "javascript-typescript"
-    "writing-typescript"
-    "google-cloud"
-    "working-on-google-cloud"
-    "google-adk"
-    "building-with-adk"
 )
 
 echo "=== Running Skill Triggering Tests ==="

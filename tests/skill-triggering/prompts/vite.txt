@@ -1,1 +1,0 @@
-My Vite dev server is really slow on cold start and HMR sometimes causes a full page reload instead of hot-updating just the component I changed. The project has about 200 dependencies. What should I check?

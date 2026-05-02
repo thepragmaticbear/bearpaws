@@ -1,1 +1,0 @@
-I need to deploy a new microservice to GCP. It needs access to Cloud SQL and Secret Manager. Walk me through setting up the service account, granting the right permissions, and deploying.

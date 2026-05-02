@@ -1,1 +1,0 @@
-I keep getting "Object is possibly undefined" errors in my TypeScript code when accessing nested properties. I'm using optional chaining but the compiler still complains in some places. Also not sure when to use type vs interface for my data models.

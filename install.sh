@@ -64,7 +64,6 @@ create_symlinks() {
             find "$target_dir" -type l -delete 2>/dev/null || true
         else
             log_success "$target_dir symlinks already exist and are valid"
-            return 0
         fi
     fi
     
@@ -75,7 +74,7 @@ create_symlinks() {
         if [[ -d "$skill_dir" ]]; then
             local skill_name="$(basename "$skill_dir")"
             ln -sfn "$skill_dir" "$target_dir/$skill_name"
-            ((skills_created++))
+            ((++skills_created))
         fi
     done
     

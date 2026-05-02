@@ -1,1 +1,0 @@
-I need to add a proxy to my Vite config so that API calls to /api/* get forwarded to my backend running on port 3000. Also need to set up path aliases so I can import from @/components instead of relative paths.

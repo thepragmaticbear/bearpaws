@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bearpaws is a Claude Code, Gemini CLI, Devin for Terminal, and Windsurf Cascade skills plugin that is a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original. The fork's primary goal is **token-efficiency**: delivering the same behavioral performance (skill triggering, compliance, code quality) while significantly reducing per-session token consumption through structured compression, deferred loading, and tighter prompt engineering.
 
-Skills cover TDD, debugging, planning, code review, and parallel execution, plus domain-knowledge for Google Cloud, Google ADK, Vite, JS/TypeScript, and Cloud Run, plus a stack-agnostic onboarding skill for projects outside those domains. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
+Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
 
 ## Repository layout
 
@@ -21,8 +21,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
-- [docs/bearpaws/specs/](docs/bearpaws/specs/) — design specs.
-- [docs/bearpaws/plans/](docs/bearpaws/plans/) — implementation plans.
+- [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/) — release notes, starting with the v1.0.0 public baseline.
 
 ## How the bootstrap works
 
@@ -50,7 +49,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ## Tests
 
-Tests are behavioral, not unit — they invoke the `claude` CLI in headless mode and assert against transcripts. Requires the local plugin to be registered (e.g. `"bp@bearpaws-dev": true` in `~/.claude/settings.json`, or pass `--plugin-dir` explicitly).
+Tests are behavioral, not unit — they invoke the `claude` CLI in headless mode and assert against transcripts. Requires the local plugin to be registered (e.g. `"bp@bearpaws": true` in `~/.claude/settings.json`, or pass `--plugin-dir` explicitly).
 
 ```bash
 tests/claude-code/run-skill-tests.sh                                          # fast skill-content tests (~2 min)
@@ -91,7 +90,7 @@ Constraints worth knowing before editing frontmatter:
 - Frontmatter total ≤ 1024 chars; `name` is letters/numbers/hyphens only.
 - Heavy reference material (>100 lines) and reusable scripts go in sibling files; keep `SKILL.md` focused on the rule.
 
-See [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md) and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All 24 skill bodies are in the XML schema described in [docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md](docs/bearpaws/specs/2026-04-30-bearpaws-fork-design.md) §2 — the schema validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
+See [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md) and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a structured XML schema — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
 
 ## Commit conventions
 

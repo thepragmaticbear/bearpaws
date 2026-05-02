@@ -1,1 +1,0 @@
-I'm getting permission denied errors when my Cloud Run service tries to access Cloud SQL. The service is using the default compute service account. What's the right way to set up IAM for this?
