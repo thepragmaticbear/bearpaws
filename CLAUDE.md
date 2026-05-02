@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Bearpaws is a Claude Code, Gemini CLI, Devin for Terminal, and Windsurf Cascade skills plugin that is a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original. The fork's primary goal is **token-efficiency**: delivering the same behavioral performance (skill triggering, compliance, code quality) while significantly reducing per-session token consumption through structured compression, deferred loading, and tighter prompt engineering.
+Bearpaws is an independent, low-token skills toolkit for AI coding agents. It began as a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original — and now evolves independently with a focus on portability, simplicity, and practical agent support.
 
-Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to inject the `using-bearpaws` bootstrap at session start so the agent learns to discover and invoke the rest of the skills via the `Skill` tool.
+Claude Code and Gemini CLI are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, superpowers behavioral parity, or guaranteed support across every agent.
+
+Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to get the `using-bearpaws` bootstrap into the agent context so the agent learns to discover and invoke the rest of the skills.
 
 ## Repository layout
 
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
-- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap (Claude Code, Cursor, Devin, Copilot CLI).
+- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin for Terminal, Copilot CLI, or unknown SDK callers). Hook compatibility does not imply support-tier promotion.
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace.
 - [.devin/](.devin/) — Devin for Terminal config: `hooks.v1.json` (SessionStart hook) and `skills/` (symlinks into `skills/`).
 - [.windsurf/](.windsurf/) — Windsurf Cascade config: `rules/bearpaws.md` (always-on bootstrap rule) and `skills/` (symlinks into `skills/`).
@@ -21,15 +23,27 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
-- [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/) — release notes, starting with the v1.0.0 public baseline.
+- [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
+- [docs/agent-support.md](docs/agent-support.md) — current support tiers and evidence by agent.
+- [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/) — release notes, starting with the v1.0.0 public baseline; new positioning changes belong in new release-note files, not retroactive edits to historical notes.
+
+## Support posture
+
+| Agent | Status | Evidence |
+|---|---|---|
+| Claude Code | Primary | Working |
+| Gemini CLI | Primary | Mostly working, needs lightweight validation |
+| Codex | Experimental | No maintained install flow yet |
+| Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
+| Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
 
 ## How the bootstrap works
 
 The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) registers the [hooks/hooks.json](hooks/hooks.json) `SessionStart` hook (matchers: `startup|clear`). That hook calls [hooks/run-hook.cmd](hooks/run-hook.cmd) → [hooks/session-start](hooks/session-start), which:
 
 1. Reads [skills/using-bearpaws/SKILL.md](skills/using-bearpaws/SKILL.md). Fails loudly (exit 1, stderr) if the file is missing/empty/unreadable rather than emitting a garbage bootstrap silently.
-2. Wraps it in a `<warning level="hard">` block (per the XML schema in the design spec §2).
-3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Copilot CLI / SDK-standard: top-level `additionalContext`.
+2. Wraps it in a `<warning level="hard">` block (per the current XML-like skill structure convention).
+3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Cursor: top-level `additional_context`; Devin for Terminal, Copilot CLI, and unknown SDK-style callers: top-level `additionalContext`.
 
 [hooks/run-hook.cmd](hooks/run-hook.cmd) is a bash/cmd polyglot so the same file works on macOS/Linux and Windows. Hook scripts under [hooks/](hooks/) are intentionally **extensionless** — Claude Code's Windows auto-detection prepends `bash` to anything ending in `.sh`, which would double-wrap the call.
 
@@ -90,7 +104,7 @@ Constraints worth knowing before editing frontmatter:
 - Frontmatter total ≤ 1024 chars; `name` is letters/numbers/hyphens only.
 - Heavy reference material (>100 lines) and reusable scripts go in sibling files; keep `SKILL.md` focused on the rule.
 
-See [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md) and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a structured XML schema — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
+See [docs/skill-structure.md](docs/skill-structure.md), [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md), and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a compact XML-like structure — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
 
 ## Commit conventions
 

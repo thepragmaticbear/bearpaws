@@ -1,6 +1,6 @@
 {
   "name": "bearpaws",
-  "description": "Bearpaws — a Gemini CLI extension with skills for TDD, debugging, planning, code review, and parallel execution. Forked from superpowers v5.0.7.",
-  "version": "1.1.1",
+  "description": "Bearpaws began as a hard fork of superpowers v5.0.7; now an independent low-token Gemini CLI extension for TDD, debugging, planning, code review, and parallel execution.",
+  "version": "2.0.0",
   "contextFileName": "GEMINI.md"
 }

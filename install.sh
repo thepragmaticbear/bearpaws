@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bearpaws installation script
-# Sets up platform-specific symlinks for Devin for Terminal and Windsurf Cascade
+# Sets up experimental platform-specific symlinks for Devin for Terminal and Windsurf Cascade
 
 set -euo pipefail
 
@@ -83,7 +83,7 @@ create_symlinks() {
 
 # Install for Devin for Terminal
 install_devin() {
-    log_info "Setting up Devin for Terminal support..."
+    log_info "Setting up experimental Devin for Terminal wiring..."
     
     # Project-level installation
     create_symlinks "$BEARPAWS_ROOT/skills" "$BEARPAWS_ROOT/.devin/skills"
@@ -98,7 +98,7 @@ install_devin() {
 
 # Install for Windsurf Cascade
 install_windsurf() {
-    log_info "Setting up Windsurf Cascade support..."
+    log_info "Setting up experimental Windsurf Cascade wiring..."
     
     # Create skills symlinks
     create_symlinks "$BEARPAWS_ROOT/skills" "$BEARPAWS_ROOT/.windsurf/skills"
@@ -143,17 +143,17 @@ main() {
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Options:"
-                echo "  --devin     Install for Devin for Terminal"
-                echo "  --windsurf  Install for Windsurf Cascade"
-                echo "  --all       Install for both platforms (default)"
-                echo "  --global    Also install globally (Devin only)"
+                echo "  --devin     Install experimental Devin for Terminal wiring"
+                echo "  --windsurf  Install experimental Windsurf Cascade wiring"
+                echo "  --all       Install experimental wiring for both platforms (default)"
+                echo "  --global    Also install experimental Devin wiring globally"
                 echo "  --help      Show this help message"
                 echo ""
                 echo "Examples:"
-                echo "  $0 --all                    # Install for both platforms"
-                echo "  $0 --devin                  # Install only for Devin"
-                echo "  $0 --windsurf               # Install only for Windsurf"
-                echo "  $0 --devin --global         # Install for Devin globally too"
+                echo "  $0 --all                    # Install experimental wiring for both platforms"
+                echo "  $0 --devin                  # Install experimental Devin wiring only"
+                echo "  $0 --windsurf               # Install experimental Windsurf wiring only"
+                echo "  $0 --devin --global         # Install experimental Devin wiring globally too"
                 exit 0
                 ;;
             *)
@@ -198,14 +198,14 @@ main() {
         echo ""
         echo "Next steps:"
         if [[ " ${platforms[*]} " =~ " devin " ]]; then
-            echo "  • Devin for Terminal: Skills are now available in .devin/skills/"
+            echo "  • Devin for Terminal (experimental): Skills are now available in .devin/skills/"
             if [[ "${INSTALL_GLOBAL:-}" == "true" ]]; then
-                echo "  • Global Devin: Skills are also available in ~/.config/devin/skills/"
+                echo "  • Global Devin (experimental): Skills are also available in ~/.config/devin/skills/"
             fi
         fi
         if [[ " ${platforms[*]} " =~ " windsurf " ]]; then
-            echo "  • Windsurf Cascade: Skills are now available in .windsurf/skills/"
-            echo "  • Bootstrap rule: .windsurf/rules/bearpaws.md will auto-load at session start"
+            echo "  • Windsurf Cascade (experimental): Skills are now available in .windsurf/skills/"
+            echo "  • Bootstrap rule: .windsurf/rules/bearpaws.md is present; verify activation in Windsurf"
         fi
     else
         log_error "$failed platform installations failed"
