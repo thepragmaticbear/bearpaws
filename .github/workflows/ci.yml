@@ -14,12 +14,12 @@ jobs:
     name: schema-validator
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: tests/schema-validator/run-validator.sh
 
   token-measurement:
     name: token-measurement
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: tests/token-measurement/measure.sh
