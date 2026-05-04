@@ -12,7 +12,7 @@ Claude Code and Gemini CLI are the primary supported targets. Codex, Devin for T
 flowchart TD
     Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>loaded by agent bootstrap context<br/>Red Flags + skill priority + lazy-load contract<br/>fallback brevity policy]
     Bootstrap --> Check{Project<br/>context?}
-    Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>identify key files, stack, conventions<br/>read manifests, README, CLAUDE.md, sample files]
+    Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>identify key files, stack, conventions<br/>read manifests, README, CLAUDE.md/AGENTS.md/GEMINI.md, sample files]
     Check -->|NO &mdash; purely abstract design| Brainstorm
     Onboard --> Brainstorm[bp:brainstorming<br/>design against discovered conventions]
     Brainstorm --> Process[Process skills<br/>writing-plans &middot; test-driven-development<br/>systematic-debugging &middot; requesting-code-review<br/>verification-before-completion &middot; finishing-a-development-branch]
@@ -104,7 +104,7 @@ The `using-bearpaws` skill is the intended bootstrap for the rest of the skills.
 
 | Skill | Purpose |
 |---|---|
-| `bp:onboarding-to-a-project` | **First on any work that touches the codebase.** Detect stack from manifests, read CLAUDE.md/AGENTS.md, sample existing files, find the test command. Skipped for pure ideation. |
+| `bp:onboarding-to-a-project` | **First on any work that touches the codebase.** Detect stack from manifests, read CLAUDE.md/AGENTS.md/GEMINI.md, sample existing files, find the test command. Skipped for pure ideation. |
 
 ### Process skills (13)
 
