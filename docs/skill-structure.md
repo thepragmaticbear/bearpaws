@@ -127,7 +127,7 @@ Because the bootstrap teaches the conventions, it should be preserved especially
 Some skill text names current agent tools or capabilities:
 
 - Claude Code: `Skill`, `Task`, `TodoWrite`, `Read`, `Write`, `Edit`, `Bash`
-- Gemini CLI equivalents are documented in `skills/using-bearpaws/references/gemini-tools.md`
+- Google Antigravity capability mappings are documented in `skills/using-bearpaws/references/antigravity-tools.md`
 - Devin and Windsurf are described in the bootstrap as using a `skill` tool or slash command
 
 This language is part of the current skill behavior. Do not rewrite source skills just to make an adapter cleaner. If an agent needs different tool names, use an agent-specific wrapper or reference note where possible.

@@ -17,10 +17,10 @@ Current tiers:
 | Agent | Status | Evidence |
 |---|---|---|
 | Claude Code | Primary | Working |
-| Gemini CLI | Primary | Mostly working, needs lightweight validation |
-| Codex | Experimental | No maintained install flow yet |
+| Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
 | Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
+| Codex | Experimental | No maintained install flow yet |
 
 ## Claude Code
 
@@ -73,52 +73,70 @@ Risk:
 - Low for current Claude behavior.
 - Medium for hook output changes, because session-start payload shape must be verified in a fresh Claude Code session.
 
-## Gemini CLI
+## Google Antigravity IDE
 
-Status: Primary, mostly working with lightweight validation still needed.
+Status: Primary (native plugin, skills, subagents, and capability adapter).
 
 Existing files:
 
-- `gemini-extension.json`
-- `GEMINI.md`
-- `skills/using-bearpaws/SKILL.md`
-- `skills/using-bearpaws/references/gemini-tools.md`
+- `.antigravity/plugin.json`
+- `.antigravity/rules/bearpaws.md`
+- `skills/using-bearpaws/references/antigravity-tools.md`
+- `agents/code-reviewer.md`
+- `install.sh` (`--antigravity --global`)
+- `tests/antigravity/run-adapter-tests.sh`
+- `tests/install/run-install-tests.sh`
 
 Install path:
 
 ```bash
-gemini extensions install /path/to/bearpaws
+./install.sh --antigravity --global
 ```
 
-Local development can also use:
+Global plugin path:
 
-```bash
-gemini extensions link /path/to/bearpaws
+```
+~/.gemini/config/plugins/bearpaws/
+├── plugin.json
+├── rules/
+│   └── bearpaws.md
+├── skills/
+└── agents/
+    └── code-reviewer.md
 ```
 
 How it works:
 
-- `gemini-extension.json` declares the extension and points Gemini at `GEMINI.md`.
-- `GEMINI.md` includes the Bearpaws bootstrap and the Gemini tool mapping reference.
-- `skills/using-bearpaws/references/gemini-tools.md` maps Claude Code tool names to Gemini CLI equivalents.
+- `.antigravity/plugin.json` declares the native Antigravity plugin manifest.
+- `.antigravity/rules/bearpaws.md` serves as the thin bootstrap rule importing `skills/using-bearpaws/SKILL.md` and `skills/using-bearpaws/references/antigravity-tools.md`.
+- `install.sh` performs atomic, real-directory copies into `~/.gemini/config/plugins/bearpaws/` (no symlinks).
+- Antigravity discovers skills natively from `skills/` and loads them on demand.
+- `skills/using-bearpaws/references/antigravity-tools.md` maps Claude Code tool references to native Antigravity capabilities (`view_file`, `write_to_file`, `replace_file_content`, `run_command`, `grep_search`, `find_by_name`, `invoke_subagent`).
+- Subagent dispatch uses native `invoke_subagent` for fresh implementers, isolated reviewers, and parallel tasks.
+- The reusable reviewer `agents/code-reviewer.md` is packaged directly within the plugin.
 
 Known limitations:
 
-- Gemini CLI has no equivalent to Claude Code's `Task` tool.
-- Skills that depend on subagent dispatch cannot have exact behavior parity.
-- The Gemini reference says subagent-heavy workflows should fall back to single-session execution via `executing-plans`.
-- The repo does not currently include automated Gemini trigger tests.
+- Requires restarting Antigravity IDE after installation or update to refresh the skill registry.
+- Antigravity CLI (`agy`) uses different config paths and is considered a separate target.
 
-Minimum useful validation:
+Validation gates (promotion requirements):
 
-- Confirm Gemini installs or links the extension.
-- Confirm `GEMINI.md` context loads.
-- Confirm `activate_skill` can load at least `using-bearpaws`, `onboarding-to-a-project`, and one process skill.
-- Confirm subagent-dependent skills either fall back or are clearly documented as limited.
+- Gate A (Install): Real files staged cleanly to global plugin folder.
+- Gate B (Discovery): `/brain` and core skills appear in Antigravity command palette.
+- Gate C (Onboarding): Project conventions inspected autonomously before editing.
+- Gate D (Pace Control): Early confidence does not bypass inspection ("Momentum does not waive gates").
+- Gate E (Debugging): Root-cause investigation before fix generation.
+- Gate F (Planning): Multi-step features follow onboarding → plan → execute.
+- Gate G (Verification): Evidence of testing before completion claim.
+- Gate H (Review Subagent): Fresh reviewer subagent with adversarial gates intact.
+- Gate I (Parallel Agents): Concurrency used only for decoupled tasks.
+- Gate J (Update): Clean idempotent re-install.
+- Gate K (Uninstall): Plugin removal cleanly restores prior state without affecting unrelated configs.
 
 Risk:
 
-- Medium until a lightweight Gemini smoke test or repeatable manual validation is documented.
+- Low. Plugin packaging isolates BearPaws from core system settings and other plugins.
 
 ## Codex
 
@@ -256,7 +274,7 @@ Minimum practical tests by tier:
 | Agent | Minimum check |
 |---|---|
 | Claude Code | Existing trigger, explicit-request, schema, and selected workflow tests. |
-| Gemini CLI | Extension/context smoke test plus one or two skill activation checks. |
+| Google Antigravity IDE | Real-file plugin install test, static adapter test, and manual promotion gates A–K. |
 | Codex | None until an integration is added. |
 | Devin for Terminal | Symlink install test plus manual or automated activation proof before promotion. |
 | Windsurf Cascade | Symlink install test plus manual or automated include/activation proof before promotion. |
@@ -267,14 +285,14 @@ Do not add a full per-agent trigger matrix unless the maintenance cost is explic
 
 Recommended public posture:
 
-- Claude Code and Gemini CLI are primary supported targets.
+- Claude Code and Google Antigravity IDE are primary supported targets.
 - Codex, Devin for Terminal, and Windsurf Cascade are experimental unless and until validated.
-- Bearpaws began as a hard fork of superpowers v5.0.7 and now evolves independently.
+- Bearpaws is an independent skills toolkit that evolves on its own cadence.
 - Attribution and MIT license compliance remain.
 
 Avoid claiming:
 
-- Full behavioral parity with superpowers.
+- Full behavioral parity with upstream baselines.
 - Ongoing upstream tracking.
 - Universal agent compatibility.
 - Equivalent behavior across agents with different tool models.

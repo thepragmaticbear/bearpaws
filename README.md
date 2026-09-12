@@ -2,7 +2,7 @@
 
 Bearpaws is an independent, low-token skills toolkit for AI coding agents, focused on portability, simplicity, and practical agent support. See [Attribution](#attribution) for the project's origin and license.
 
-Claude Code and Gemini CLI are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade support is experimental unless explicitly validated for a given workflow.
+Claude Code and Google Antigravity IDE are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade support is experimental unless explicitly validated for a given workflow.
 
 **15 skills** covering TDD, debugging, planning, code review, parallel execution, plus a stack-agnostic onboarding skill. All skill bodies use a compact XML-like structure with lazy-loaded references.
 
@@ -23,10 +23,10 @@ flowchart TD
 | Agent | Status | Evidence |
 |---|---|---|
 | Claude Code | Primary | Working |
-| Gemini CLI | Primary | Mostly working, needs lightweight validation |
-| Codex | Experimental | No maintained install flow yet |
+| Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
 | Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
+| Codex | Experimental | No maintained install flow yet |
 
 See [docs/agent-support.md](docs/agent-support.md) for the current support policy and [docs/skill-structure.md](docs/skill-structure.md) for the descriptive skill structure contract.
 
@@ -41,15 +41,48 @@ claude plugin install bp@bearpaws
 
 Or pass it on the command line without installing: `claude --plugin-dir /path/to/bearpaws`.
 
-## Install (Gemini CLI)
+## Install — Google Antigravity
 
-You can install the plugin via the Gemini CLI:
+Clone BearPaws:
 
 ```bash
-gemini extensions install /path/to/bearpaws
+git clone https://github.com/brandonfla/bearpaws.git
+cd bearpaws
 ```
 
-Or link it for local development so updates are reflected immediately: `gemini extensions link /path/to/bearpaws`.
+Install globally:
+
+```bash
+./install.sh --antigravity --global
+```
+
+BearPaws installs as a native Antigravity plugin to:
+`~/.gemini/config/plugins/bearpaws/`
+
+Restart Antigravity.
+
+### Verify
+
+Type:
+```
+/brain
+```
+Confirm `brainstorming` appears in the skill list.
+
+### Update
+
+```bash
+git pull
+./install.sh --antigravity --global
+```
+
+### Uninstall
+
+```bash
+rm -rf ~/.gemini/config/plugins/bearpaws
+```
+
+BearPaws uses native Antigravity plugin packaging, rules, skills, and subagents — not Gemini CLI compatibility mode.
 
 ## Experimental Install (Devin for Terminal & Windsurf Cascade)
 

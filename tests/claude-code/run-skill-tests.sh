@@ -198,16 +198,3 @@ else
     echo "STATUS: PASSED"
     exit 0
 fi
-INTEGRATION" = false ] && [ ${#integration_tests[@]} -gt 0 ]; then
-    echo "Note: Integration tests were not run (they take 10-30 minutes)."
-    echo "Use --integration flag to run full workflow execution tests."
-    echo ""
-fi
-
-if [ $failed -gt 0 ]; then
-    echo "STATUS: FAILED"
-    exit 1
-else
-    echo "STATUS: PASSED"
-    exit 0
-fi

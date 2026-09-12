@@ -114,6 +114,65 @@ install_windsurf() {
     log_success "Windsurf bootstrap rule is in place"
 }
 
+# Install for Google Antigravity
+install_antigravity() {
+    log_info "Setting up Google Antigravity plugin..."
+    if [[ "${INSTALL_GLOBAL:-}" != "true" ]]; then
+        log_error "Antigravity installation currently requires --global"
+        log_info "Use: ./install.sh --antigravity --global"
+        return 1
+    fi
+
+    if [[ ! -f "$BEARPAWS_ROOT/.antigravity/plugin.json" ]]; then
+        log_error "Plugin manifest missing: .antigravity/plugin.json"
+        return 1
+    fi
+
+    if [[ ! -f "$BEARPAWS_ROOT/.antigravity/rules/bearpaws.md" ]]; then
+        log_error "Plugin bootstrap rule missing: .antigravity/rules/bearpaws.md"
+        return 1
+    fi
+
+    local plugin_root="$HOME/.gemini/config/plugins/bearpaws"
+    local plugin_parent
+    plugin_parent="$(dirname "$plugin_root")"
+
+    mkdir -p "$plugin_parent"
+
+    local staging
+    staging="$(mktemp -d "$plugin_parent/.bearpaws-install.XXXXXX")" || {
+        log_error "Failed to create staging directory in $plugin_parent"
+        return 1
+    }
+    trap 'rm -rf "$staging"' EXIT
+
+    mkdir -p "$staging/rules"
+    mkdir -p "$staging/skills"
+    mkdir -p "$staging/agents"
+
+    cp "$BEARPAWS_ROOT/.antigravity/plugin.json" "$staging/plugin.json"
+    cp -R "$BEARPAWS_ROOT/.antigravity/rules/." "$staging/rules/"
+    cp -R "$BEARPAWS_ROOT/skills/." "$staging/skills/"
+    cp -R "$BEARPAWS_ROOT/agents/." "$staging/agents/"
+
+    local backup=""
+    if [[ -d "$plugin_root" ]]; then
+        backup="$(mktemp -d "$plugin_parent/.bearpaws-backup.XXXXXX")"
+        rmdir "$backup"
+        mv "$plugin_root" "$backup"
+    fi
+
+    if mv "$staging" "$plugin_root"; then
+        [[ -n "$backup" ]] && rm -rf "$backup"
+        trap - EXIT
+        log_success "Installed BearPaws for Antigravity: $plugin_root"
+    else
+        log_error "Failed to move staged plugin to $plugin_root"
+        [[ -n "$backup" ]] && mv "$backup" "$plugin_root"
+        return 1
+    fi
+}
+
 # Main installation
 main() {
     local platforms=()
@@ -121,6 +180,10 @@ main() {
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --antigravity)
+                platforms+=("antigravity")
+                shift
+                ;;
             --devin)
                 platforms+=("devin")
                 shift
@@ -143,13 +206,15 @@ main() {
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
                 echo "Options:"
-                echo "  --devin     Install experimental Devin for Terminal wiring"
-                echo "  --windsurf  Install experimental Windsurf Cascade wiring"
-                echo "  --all       Install experimental wiring for both platforms (default)"
-                echo "  --global    Also install experimental Devin wiring globally"
-                echo "  --help      Show this help message"
+                echo "  --antigravity Install BearPaws for Google Antigravity"
+                echo "  --devin       Install experimental Devin for Terminal wiring"
+                echo "  --windsurf    Install experimental Windsurf Cascade wiring"
+                echo "  --all         Install experimental wiring for Devin and Windsurf (default)"
+                echo "  --global      Install globally where supported (required for Antigravity)"
+                echo "  --help        Show this help message"
                 echo ""
                 echo "Examples:"
+                echo "  $0 --antigravity --global   # Install BearPaws plugin for Antigravity"
                 echo "  $0 --all                    # Install experimental wiring for both platforms"
                 echo "  $0 --devin                  # Install experimental Devin wiring only"
                 echo "  $0 --windsurf               # Install experimental Windsurf wiring only"
@@ -175,6 +240,11 @@ main() {
     
     for platform in "${platforms[@]}"; do
         case $platform in
+            antigravity)
+                if ! install_antigravity; then
+                    ((failed++))
+                fi
+                ;;
             devin)
                 if ! install_devin; then
                     ((failed++))
@@ -197,6 +267,10 @@ main() {
         log_success "Bearpaws installation completed successfully!"
         echo ""
         echo "Next steps:"
+        if [[ " ${platforms[*]} " =~ " antigravity " ]]; then
+            echo "  • Google Antigravity: Plugin installed in ~/.gemini/config/plugins/bearpaws/"
+            echo "  • Restart Antigravity to discover skills and apply the bootstrap rule"
+        fi
         if [[ " ${platforms[*]} " =~ " devin " ]]; then
             echo "  • Devin for Terminal (experimental): Skills are now available in .devin/skills/"
             if [[ "${INSTALL_GLOBAL:-}" == "true" ]]; then

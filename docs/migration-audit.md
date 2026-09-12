@@ -274,7 +274,7 @@ Current measured snapshot:
 - All `SKILL.md` files: 61,916 bytes
 - Full `skills/` payload: 198,418 bytes
 
-README also includes a static comparison against superpowers v5.0.7 using approximate token estimates. The measurement script itself does not compare against upstream and does not count generated artifacts.
+README also includes a static comparison against the upstream project using approximate token estimates. The measurement script itself does not compare against upstream and does not count generated artifacts.
 
 Adapters would affect reporting only if generated outputs became user-visible or session-loaded artifacts. Under the Lean Path, token reporting can remain simple: bootstrap footprint, per-skill `SKILL.md` bytes, full skills payload, and clear caveats that bytes are deterministic while tokens are approximate.
 
@@ -298,16 +298,16 @@ A full per-agent trigger matrix would create more maintenance cost than value at
 
 ## README Positioning Findings
 
-README clearly preserves attribution and states that Bearpaws is a hard fork of superpowers v5.0.7. It also clearly describes the low-token goal.
+README clearly preserves attribution and states that Bearpaws began as an independent fork of the upstream project. It also clearly describes the low-token goal.
 
 Phase 0 positioning issues to adjust in a later phase:
-- README said Bearpaws preserves the behavioral performance of upstream superpowers, which read like a parity claim.
+- README said Bearpaws preserves the behavioral performance of the upstream project, which read like a parity claim.
 - README called the project "A Claude Code (and Gemini CLI) skills plugin" but also included Devin/Windsurf install instructions that implied readiness.
 - README said the repository was "ready out of the box" for Devin/Windsurf and that both platforms would invoke the bootstrap autonomously; the audit found wiring, but not behavioral evidence.
 - README did not yet clearly say Bearpaws evolves independently rather than tracking upstream.
 
 Recommended future language:
-- Bearpaws is independent and began as a hard fork of superpowers v5.0.7.
+- Bearpaws is independent and evolves on its own line.
 - Claude Code and Gemini CLI are primary supported targets.
 - Devin, Windsurf, and Codex should be experimental unless tested and documented.
 - Avoid feature parity, behavioral parity, ongoing upstream tracking, and universal compatibility claims.

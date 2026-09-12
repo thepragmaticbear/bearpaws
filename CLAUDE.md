@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Bearpaws is an independent, low-token skills toolkit for AI coding agents. It began as a hard fork of [superpowers](https://github.com/obra/superpowers) v5.0.7 — credit to Jesse Vincent and contributors for the original — and now evolves independently with a focus on portability, simplicity, and practical agent support.
+Bearpaws is an independent, low-token skills toolkit for AI coding agents, with a focus on portability, simplicity, and practical agent support.
 
-Claude Code and Gemini CLI are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, superpowers behavioral parity, or guaranteed support across every agent.
+Claude Code and Google Antigravity IDE are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, upstream behavioral parity, or guaranteed support across every agent.
 
 Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to get the `using-bearpaws` bootstrap into the agent context so the agent learns to discover and invoke the rest of the skills.
 
@@ -17,10 +17,12 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
 - [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin for Terminal, Copilot CLI, or unknown SDK callers). Hook compatibility does not imply support-tier promotion.
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace.
+- [.antigravity/](.antigravity/) — Google Antigravity IDE plugin manifest (`plugin.json`) and rules (`bearpaws.md`).
 - [.devin/](.devin/) — Devin for Terminal config: `hooks.v1.json` (SessionStart hook) and `skills/` (symlinks into `skills/`).
 - [.windsurf/](.windsurf/) — Windsurf Cascade config: `rules/bearpaws.md` (always-on bootstrap rule) and `skills/` (symlinks into `skills/`).
-- [gemini-extension.json](gemini-extension.json) — Gemini CLI extension manifest.
 - [scripts/](scripts/) — version-bump tooling.
+- [tests/antigravity/](tests/antigravity/) — static adapter tests for Antigravity plugin integrity.
+- [tests/install/](tests/install/) — installer tests for Antigravity, Devin, and Windsurf.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
 - [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
@@ -32,12 +34,14 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 | Agent | Status | Evidence |
 |---|---|---|
 | Claude Code | Primary | Working |
-| Gemini CLI | Primary | Mostly working, needs lightweight validation |
-| Codex | Experimental | No maintained install flow yet |
+| Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
 | Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
+| Codex | Experimental | No maintained install flow yet |
 
 ## How the bootstrap works
+
+### Claude Code and SDK callers
 
 The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) registers the [hooks/hooks.json](hooks/hooks.json) `SessionStart` hook (matchers: `startup|clear`). That hook calls [hooks/run-hook.cmd](hooks/run-hook.cmd) → [hooks/session-start](hooks/session-start), which:
 
@@ -49,9 +53,19 @@ The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) reg
 
 If you change the bootstrap shape or the JSON output, run a fresh Claude Code session against this checkout (registered via `--plugin-dir` or the dev marketplace) and confirm the `using-bearpaws` content arrives in the first turn.
 
+### Google Antigravity IDE
+
+The Antigravity plugin manifest [.antigravity/plugin.json](.antigravity/plugin.json) and rule [.antigravity/rules/bearpaws.md](.antigravity/rules/bearpaws.md) import [skills/using-bearpaws/SKILL.md](skills/using-bearpaws/SKILL.md) and [skills/using-bearpaws/references/antigravity-tools.md](skills/using-bearpaws/references/antigravity-tools.md).
+
+Installation copies real files (no symlinks) into `~/.gemini/config/plugins/bearpaws/`:
+```bash
+./install.sh --antigravity --global
+```
+Antigravity discovers skills natively from `skills/`, loads them on demand, maps actions to native capabilities via `antigravity-tools.md`, and runs isolated subagents via `invoke_subagent`.
+
 ## Version management
 
-The plugin version is duplicated across four manifest fields. They are kept in sync by [scripts/bump-version.sh](scripts/bump-version.sh), driven by [.version-bump.json](.version-bump.json):
+The plugin version is duplicated across three manifest fields. They are kept in sync by [scripts/bump-version.sh](scripts/bump-version.sh), driven by [.version-bump.json](.version-bump.json):
 
 ```bash
 scripts/bump-version.sh --check       # report current versions, detect drift
@@ -63,10 +77,11 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ## Tests
 
-Tests are behavioral, not unit — they invoke the `claude` CLI in headless mode and assert against transcripts. Requires the local plugin to be registered (e.g. `"bp@bearpaws": true` in `~/.claude/settings.json`, or pass `--plugin-dir` explicitly).
-
 ```bash
-tests/claude-code/run-skill-tests.sh                                          # fast skill-content tests (~2 min)
+tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist and adversarial gates
+tests/install/run-install-tests.sh                                            # verify Devin/Windsurf/Antigravity installer
+tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
+tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
 tests/claude-code/run-skill-tests.sh --verbose                                # stream Claude output

@@ -24,7 +24,7 @@ description: Use when starting any conversation - establishes how to find and us
   <process>
     <step>**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content loads — follow it directly. Never `Read` skill files.</step>
     <step>**In Devin for Terminal / Windsurf Cascade:** Use the `skill` tool (slash command `/skill-name`). Skills live in `.devin/skills/` or `.windsurf/skills/`.</step>
-    <step>**In Gemini CLI:** Skills activate via `activate_skill`. Gemini loads metadata at session start, full content on demand.</step>
+    <step>**In Antigravity:** Use native Agent Skills. Installed skills are discovered by Antigravity and loaded on demand. When a skill applies, use that skill before performing the governed work. Follow the Antigravity capability mapping supplied by the adapter.</step>
     <step>Even a 1% chance a skill might apply means invoke the skill to check.</step>
     <step>If an invoked skill turns out to be wrong for the situation, you don't need to use it.</step>
   </process>
@@ -46,6 +46,30 @@ description: Use when starting any conversation - establishes how to find and us
   | "I remember this skill" | Skills evolve. Read current version. |
   | "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
   | "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+  | "I know where this is going" | Early confidence is not permission to skip inspection, planning, or verification. |
+
+  ## Pace Control
+
+  Do not convert early confidence into immediate implementation.
+
+  Before acting:
+  - establish what is known
+  - identify what is assumed
+  - inspect the relevant existing implementation when one exists
+  - determine the smallest correct next step
+
+  Confidence is not evidence. A familiar-looking problem still requires the
+  workflow appropriate to the task.
+
+  When the task becomes broader, riskier, or materially different from what was
+  initially understood, stop and re-evaluate before continuing.
+
+  Do not allow momentum from a successful step to justify skipping the next
+  required gate.
+
+  Prefer one verified step over several speculative steps.
+
+  **Momentum does not waive gates.**
 
   ## Lazy-load contract
 
