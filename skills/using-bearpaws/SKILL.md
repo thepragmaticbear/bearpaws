@@ -24,6 +24,7 @@ description: Use when starting any conversation - establishes how to find and us
   <process>
     <step>**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content loads — follow it directly. Never `Read` skill files.</step>
     <step>**In Devin for Terminal / Windsurf Cascade:** Use the `skill` tool (slash command `/skill-name`). Skills live in `.devin/skills/` or `.windsurf/skills/`.</step>
+    <step>**In Codex:** Skills live in `.agents/skills/` or `~/.agents/skills/`. Mention one as `$skill-name` (drop the `bp:` prefix) or let Codex match its description, then follow its `SKILL.md`.</step>
     <step>**In Antigravity:** Use native Agent Skills. Installed skills are discovered by Antigravity and loaded on demand. When a skill applies, use that skill before performing the governed work. Follow the Antigravity capability mapping supplied by the adapter.</step>
     <step>Even a 1% chance a skill might apply means invoke the skill to check.</step>
     <step>If an invoked skill turns out to be wrong for the situation, you don't need to use it.</step>

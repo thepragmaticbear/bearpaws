@@ -101,7 +101,7 @@ for skill in "${EXPECTED_SKILLS[@]}"; do
     echo "FAIL: Missing skill file $skill_file"
     exit 1
   fi
-  ((skill_count++))
+  skill_count=$((skill_count + 1))
 done
 if [[ "$skill_count" -ne 15 ]]; then
   echo "FAIL: Expected 15 skills, found $skill_count"

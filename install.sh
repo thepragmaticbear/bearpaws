@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Bearpaws installation script
-# Sets up experimental platform-specific symlinks for Devin for Terminal and Windsurf Cascade
+# Sets up experimental platform-specific symlinks for Codex, Devin for Terminal, and Windsurf Cascade,
+# and the native Google Antigravity plugin
 
 set -euo pipefail
 
@@ -41,44 +42,58 @@ fi
 log_info "Bearpaws installation script"
 log_info "Repository root: $BEARPAWS_ROOT"
 
-# Function to create symlinks for a platform
+# Reconcile skill symlinks from source_dir into target_dir.
+# Target dirs may be shared with the user's own skills (e.g. ~/.agents/skills),
+# so only broken links that pointed into source_dir are pruned, and entries
+# with a colliding name that are not links into source_dir are never replaced.
 create_symlinks() {
-    local platform_dir="$1"
+    local source_dir="$1"
     local target_dir="$2"
-    
-    if [[ -d "$target_dir" ]]; then
-        log_warning "$target_dir already exists, checking existing symlinks..."
-        
-        # Check if existing symlinks point to the right place
-        local broken_symlinks=0
-        for skill in "$target_dir"/*; do
-            if [[ -L "$skill" ]]; then
-                if [[ ! -e "$skill" ]]; then
-                    ((broken_symlinks++))
-                fi
-            fi
-        done
-        
-        if [[ $broken_symlinks -gt 0 ]]; then
-            log_warning "Found $broken_symlinks broken symlinks, removing them..."
-            find "$target_dir" -type l -delete 2>/dev/null || true
-        else
-            log_success "$target_dir symlinks already exist and are valid"
-        fi
-    fi
-    
+
     mkdir -p "$target_dir"
-    
-    local skills_created=0
-    for skill_dir in "$platform_dir"/*/; do
-        if [[ -d "$skill_dir" ]]; then
-            local skill_name="$(basename "$skill_dir")"
-            ln -sfn "$skill_dir" "$target_dir/$skill_name"
-            ((++skills_created))
+
+    local source_real
+    source_real="$(cd "$source_dir" && pwd -P)"
+
+    local pruned=0
+    local link dest parent
+    for link in "$target_dir"/*; do
+        [[ -L "$link" && ! -e "$link" ]] || continue
+        dest="$(readlink "$link")"
+        [[ "$dest" == /* ]] || dest="$target_dir/$dest"
+        parent="$(cd "$(dirname "$dest")" 2>/dev/null && pwd -P)" || continue
+        if [[ "$parent" == "$source_real" ]]; then
+            rm -f "$link"
+            pruned=$((pruned + 1))
         fi
     done
-    
-    log_success "Created $skills_created symlinks in $target_dir"
+    if [[ $pruned -gt 0 ]]; then
+        log_warning "Removed $pruned stale Bearpaws symlinks from $target_dir"
+    fi
+
+    local skills_created=0
+    local skill_dir skill_name
+    for skill_dir in "$source_dir"/*/; do
+        [[ -d "$skill_dir" ]] || continue
+        skill_name="$(basename "$skill_dir")"
+        link="$target_dir/$skill_name"
+        if [[ -L "$link" ]]; then
+            dest="$(readlink "$link")"
+            [[ "$dest" == /* ]] || dest="$target_dir/$dest"
+            parent="$(cd "$(dirname "$dest")" 2>/dev/null && pwd -P)" || parent=""
+            if [[ "$parent" != "$source_real" ]]; then
+                log_warning "Skipping $skill_name: $link links outside Bearpaws ($dest)"
+                continue
+            fi
+        elif [[ -e "$link" ]]; then
+            log_warning "Skipping $skill_name: $link exists and is not a symlink"
+            continue
+        fi
+        ln -sfn "$skill_dir" "$target_dir/$skill_name"
+        skills_created=$((skills_created + 1))
+    done
+
+    log_success "Linked $skills_created skills in $target_dir"
 }
 
 # Install for Devin for Terminal
@@ -112,6 +127,20 @@ install_windsurf() {
     fi
     
     log_success "Windsurf bootstrap rule is in place"
+}
+
+# Install for Codex (Agent Skills discovered from .agents/skills)
+install_codex() {
+    log_info "Setting up experimental Codex wiring..."
+
+    # Project-level installation
+    create_symlinks "$BEARPAWS_ROOT/skills" "$BEARPAWS_ROOT/.agents/skills"
+
+    # Global installation (optional)
+    if [[ "${INSTALL_GLOBAL:-}" == "true" ]]; then
+        log_info "Setting up global Codex installation..."
+        create_symlinks "$BEARPAWS_ROOT/skills" "$HOME/.agents/skills"
+    fi
 }
 
 # Install for Google Antigravity
@@ -184,6 +213,10 @@ main() {
                 platforms+=("antigravity")
                 shift
                 ;;
+            --codex)
+                platforms+=("codex")
+                shift
+                ;;
             --devin)
                 platforms+=("devin")
                 shift
@@ -193,7 +226,7 @@ main() {
                 shift
                 ;;
             --all)
-                platforms=("devin" "windsurf")
+                platforms=("codex" "devin" "windsurf")
                 shift
                 ;;
             --global)
@@ -207,15 +240,17 @@ main() {
                 echo ""
                 echo "Options:"
                 echo "  --antigravity Install BearPaws for Google Antigravity"
+                echo "  --codex       Install experimental Codex wiring (.agents/skills)"
                 echo "  --devin       Install experimental Devin for Terminal wiring"
                 echo "  --windsurf    Install experimental Windsurf Cascade wiring"
-                echo "  --all         Install experimental wiring for Devin and Windsurf (default)"
+                echo "  --all         Install experimental wiring for Codex, Devin, and Windsurf (default)"
                 echo "  --global      Install globally where supported (required for Antigravity)"
                 echo "  --help        Show this help message"
                 echo ""
                 echo "Examples:"
                 echo "  $0 --antigravity --global   # Install BearPaws plugin for Antigravity"
-                echo "  $0 --all                    # Install experimental wiring for both platforms"
+                echo "  $0 --all                    # Install experimental wiring for all three platforms"
+                echo "  $0 --codex --global         # Install experimental Codex wiring into ~/.agents/skills too"
                 echo "  $0 --devin                  # Install experimental Devin wiring only"
                 echo "  $0 --windsurf               # Install experimental Windsurf wiring only"
                 echo "  $0 --devin --global         # Install experimental Devin wiring globally too"
@@ -231,7 +266,7 @@ main() {
     
     # Default to all platforms if none specified
     if [[ ${#platforms[@]} -eq 0 ]]; then
-        platforms=("devin" "windsurf")
+        platforms=("codex" "devin" "windsurf")
     fi
     
     log_info "Installing for platforms: ${platforms[*]}"
@@ -242,22 +277,27 @@ main() {
         case $platform in
             antigravity)
                 if ! install_antigravity; then
-                    ((failed++))
+                    failed=$((failed + 1))
+                fi
+                ;;
+            codex)
+                if ! install_codex; then
+                    failed=$((failed + 1))
                 fi
                 ;;
             devin)
                 if ! install_devin; then
-                    ((failed++))
+                    failed=$((failed + 1))
                 fi
                 ;;
             windsurf)
                 if ! install_windsurf; then
-                    ((failed++))
+                    failed=$((failed + 1))
                 fi
                 ;;
             *)
                 log_error "Unknown platform: $platform"
-                ((failed++))
+                failed=$((failed + 1))
                 ;;
         esac
     done
@@ -270,6 +310,12 @@ main() {
         if [[ " ${platforms[*]} " =~ " antigravity " ]]; then
             echo "  • Google Antigravity: Plugin installed in ~/.gemini/config/plugins/bearpaws/"
             echo "  • Restart Antigravity to discover skills and apply the bootstrap rule"
+        fi
+        if [[ " ${platforms[*]} " =~ " codex " ]]; then
+            echo "  • Codex (experimental): Skills are now available in .agents/skills/"
+            if [[ "${INSTALL_GLOBAL:-}" == "true" ]]; then
+                echo "  • Global Codex (experimental): Skills are also available in ~/.agents/skills/"
+            fi
         fi
         if [[ " ${platforms[*]} " =~ " devin " ]]; then
             echo "  • Devin for Terminal (experimental): Skills are now available in .devin/skills/"

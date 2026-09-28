@@ -23,6 +23,44 @@ test -L "$WORK/.windsurf/skills/beta"
 
 echo "OK: Devin/Windsurf install reconciles existing skill directories"
 
+# ========== Codex Installer Tests ==========
+CODEX_HOME_DIR="$TMP_ROOT/codex-home"
+SHARED="$CODEX_HOME_DIR/.agents/skills"
+mkdir -p "$SHARED" "$TMP_ROOT/user-skill"
+# Unrelated user entries in the shared global dir must survive reinstall
+ln -sfn "$TMP_ROOT/user-skill" "$SHARED/user-skill"
+ln -sfn "$TMP_ROOT/missing-user-skill" "$SHARED/user-broken"
+mkdir -p "$SHARED/beta-owned-by-user"
+# A stale Bearpaws link (skill removed upstream) should be pruned
+ln -sfn "$WORK/skills/retired" "$SHARED/retired"
+# A user's real directory that collides with a Bearpaws skill name is left alone
+mkdir -p "$SHARED/beta"
+touch "$SHARED/beta/USER_SKILL"
+# A user's own symlinked skill that collides with a Bearpaws name is left alone
+ln -sfn "$TMP_ROOT/user-skill" "$SHARED/using-bearpaws"
+
+( cd "$WORK" && HOME="$CODEX_HOME_DIR" ./install.sh --codex --global ) >"$TMP_ROOT/bearpaws-install-codex.log" 2>&1
+
+test -L "$WORK/.agents/skills/alpha"
+test -L "$WORK/.agents/skills/beta"
+test -f "$WORK/.agents/skills/alpha/SKILL.md"
+test -L "$SHARED/alpha"
+test "$(readlink "$SHARED/using-bearpaws")" = "$TMP_ROOT/user-skill"
+test -L "$SHARED/user-skill"
+test -L "$SHARED/user-broken"
+test -d "$SHARED/beta-owned-by-user"
+test ! -L "$SHARED/beta"
+test -f "$SHARED/beta/USER_SKILL"
+test ! -e "$SHARED/beta/beta"
+test ! -L "$SHARED/retired"
+
+# Idempotent re-run
+( cd "$WORK" && HOME="$CODEX_HOME_DIR" ./install.sh --codex --global ) >>"$TMP_ROOT/bearpaws-install-codex.log" 2>&1
+test -L "$SHARED/alpha"
+test -L "$SHARED/user-skill"
+
+echo "OK: Codex install links .agents/skills and preserves unrelated global skills"
+
 # ========== Antigravity Installer Tests ==========
 TEST_HOME="$TMP_ROOT/home"
 mkdir -p "$TEST_HOME"

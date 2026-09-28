@@ -52,6 +52,8 @@ This is a minimal plan to test the subagent-driven-development workflow.
 
 ## Task 1: Create Add Function
 
+- [ ] Task 1 complete
+
 Create a function that adds two numbers.
 
 **File:** `src/math.js`
@@ -77,6 +79,8 @@ export function add(a, b) {
 **Verification:** `npm test`
 
 ## Task 2: Create Multiply Function
+
+- [ ] Task 2 complete
 
 Create a function that multiplies two numbers.
 
@@ -194,9 +198,9 @@ else
 fi
 echo ""
 
-# Test 2: Subagents were used (Task tool)
+# Test 2: Subagents were used (Agent tool; named Task before Claude Code 2.1.63)
 echo "Test 2: Subagents dispatched..."
-task_count=$(grep -c '"name":"Task"' "$SESSION_FILE" || echo "0")
+task_count=$(grep -cE '"name":"(Agent|Task)"' "$SESSION_FILE" || true)
 if [ "$task_count" -ge 2 ]; then
     echo "  [PASS] $task_count subagents dispatched"
 else
@@ -205,13 +209,17 @@ else
 fi
 echo ""
 
-# Test 3: TodoWrite was used for tracking
+# Test 3: Progress was tracked — task tools where the model has them,
+# otherwise the plan's checkboxes (task tools are gated off on some models)
 echo "Test 3: Task tracking..."
-todo_count=$(grep -c '"name":"TodoWrite"' "$SESSION_FILE" || echo "0")
+todo_count=$(grep -cE '"name":"(TaskCreate|TaskUpdate|TodoWrite)"' "$SESSION_FILE" || true)
+checked_count=$(grep -c '^- \[x\]' "$TEST_PROJECT/docs/bearpaws/plans/implementation-plan.md" || true)
 if [ "$todo_count" -ge 1 ]; then
-    echo "  [PASS] TodoWrite used $todo_count time(s) for task tracking"
+    echo "  [PASS] Task tools used $todo_count time(s) for task tracking"
+elif [ "$checked_count" -ge 1 ]; then
+    echo "  [PASS] Plan checkboxes ticked $checked_count time(s) for task tracking"
 else
-    echo "  [FAIL] TodoWrite not used"
+    echo "  [FAIL] No task tracking (no task tool calls, no ticked plan checkboxes)"
     FAILED=$((FAILED + 1))
 fi
 echo ""

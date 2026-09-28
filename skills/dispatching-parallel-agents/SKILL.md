@@ -37,7 +37,7 @@ description: Use when facing 2+ independent tasks that can be worked on without 
   <process>
     <step>**Identify independent domains** — Group failures by what's broken. Each domain is one agent's scope.</step>
     <step>**Create focused prompts** — Each agent gets: specific scope (one file/subsystem), clear goal, constraints (don't change other code), expected output format.</step>
-    <step>**Dispatch in parallel** — Use Task tool for all agents concurrently.</step>
+    <step>**Dispatch in parallel** — Use the subagent tool (Claude Code: `Agent`, formerly `Task`) for all agents concurrently.</step>
     <step>**Review and integrate** — Read each summary, verify fixes don't conflict, run full test suite, integrate changes.</step>
   </process>
 

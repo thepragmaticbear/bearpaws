@@ -26,7 +26,7 @@ flowchart TD
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
 | Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
-| Codex | Experimental | No maintained install flow yet |
+| Codex | Experimental | Partial `.agents/skills` symlink wiring; no behavior test yet |
 
 See [docs/agent-support.md](docs/agent-support.md) for the current support policy and [docs/skill-structure.md](docs/skill-structure.md) for the descriptive skill structure contract.
 
@@ -84,27 +84,39 @@ rm -rf ~/.gemini/config/plugins/bearpaws
 
 BearPaws uses native Antigravity plugin packaging, rules, skills, and subagents — not Gemini CLI compatibility mode.
 
-## Experimental Install (Devin for Terminal & Windsurf Cascade)
+## Experimental Install (Codex, Devin for Terminal & Windsurf Cascade)
 
 These integrations are experimental. The script sets up the repo-local symlinks and bootstrap files Bearpaws currently uses for Devin and Windsurf, but behavior should be verified in the target agent before treating either integration as supported for critical work.
 
 **Quick install (recommended):**
 
 ```bash
-# Install for both platforms
+# Install for all three platforms
 ./install.sh --all
 
 # Or install for specific platforms
+./install.sh --codex      # Codex only (.agents/skills)
 ./install.sh --devin      # Devin for Terminal only
 ./install.sh --windsurf   # Windsurf Cascade only
 
-# Global installation for Devin (available in all projects)
-./install.sh --devin --global
+# Global installation (available in all projects)
+./install.sh --codex --global   # ~/.agents/skills
+./install.sh --devin --global   # ~/.config/devin/skills
 ```
 
-The install script reconciles repo-local skill symlinks for Devin and Windsurf, preserves Devin's hook wiring, supports optional global Devin symlinks with `--global`, and checks that the Windsurf bootstrap rule exists.
+The install script reconciles repo-local skill symlinks for Codex, Devin, and Windsurf, preserves Devin's hook wiring, supports optional global Codex and Devin symlinks with `--global`, and checks that the Windsurf bootstrap rule exists. Reinstalls prune only stale Bearpaws links and never replace your own skills in shared directories such as `~/.agents/skills`.
+
+Codex discovers skills natively from `.agents/skills/`; there is no Codex SessionStart hook because Codex does not currently accept injected `additionalContext`. To make the bootstrap reliable, add a line such as `Use the using-bearpaws skill at the start of every task.` to your project's `AGENTS.md`.
 
 **Manual install (if you prefer):**
+
+For Codex:
+```bash
+mkdir -p ~/.agents/skills
+for skill in skills/*/; do
+  ln -sfn "$PWD/$skill" "$HOME/.agents/skills/$(basename "$skill")"
+done
+```
 
 For Devin for Terminal:
 ```bash
@@ -163,7 +175,7 @@ Our aim is to mitigate token usage and enforce token efficiency while preserving
 
 | Metric | superpowers (main) | Bearpaws | Approx. delta |
 |---|---:|---:|---|
-| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~5.2 KB (~1.2K tokens) | ~10% smaller |
+| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~6.4 KB (~1.5K tokens) | ~15% larger (Pace Control + per-agent activation lines) |
 | Process skill bodies (apples-to-apples subset) | ~101 KB (~24K tokens) | ~51 KB (~12K tokens) | roughly half |
 
 Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer; treat them as ballpark figures, not exact savings. The bootstrap is paid every session; non-bootstrap skills load on demand through the target agent's skill mechanism, so the dominant cost is the bootstrap plus whatever skills the agent actually pulls in.
