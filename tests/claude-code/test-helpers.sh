@@ -23,7 +23,10 @@ run_claude() {
     local output_file=$(mktemp)
 
     # Build command
-    local cmd="claude -p \"$prompt\" --permission-mode bypassPermissions"
+    # --plugin-dir makes this checkout ("bp@inline") shadow the globally installed bp of the same name.
+    local plugin_dir
+    plugin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local cmd="claude -p \"$prompt\" --permission-mode bypassPermissions --plugin-dir \"$plugin_dir\""
     if [ -n "$allowed_tools" ]; then
         cmd="$cmd --allowed-tools=$allowed_tools"
     fi

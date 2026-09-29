@@ -19,7 +19,7 @@ description: Use when you have a written implementation plan to execute in a sep
   </warning>
 
   <process>
-    <step>**Load and review** — Read plan. Review critically for questions or concerns. If concerns: raise with human partner before starting. If clear: create TodoWrite and proceed.</step>
+    <step>**Load and review** — Read plan. Review critically for questions or concerns. If concerns: raise with human partner before starting. If clear: track progress with the plan's checkboxes (and a task-tracking tool if one is available) and proceed.</step>
     <step>**Execute tasks** — For each task: mark in_progress, follow steps exactly (plan has bite-sized steps), run verifications as specified, mark completed.</step>
     <step>**Complete development** — After all tasks verified, invoke bp:finishing-a-development-branch.</step>
   </process>

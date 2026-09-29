@@ -35,12 +35,12 @@ description: Use when executing implementation plans with independent tasks in t
   </flow>
 
   <process>
-    <step>**Setup** — Read plan, extract all tasks with full text, note context, create TodoWrite. Set up workspace with bp:using-git-worktrees.</step>
+    <step>**Setup** — Read the plan once, extract all tasks with full text, note context, track progress with the plan's checkboxes (and a task-tracking tool if one is available). Set up workspace with bp:using-git-worktrees.</step>
     <step>**Dispatch implementer** — Fresh subagent per task (use ./implementer-prompt.md). Provide full task text + context. Never make subagent read the plan file.</step>
     <step>**Handle status** — DONE: proceed to review. DONE_WITH_CONCERNS: assess before review. NEEDS_CONTEXT: provide and re-dispatch. BLOCKED: assess (context problem → re-dispatch; reasoning problem → more capable model; too large → break up; plan wrong → escalate to human).</step>
     <step>**Spec compliance review** — Dispatch spec reviewer subagent (./spec-reviewer-prompt.md). Must pass before code quality review. If issues found: implementer fixes → re-review → repeat until ✅.</step>
     <step>**Code quality review** — Dispatch code quality reviewer subagent (./code-quality-reviewer-prompt.md). If issues: implementer fixes → re-review → repeat until ✅.</step>
-    <step>**Mark complete, next task** — Mark task in TodoWrite. Proceed to next task.</step>
+    <step>**Mark complete, next task** — Check the task off in the plan. Proceed to next task.</step>
     <step>**Final review + finish** — After all tasks: dispatch final reviewer for entire implementation, then invoke bp:finishing-a-development-branch.</step>
   </process>
 

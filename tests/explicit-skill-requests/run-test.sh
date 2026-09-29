@@ -85,6 +85,15 @@ env -u CLAUDECODE $TIMEOUT_CMD claude -p "$PROMPT" \
     --verbose \
     > "$LOG_FILE" 2>&1 || true
 
+# Isolation guard: --plugin-dir registers this checkout as "bp@inline", which shadows the globally
+# installed bp@bearpaws of the same name. Warn if the init event shows any other bp copy.
+init=$(grep -m1 '"subtype": *"init"' "$LOG_FILE" || true)
+if [ -z "$init" ]; then
+    echo "WARNING: no init event; isolation unverified"
+elif printf '%s' "$init" | grep -oE '\{"name": *"bp"[^}]*\}' | grep -qv '"source": *"bp@inline"'; then
+    echo "WARNING: a bp plugin other than bp@inline is loaded; results are not isolated"
+fi
+
 echo ""
 echo "=== Results ==="
 
@@ -117,7 +126,7 @@ if [ -n "$FIRST_SKILL_LINE" ]; then
     PREMATURE_TOOLS=$(head -n "$FIRST_SKILL_LINE" "$LOG_FILE" | \
         grep '"type":"tool_use"' | \
         grep -v '"name":"Skill"' | \
-        grep -v '"name":"TodoWrite"' || true)
+        grep -vE '"name":"(TodoWrite|TaskCreate|TaskUpdate)"' || true)
     if [ -n "$PREMATURE_TOOLS" ]; then
         echo "WARNING: Tools invoked BEFORE Skill tool:"
         echo "$PREMATURE_TOOLS" | head -5

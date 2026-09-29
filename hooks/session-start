@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook for bearpaws plugin
 # Platforms: Claude Code (CLAUDE_PLUGIN_ROOT), Cursor (CURSOR_PLUGIN_ROOT),
-#            Devin for Terminal (DEVIN_PROJECT_DIR), Copilot CLI (COPILOT_CLI),
+#            Devin CLI (DEVIN_PROJECT_DIR), Copilot CLI (COPILOT_CLI),
 #            and any SDK-standard platform (additionalContext).
 
 set -euo pipefail
@@ -9,13 +9,6 @@ set -euo pipefail
 # Determine plugin root directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-# Check if legacy skills directory exists and build warning
-warning_message=""
-legacy_skills_dir="${HOME}/.config/bearpaws/skills"
-if [ -d "$legacy_skills_dir" ]; then
-    warning_message="\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER:⚠️ **WARNING:** Bearpaws now uses Claude Code's skills system. Custom skills in ~/.config/bearpaws/skills will not be read. Move custom skills to ~/.claude/skills instead. To make this message go away, remove ~/.config/bearpaws/skills</important-reminder>"
-fi
 
 # Read using-bearpaws content. Fail loudly if missing/empty/unreadable —
 # Claude Code surfaces a non-zero exit as a hook error rather than silently
@@ -41,8 +34,7 @@ escape_for_json() {
 }
 
 using_bearpaws_escaped=$(escape_for_json "$using_bearpaws_content")
-warning_escaped=$(escape_for_json "$warning_message")
-session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n${using_bearpaws_escaped}\n\n${warning_escaped}\n</warning>"
+session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n${using_bearpaws_escaped}\n</warning>"
 
 # Output context injection as JSON.
 # Each platform expects a different JSON shape for SessionStart output.
@@ -56,11 +48,8 @@ if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
 elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
   # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
-elif [ -n "${DEVIN_PROJECT_DIR:-}" ]; then
-  # Devin for Terminal sets DEVIN_PROJECT_DIR; uses SDK-standard top-level additionalContext
-  printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
 else
-  # Copilot CLI (sets COPILOT_CLI=1) or unknown platform — SDK standard format
+  # Devin CLI, Copilot CLI, or unknown platform — SDK standard format
   printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
 fi
 

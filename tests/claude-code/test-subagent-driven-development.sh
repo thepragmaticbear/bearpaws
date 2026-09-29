@@ -20,7 +20,7 @@ else
     exit 1
 fi
 
-if assert_contains "$output" "Load Plan\|read.*plan\|extract.*tasks" "Mentions loading plan"; then
+if assert_contains "$output" "Load Plan\|[Rr]ead.*plan\|extract.*tasks\|pull out every task" "Mentions loading plan"; then
     : # pass
 else
     exit 1
@@ -71,7 +71,7 @@ else
     exit 1
 fi
 
-if assert_contains "$output" "Step 1\|beginning\|start\|Load Plan" "Read at beginning"; then
+if assert_contains "$output" "Step 1\|beginning\|start\|Load Plan\|Setup" "Read at beginning"; then
     : # pass
 else
     exit 1

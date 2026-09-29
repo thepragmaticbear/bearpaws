@@ -21,7 +21,7 @@ description: Use when creating new skills, editing existing skills, or verifying
 
   <rules>
     <rule>**REQUIRED BACKGROUND:** You MUST understand bp:test-driven-development before using this skill.</rule>
-    <rule>Personal skills live in agent-specific directories (`~/.claude/skills` for Claude Code, `~/.agents/skills/` for Codex).</rule>
+    <rule>Personal skills live in agent-specific directories (`~/.claude/skills` for Claude Code, `~/.agents/skills/` for Codex, OpenCode, Devin, and other Agent Skills agents).</rule>
   </rules>
 
   ## What is a skill?

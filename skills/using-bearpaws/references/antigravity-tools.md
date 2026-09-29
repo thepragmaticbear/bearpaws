@@ -11,10 +11,10 @@ when a skill names a platform-oriented action.
 | Bash | Native command execution (`run_command`) |
 | Grep | Native content/code search (`grep_search`) |
 | Glob | Native file discovery (`find_by_name`, `list_dir`) |
-| TodoWrite | Native planning/task tracking (`implementation_plan.md`) |
+| TodoWrite / task tracking | Native planning/task tracking (`implementation_plan.md`) |
 | Skill | Native Agent Skill discovery/activation |
 | WebSearch / WebFetch | Native search/browser capability (`search_web`, `read_url_content`) |
-| Task / subagent | `invoke_subagent` or packaged custom agent |
+| Agent (formerly Task) / subagent | `invoke_subagent` or packaged custom agent |
 
 Do not use legacy Gemini CLI `activate_skill`.
 

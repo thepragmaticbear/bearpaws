@@ -103,7 +103,7 @@ portable_timeout() {
 }
 
 echo "================================================================================"
-cd "$SCRIPT_DIR/../.." && portable_timeout 120 claude -p "$PROMPT" --permission-mode bypassPermissions 2>&1 | tee "$OUTPUT_FILE" || {
+cd "$SCRIPT_DIR/../.." && portable_timeout 120 claude -p "$PROMPT" --plugin-dir "$(cd "$SCRIPT_DIR/../.." && pwd)" --permission-mode bypassPermissions 2>&1 | tee "$OUTPUT_FILE" || {
     echo ""
     echo "================================================================================"
     echo "EXECUTION FAILED (exit code: $?)"

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bearpaws is an independent, low-token skills toolkit for AI coding agents, with a focus on portability, simplicity, and practical agent support.
 
-Claude Code and Google Antigravity IDE are the primary supported targets. Codex, Devin for Terminal, and Windsurf Cascade are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, upstream behavioral parity, or guaranteed support across every agent.
+Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, upstream behavioral parity, or guaranteed support across every agent.
 
 Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to get the `using-bearpaws` bootstrap into the agent context so the agent learns to discover and invoke the rest of the skills.
 
@@ -15,14 +15,14 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
-- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin for Terminal, Copilot CLI, or unknown SDK callers). Hook compatibility does not imply support-tier promotion.
+- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers). Hook compatibility does not imply support-tier promotion.
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace.
 - [.antigravity/](.antigravity/) — Google Antigravity IDE plugin manifest (`plugin.json`) and rules (`bearpaws.md`).
-- [.devin/](.devin/) — Devin for Terminal config: `hooks.v1.json` (SessionStart hook) and `skills/` (symlinks into `skills/`).
-- [.windsurf/](.windsurf/) — Windsurf Cascade config: `rules/bearpaws.md` (always-on bootstrap rule) and `skills/` (symlinks into `skills/`).
+- [.devin/](.devin/) — Devin CLI `hooks.v1.json` (SessionStart hook). Skills come from `.agents/skills`.
+- [.agents/skills](.agents/skills) — repo-level Agent Skills discovery: a real directory of per-skill links into `skills/` (Codex ignores a symlinked skills directory, so per-skill links; verified with Codex in a plain repo). The validator keeps it in sync; a new skill needs `ln -s ../../skills/<name> .agents/skills/<name>`. `install.sh --agents --global` links skills into `~/.agents/skills/` for Codex, Devin, OpenCode, Cursor, Copilot, and others.
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/antigravity/](tests/antigravity/) — static adapter tests for Antigravity plugin integrity.
-- [tests/install/](tests/install/) — installer tests for Antigravity, Devin, and Windsurf.
+- [tests/install/](tests/install/) — installer tests for Antigravity and Agent Skills (`--agents`).
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
 - [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
@@ -35,9 +35,8 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 |---|---|---|
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
-| Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
-| Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
-| Codex | Experimental | No maintained install flow yet |
+| OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex smoke-tested; others rely on native `.agents/skills` discovery |
 
 ## How the bootstrap works
 
@@ -47,7 +46,7 @@ The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) reg
 
 1. Reads [skills/using-bearpaws/SKILL.md](skills/using-bearpaws/SKILL.md). Fails loudly (exit 1, stderr) if the file is missing/empty/unreadable rather than emitting a garbage bootstrap silently.
 2. Wraps it in a `<warning level="hard">` block (per the current XML-like skill structure convention).
-3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Cursor: top-level `additional_context`; Devin for Terminal, Copilot CLI, and unknown SDK-style callers: top-level `additionalContext`.
+3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Cursor: top-level `additional_context`; Devin CLI, Copilot CLI, and unknown SDK-style callers: top-level `additionalContext`.
 
 [hooks/run-hook.cmd](hooks/run-hook.cmd) is a bash/cmd polyglot so the same file works on macOS/Linux and Windows. Hook scripts under [hooks/](hooks/) are intentionally **extensionless** — Claude Code's Windows auto-detection prepends `bash` to anything ending in `.sh`, which would double-wrap the call.
 
@@ -78,8 +77,8 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 ## Tests
 
 ```bash
-tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist and adversarial gates
-tests/install/run-install-tests.sh                                            # verify Devin/Windsurf/Antigravity installer
+tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
+tests/install/run-install-tests.sh                                            # verify Antigravity and --agents installer
 tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
@@ -119,7 +118,7 @@ Constraints worth knowing before editing frontmatter:
 - Frontmatter total ≤ 1024 chars; `name` is letters/numbers/hyphens only.
 - Heavy reference material (>100 lines) and reusable scripts go in sibling files; keep `SKILL.md` focused on the rule.
 
-See [docs/skill-structure.md](docs/skill-structure.md), [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md), and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a compact XML-like structure — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist on every commit.
+See [docs/skill-structure.md](docs/skill-structure.md), [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md), and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a compact XML-like structure — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist, frontmatter spec, and `.agents/skills` layout on every commit.
 
 ## Commit conventions
 

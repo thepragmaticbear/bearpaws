@@ -1,0 +1,1 @@
+My reviewer left these comments on my PR: 'Extract the retry logic into a helper' and 'This null check is unnecessary, remove it.' Can you address them?

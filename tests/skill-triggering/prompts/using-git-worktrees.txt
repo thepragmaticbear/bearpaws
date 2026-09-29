@@ -1,0 +1,1 @@
+I want to start a new feature but keep my current work untouched in this checkout. Set me up an isolated workspace for it.

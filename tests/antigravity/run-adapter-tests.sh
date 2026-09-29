@@ -13,7 +13,7 @@ if [[ ! -f "$manifest" ]]; then
   exit 1
 fi
 
-if command -v node >/dev/null 2>&1; then
+if command -v node >/dev/null 2>&1 && node -v >/dev/null 2>&1; then
   plugin_name=$(node -e "const m = JSON.parse(require('fs').readFileSync('$manifest')); console.log(m.name);")
 elif command -v python3 >/dev/null 2>&1; then
   plugin_name=$(python3 -c "import json; print(json.load(open('$manifest'))['name'])")

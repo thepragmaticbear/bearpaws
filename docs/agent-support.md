@@ -18,9 +18,8 @@ Current tiers:
 |---|---|---|
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
-| Devin for Terminal | Experimental | Partial repo-local symlink and hook wiring |
-| Windsurf Cascade | Experimental | Partial repo-local symlink and rule wiring |
-| Codex | Experimental | No maintained install flow yet |
+| OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex smoke-tested; others rely on native `.agents/skills` discovery |
 
 ## Claude Code
 
@@ -138,110 +137,26 @@ Risk:
 
 - Low. Plugin packaging isolates BearPaws from core system settings and other plugins.
 
-## Codex
+## OpenCode
 
-Status: Experimental, currently no install flow.
+Status: Experimental.
 
-Existing files:
+- Skills: OpenCode scans `.agents/skills/` and `~/.agents/skills/` and invokes them with its native `skill` tool. It enforces the Agent Skills frontmatter rules (name `^[a-z0-9]+(-[a-z0-9]+)*$`, ≤64 chars, equals folder; description 1–1024 chars), which `tests/schema-validator/run-validator.sh` checks in CI.
+- Bootstrap: `"instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]` in `~/.config/opencode/opencode.json`. The installer prints this line and never edits user config.
+- Evidence: smoke test 2026-09-28, OpenCode 1.18.29: skills discovered from `.agents/skills` (pass; tested with the earlier directory-symlink layout); bootstrap loaded via a `~`-prefixed `instructions` path, confirmed against a no-`instructions` control run that could not answer (pass).
+- Known limitations: no OpenCode tool-name mapping reference; Claude Code tool names (`Agent`, `Skill`) in skills are interpreted by the model.
 
-- Incidental reference in `skills/brainstorming/visual-companion.md`
-- Incidental reference in `skills/writing-skills/SKILL.md`
+## Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …)
 
-Current install behavior:
+Status: Experimental.
 
-- None.
+- Install: `./install.sh --agents --global` links each skill into `~/.agents/skills/`, removing only broken links and skipping any existing entry it didn't link from this checkout. The repo ships `.agents/skills/` (per-skill links into `skills/`).
+- Invocation: `$skill-name` or `/skills` (Codex), `/skill-name` (Devin CLI), or implicitly when a description matches.
+- Devin CLI: `.devin/hooks.v1.json` runs `hooks/session-start`, which emits top-level `additionalContext` when `DEVIN_PROJECT_DIR` is set.
+- Evidence: installer test (global linking, the `--global` requirement, preserved unrelated skills); smoke test 2026-09-28, codex-cli 0.156.1: skills discovered via per-skill links in a plain repo (pass); brainstorming loaded on request, SKILL.md read, answered `no-implementation` (pass); a symlinked `.agents/skills` directory was not discovered (fail, with and without project trust); inside a Bearpaws checkout (clone or worktree) only the `bp:` plugin skills were listed (see limitations).
+- Known limitations: no automatic bootstrap outside hook-capable agents; no per-agent behavior tests; repo-local discovery through `.agents/skills` needs git symlinks enabled (`core.symlinks=true`; Developer Mode on Windows); Codex ignores a symlinked skills directory, so `.agents/skills/` uses per-skill links (verified with Codex in a plain repo); in a Bearpaws checkout, Codex lists the installed `bp:` plugin skills instead of the repo-local copies (it apparently treats the repo as the plugin's source; reproduced by adding `.claude-plugin/` to an otherwise passing repo); `./install.sh --agents --global` is the recommended path for other projects; Codex discovered per-skill links in a plain repo, but the global `~/.agents/skills` install has not been smoke-tested with Codex.
 
-Current support reality:
-
-- There is no Codex manifest, adapter, installer flag, or test suite.
-- The current skills may be useful to Codex as human-readable process docs, but Bearpaws does not currently provide a maintained Codex integration.
-
-Minimum work before stronger claims:
-
-- Decide where Bearpaws skills should live for Codex.
-- Document activation behavior.
-- Add a minimal placement or wrapper flow.
-- Validate at least bootstrap discovery and one non-bootstrap skill.
-
-Risk:
-
-- Medium to high if promoted prematurely, because no current support surface exists.
-
-## Devin for Terminal
-
-Status: Experimental, partial.
-
-Existing files:
-
-- `.devin/hooks.v1.json`
-- `.devin/skills/` symlinks into `skills/`
-- `install.sh`
-- `hooks/session-start`
-
-Install path:
-
-```bash
-./install.sh --devin
-```
-
-Optional global install:
-
-```bash
-./install.sh --devin --global
-```
-
-How it works:
-
-- `install.sh` symlinks each `skills/<name>/` directory into `.devin/skills/`.
-- `.devin/hooks.v1.json` runs `hooks/session-start` through bash.
-- `hooks/session-start` detects `DEVIN_PROJECT_DIR` and emits SDK-standard top-level `additionalContext`.
-
-Evidence:
-
-- The repo has an install reconciliation test for symlink creation.
-
-Known limitations:
-
-- The repo does not include a real Devin behavior test.
-- The bootstrap currently instructs Devin to use the `skill` tool or slash command `/skill-name`; real activation should be verified before primary support is claimed.
-
-Risk:
-
-- Medium until real Devin activation is verified.
-
-## Windsurf Cascade
-
-Status: Experimental, partial.
-
-Existing files:
-
-- `.windsurf/rules/bearpaws.md`
-- `.windsurf/skills/` symlinks into `skills/`
-- `install.sh`
-
-Install path:
-
-```bash
-./install.sh --windsurf
-```
-
-How it works:
-
-- `install.sh` symlinks each `skills/<name>/` directory into `.windsurf/skills/`.
-- `.windsurf/rules/bearpaws.md` is an always-on rule file with a commented `@include` reference to `../skills/using-bearpaws/SKILL.md`; real include expansion has not been verified.
-
-Evidence:
-
-- The repo has an install reconciliation test for symlink creation.
-
-Known limitations:
-
-- The repo does not include a real Windsurf behavior test.
-- The always-on rule and commented include behavior should be verified in Windsurf before stronger support claims are made.
-
-Risk:
-
-- Medium until real Windsurf activation is verified.
+Windsurf support removed; Windsurf users can use `--agents`.
 
 ## Adapter Policy
 
@@ -275,9 +190,8 @@ Minimum practical tests by tier:
 |---|---|
 | Claude Code | Existing trigger, explicit-request, schema, and selected workflow tests. |
 | Google Antigravity IDE | Real-file plugin install test, static adapter test, and manual promotion gates A–K. |
-| Codex | None until an integration is added. |
-| Devin for Terminal | Symlink install test plus manual or automated activation proof before promotion. |
-| Windsurf Cascade | Symlink install test plus manual or automated include/activation proof before promotion. |
+| OpenCode | Spec validator + manual discovery smoke test. |
+| Other Agent Skills agents | `--agents` installer test + manual activation proof before promotion. |
 
 Do not add a full per-agent trigger matrix unless the maintenance cost is explicitly accepted.
 
@@ -286,7 +200,7 @@ Do not add a full per-agent trigger matrix unless the maintenance cost is explic
 Recommended public posture:
 
 - Claude Code and Google Antigravity IDE are primary supported targets.
-- Codex, Devin for Terminal, and Windsurf Cascade are experimental unless and until validated.
+- OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless and until validated.
 - Bearpaws is an independent skills toolkit that evolves on its own cadence.
 - Attribution and MIT license compliance remain.
 

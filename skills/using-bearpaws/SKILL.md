@@ -1,6 +1,6 @@
 ---
 name: using-bearpaws
-description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+description: Use when starting any conversation, before responding or exploring the project
 ---
 
 <skill>
@@ -8,25 +8,13 @@ description: Use when starting any conversation - establishes how to find and us
   <subagent-stop>If you were dispatched as a subagent to execute a specific task, skip this skill.</subagent-stop>
 
   <warning level="hard">
-    If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill. IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+    If a skill might apply, invoke it before responding, asking, or exploring. Follow applicable skills; user instructions take precedence.
   </warning>
 
-  <purpose>
-    Skill discovery and invocation. Bearpaws skills override default system behavior where they conflict, but **user instructions always take precedence**: user > skill > default system prompt.
-  </purpose>
-
-  <triggers>
-    <rule>Use at the start of every conversation, before any response.</rule>
-    <rule>Use before clarifying questions — skill check comes first.</rule>
-    <rule>Use before exploring the codebase — skills tell you HOW to explore.</rule>
-  </triggers>
-
   <process>
-    <step>**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content loads — follow it directly. Never `Read` skill files.</step>
-    <step>**In Devin for Terminal / Windsurf Cascade:** Use the `skill` tool (slash command `/skill-name`). Skills live in `.devin/skills/` or `.windsurf/skills/`.</step>
-    <step>**In Antigravity:** Use native Agent Skills. Installed skills are discovered by Antigravity and loaded on demand. When a skill applies, use that skill before performing the governed work. Follow the Antigravity capability mapping supplied by the adapter.</step>
-    <step>Even a 1% chance a skill might apply means invoke the skill to check.</step>
-    <step>If an invoked skill turns out to be wrong for the situation, you don't need to use it.</step>
+    <step>**Claude Code:** Invoke `Skill` and follow it; do not `Read` skill files.</step>
+    <step>**In Antigravity:** Use native Agent Skills and the capability mapping.</step>
+    <step>**Other Agent Skills agents:** Load `.agents/skills/` or `~/.agents/skills/` via the native tool (`skill` in OpenCode) or read `SKILL.md`. Users can type `$skill-name` (Codex) or `/skill-name` (Devin CLI).</step>
   </process>
 
   ## Red Flags
@@ -50,72 +38,28 @@ description: Use when starting any conversation - establishes how to find and us
 
   ## Pace Control
 
-  Do not convert early confidence into immediate implementation.
-
-  Before acting:
-  - establish what is known
-  - identify what is assumed
-  - inspect the relevant existing implementation when one exists
-  - determine the smallest correct next step
-
-  Confidence is not evidence. A familiar-looking problem still requires the
-  workflow appropriate to the task.
-
-  When the task becomes broader, riskier, or materially different from what was
-  initially understood, stop and re-evaluate before continuing.
-
-  Do not allow momentum from a successful step to justify skipping the next
-  required gate.
-
-  Prefer one verified step over several speculative steps.
+  Check knowns, assumptions, and existing work before acting. Re-evaluate when scope or risk changes. Verify each required gate.
 
   **Momentum does not waive gates.**
 
-  ## Lazy-load contract
-
-  Inside a loaded skill, `<see file="...">` and `<include ref="...">` are **advisory pointers, not directives**. Read the target only if the current task explicitly needs it. Never auto-Read them at skill load time.
-
   ## Skill priority
 
-  When multiple skills apply, the order is:
+  1. **`bp:onboarding-to-a-project`** first for projects; skip only for abstract design with no project involved.
+  2. **`bp:brainstorming`** next for design, using project conventions.
+  3. **Other process skills** for planning, TDD, debugging, review, and verification.
 
-  1. **`bp:onboarding-to-a-project`** — first, whenever there's an existing project context. Identify the key files and stack from manifests, READMEs, and a sample of similar files. Skip only for purely abstract design discussion with no codebase ("how would I architect a system that does X?" with no project named).
-  2. **`bp:brainstorming`** — next, for any creative/design work. Brainstorming designs *against the conventions you discovered in onboarding*, not against your training-data prior.
-  3. **Other process skills** (writing-plans, TDD, debugging, code review, verification) — stack-agnostic, apply during implementation.
+  ## Lazy-load contract
 
-  Onboarding tells you the *project's specific* conventions; brainstorming reconciles them with the work to be done before code is written. Onboarding → brainstorming → implementation is the standard flow.
-
-  ## Brevity Policy
-
-  When no process skill governs the current output, prefer concise, low-commentary responses.
-
-  Default behavior:
-  - Answer directly.
-  - Do not restate the prompt.
-  - Skip preamble and post-hoc summaries unless asked.
-  - Prefer actionable output over commentary.
-  - For routine progress updates, use one line; expand only when something unexpected happens.
-  - Ask at most one clarification question when blocked.
-
-  Skill precedence:
-  - Active process skills define their own verbosity expectations.
-  - If a skill requires detailed plans, verification, debugging analysis, or acceptance criteria, follow the skill.
-  - Do not shorten outputs in ways that reduce correctness, safety, or usefulness.
-
-  Never compress:
-  - safety-critical warnings
-  - migration risks
-  - acceptance criteria
-  - code review findings needed to prevent defects
-  - test failures and error output
-  - verification results
+  `<see file="...">` and `<include ref="...">` are advisory. Read targets only when needed; do not load them automatically.
 
   ## Skill types
 
-  Rigid (TDD, debugging) — follow exactly. Flexible (patterns) — adapt to context. The skill itself tells you which.
+  Follow rigid process skills exactly; adapt flexible patterns to context.
 
-  <warning level="soft">
-    Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
-  </warning>
+  ## Brevity Policy
+
+  - Answer directly and keep routine updates brief when no process skill sets the output format.
+  - Follow a process skill's detail requirements when it applies.
+  - Never compress safety warnings, migration risks, acceptance criteria, defect-preventing review findings, test failures and error output, or verification results.
 
 </skill>

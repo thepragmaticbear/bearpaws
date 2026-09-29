@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+description: Use when about to create or change features, components, or behavior and the design has not been agreed yet
 ---
 
 <skill>
@@ -25,12 +25,11 @@ description: "You MUST use this before any creative work - creating features, bu
 
   <process>
     <step>**Explore project context** — check files, docs, recent commits.</step>
-    <step>**Offer visual companion** (if visual questions ahead) — own message, no other content. See visual-companion.md.</step>
     <step>**Ask clarifying questions** — one at a time. Multiple choice preferred. Understand purpose, constraints, success criteria.</step>
     <step>**Scope check** — if the request spans multiple independent subsystems, flag it. Decompose into sub-projects before refining details. Each sub-project gets its own spec → plan → implementation cycle.</step>
     <step>**Propose 2-3 approaches** — with trade-offs and your recommendation. Lead with recommended option.</step>
     <step>**Present design** — scale each section to complexity. Ask after each section if it looks right. Cover: architecture, components, data flow, error handling, testing.</step>
-    <step>**Write design doc** — save to `docs/bearpaws/plans/YYYY-MM-DD-{topic}-design.md` (user prefs override). Commit.</step>
+    <step>**Write design doc** — save to `docs/bearpaws/plans/YYYY-MM-DD-{topic}-design.md` (user prefs override). Commit it if the user or project allows commits without asking; otherwise leave it uncommitted and say so.</step>
     <step>**Spec self-review** — scan for placeholders/TBD, internal contradictions, scope creep, ambiguity. Fix inline.</step>
     <step>**User reviews spec** — ask user to review before proceeding. Wait for approval.</step>
     <step>**Transition** — invoke bp:writing-plans. That is the ONLY next skill.</step>
@@ -40,8 +39,6 @@ description: "You MUST use this before any creative work - creating features, bu
     ```dot
     digraph brainstorming {
       "Explore context" [shape=box];
-      "Visual ahead?" [shape=diamond];
-      "Offer companion\n(own message)" [shape=box];
       "Clarifying Qs" [shape=box];
       "Propose approaches" [shape=box];
       "Present design" [shape=box];
@@ -51,10 +48,7 @@ description: "You MUST use this before any creative work - creating features, bu
       "User reviews?" [shape=diamond];
       "Invoke writing-plans" [shape=doublecircle];
 
-      "Explore context" -> "Visual ahead?";
-      "Visual ahead?" -> "Offer companion\n(own message)" [label="yes"];
-      "Visual ahead?" -> "Clarifying Qs" [label="no"];
-      "Offer companion\n(own message)" -> "Clarifying Qs";
+      "Explore context" -> "Clarifying Qs";
       "Clarifying Qs" -> "Propose approaches";
       "Propose approaches" -> "Present design";
       "Present design" -> "Approved?";
@@ -79,7 +73,6 @@ description: "You MUST use this before any creative work - creating features, bu
     <rule>**Follow existing patterns** in existing codebases. Only propose improvements that serve the current goal.</rule>
   </rules>
 
-  <see file="visual-companion.md"/>
   <see file="spec-document-reviewer-prompt.md"/>
 
 </skill>
