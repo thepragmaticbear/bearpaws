@@ -203,7 +203,7 @@ See the [2.5.0 release notes](docs/bearpaws/release-notes/2.5.0.md).
 
 See the [2.4.0 release notes](docs/bearpaws/release-notes/2.4.0.md).
 
-### 2.3.1 — proposed evidence-driven roadmap follow-up
+### 2.3.1
 
 Behavior changes started from failing baselines; proposals whose baseline already passed got no skill change. See the [roadmap evaluation](docs/bearpaws/plans/2026-09-29-roadmap-evaluation.md), [continuation checklist](docs/bearpaws/plans/2026-09-30-roadmap-continuation.md), and [three-way benchmark](docs/benchmarks/2026-09-30-three-way.md).
 
