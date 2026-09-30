@@ -13,6 +13,8 @@
       ".version-bump.json",
       "scripts/bump-version.sh",
       "docs/bearpaws/release-notes",
+      "docs/bearpaws/plans",
+      "plans",
       "release-notes",
       "README.md"
     ]

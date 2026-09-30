@@ -17,7 +17,7 @@ description: Use when completing tasks, implementing major features, or before m
 
   <process>
     <step>**Get git SHAs** — `BASE_SHA=$(git rev-parse HEAD~1)` (or `origin/main`), `HEAD_SHA=$(git rev-parse HEAD)`.</step>
-    <step>**Dispatch bp:code-reviewer subagent** — Use the Agent tool (formerly Task) with code-reviewer type. Fill placeholders: `{WHAT_WAS_IMPLEMENTED}`, `{PLAN_OR_REQUIREMENTS}`, `{BASE_SHA}`, `{HEAD_SHA}`, `{DESCRIPTION}`.</step>
+    <step>**Dispatch bp:code-reviewer subagent** — Use the Agent tool (formerly Task) with code-reviewer type. Fill placeholders: `{WHAT_WAS_IMPLEMENTED}`, `{PLAN_OR_REQUIREMENTS}`, `{PROJECT_CONVENTIONS}` (the project rules found during onboarding: test command, required patterns, banned patterns), `{BASE_SHA}`, `{HEAD_SHA}`, `{DESCRIPTION}`, `{CHANGED_FILE_DIFF}`, `{VERIFICATION_EVIDENCE}`, `{KNOWN_DECISIONS}`, `{UNRESOLVED_CONCERNS}`.</step>
     <step>**Validate adversarial structure** — Review MUST contain all four named gates: (1) **Failure Mode Enumeration** with ≥3 concrete scenarios, (2) **What would have to be true for this to be wrong** steel-manning, (3) **What I didn't check and why** mapping blind spots, (4) **Break Attempts** documented as "Tried: [executed|reasoned] X — Y". Vague is rejection-worthy: a "Tried" line without an `[executed]`/`[reasoned]` label, a `—` separator, and an outcome; or a failure mode without a specific code reference. If any gate is missing or vague, send back: "Review incomplete — missing [gate]. Redo."</step>
     <step>**Act on feedback** — Fix Critical immediately. Fix Important before proceeding. Note Minor for later. Push back if reviewer is wrong (with technical reasoning).</step>
   </process>

@@ -34,7 +34,7 @@ description: Use when starting any conversation, before responding or exploring 
   | "I remember this skill" | Skills evolve. Read current version. |
   | "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
   | "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
-  | "I'll note that I skipped the review" | Disclosure is not review. Run it before reporting. |
+  | "I'll note that I skipped the review" | Disclosure is not review. Run it, or report INCOMPLETE. |
   | "I know where this is going" | Early confidence is not permission to skip inspection, planning, or verification. |
 
   ## Pace Control
@@ -51,7 +51,7 @@ description: Use when starting any conversation, before responding or exploring 
 
   ## Elevated risk
 
-  Size never lowers risk. Work is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema. However small the change, elevated-risk work needs a failing test for the risk first (`bp:test-driven-development`), an independent review (`bp:requesting-code-review`) before any completion claim, and verification evidence in the report (`bp:verification-before-completion`). Saying you skipped a step does not satisfy it: elevated-risk work is not complete until the review has returned.
+  Size never lowers risk. Work is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema. However small the change, elevated-risk work needs a failing test for the risk first (`bp:test-driven-development`), an independent review (`bp:requesting-code-review`) before any completion claim, and verification evidence in the report (`bp:verification-before-completion`). Saying you skipped a step does not satisfy it. Dispatch the review before your final report; if it has not returned, the report's status is INCOMPLETE, never done.
 
   ## Lazy-load contract
 

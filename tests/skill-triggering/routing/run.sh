@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Which workflow does the bootstrap lead an agent to plan for each request?
-# Usage: tests/routing-eval/run.sh <bootstrap-skill.md> <label> [runs] [out-dir]
+# Usage: tests/skill-triggering/routing/run.sh <bootstrap-skill.md> <label> [runs] [out-dir]
 # Text-only: the agent names the skills it would invoke; nothing is executed.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

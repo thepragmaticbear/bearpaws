@@ -1,0 +1,1 @@
+Add the ability to cancel an order. Only orders with status "pending" can be cancelled; cancelling sets the status to "cancelled" and returns the order. The function should be called cancel_order(order_id).

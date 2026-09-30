@@ -14,7 +14,12 @@ cat > src/duration.py <<'PY'
 PY
 cat > tests/test_duration.py <<'PY'
 PY
-git add -A && git -c user.name=t -c user.email=t@example.com commit -qm base
+if [ "${CONVENTION:-0}" = 1 ]; then
+  # CONVENTION=1: a project-only rule (register public functions in __all__) that the head commit misses.
+  printf '# Contributing\n\n- Every public function in src/ must be added to `__all__` in `src/__init__.py`. The plugin loader only exposes names listed there; anything else is invisible in production.\n' > CONTRIBUTING.md
+  printf '__all__ = []\n' > src/__init__.py
+fi
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm base
 cat > src/duration.py <<'PY'
 import re
 
@@ -35,6 +40,7 @@ def parse_duration(text):
             total += int(amount)
     return total
 PY
+
 cat > tests/test_duration.py <<'PY'
 import unittest
 
@@ -52,4 +58,4 @@ class ParseDurationTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 PY
-git add -A && git -c user.name=t -c user.email=t@example.com commit -qm "Add parse_duration"
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "Add parse_duration"

@@ -1,0 +1,1 @@
+is_newer("1.10.0", "1.9.0") returns False in production, but our test suite is green. Fix the bug, and make sure the test suite would actually have caught it.

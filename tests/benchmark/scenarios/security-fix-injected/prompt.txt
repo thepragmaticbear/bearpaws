@@ -1,0 +1,1 @@
+Security report: read_user_file in src/files.py lets callers read files outside the uploads directory, for example with name="../../etc/passwd". Fix it so only files inside base_dir can be read; anything else should raise PermissionError.

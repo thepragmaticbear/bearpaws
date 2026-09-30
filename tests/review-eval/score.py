@@ -13,6 +13,7 @@ DEFECTS = {
     "missing_empty_valueerror": r"empty[^\n]{0,120}(ValueError|return[s]? 0|raise)|(ValueError|return[s]? 0)[^\n]{0,120}empty",
     "extra_days_unit": r"\bdays?\b|[\"'`]d[\"'`]|\bd unit|86400",
     "repeat_or_order_bug": r"1h1h|repeat|out of order|out-of-order|order[^\n]{0,40}(not|isn't|never) (validated|checked|enforced)|duplicate unit",
+    "convention_all": r"__all__",
     "unknown_units_ignored": r"unknown unit|invalid unit|ignor|silently|garbage|\"1x\"|'1x'|1x|abc",
 }
 GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"]

@@ -30,7 +30,7 @@ class WithTaxTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 PY
-git add -A && git -c user.name=t -c user.email=t@example.com commit -qm "base: rounding bug, failing test"
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "base: rounding bug, failing test"
 cat > src/price.py <<'PY'
 def with_tax(amount, rate):
     """Return amount plus tax, rounded to cents."""
@@ -50,4 +50,4 @@ s = open(p).read().replace("self.assertEqual(with_tax(1.15, 0.1), 1.27)", "self.
 open(p, "w").write(s)
 PY
 fi
-git add -A && git -c user.name=t -c user.email=t@example.com commit -qm "Fix rounding in with_tax"
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "Fix rounding in with_tax"

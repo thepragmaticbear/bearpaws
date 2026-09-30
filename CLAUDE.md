@@ -38,7 +38,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
-| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex passes the conformance smoke (discovery, explicit load, auto-trigger, risk gate) with the `AGENTS.md` bootstrap; others rely on native `.agents/skills` discovery |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex discovery and activation smoke-tested with the `AGENTS.md` bootstrap; expanded conformance requires completed-action evidence. Others rely on native `.agents/skills` discovery. |
 
 ## How the bootstrap works
 
@@ -90,7 +90,7 @@ tests/skill-triggering/run-all.sh                                             # 
 tests/benchmark/run.sh                                                        # cost per accepted task: bearpaws vs no plugin (see tests/benchmark/README.md)
 tests/review-eval/run.sh <template> <label>                                   # reviewer catches planted defects; labels break attempts honestly
 tests/review-eval/routing.sh                                                  # SDD routes review by risk under pressure
-tests/routing-eval/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
+tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers

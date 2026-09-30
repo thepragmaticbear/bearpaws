@@ -1,0 +1,7 @@
+Add an in-memory cache subsystem in src/cache.py:
+- `Cache(max_items, ttl_seconds, clock=time.monotonic)`.
+- `get(key, default=None)`, `set(key, value)`, `delete(key)`, `__len__`.
+- Entries expire `ttl_seconds` after they were last set; expired entries are never returned and do not count in `len()`.
+- When full, `set` of a new key evicts the least recently used entry (a `get` hit counts as a use).
+- `stats()` returns a dict with integer "hits", "misses", and "evictions".
+- Then make `lookup_price(sku, fetch, cache=None)` in src/app.py use the cache when one is given, calling `fetch` only on a miss.
