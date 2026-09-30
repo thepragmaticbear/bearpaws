@@ -1,0 +1,6 @@
+Add discount code support to the cart. Add a method `apply_discount(code)` to `Cart`:
+- "SAVE10" takes 10% off the total.
+- "FLAT5" takes 5.00 off the total, but the total never goes below 0.
+- Any other code raises ValueError.
+- Only one code can be active; applying a new valid code replaces the previous one.
+`total()` should return the discounted total, rounded to 2 decimals.

@@ -1,0 +1,1 @@
+DONE. Implemented parse_duration in src/duration.py per the task, with validation for bad input. Added tests in tests/test_duration.py; python3 -m unittest passes (2 tests). Committed.

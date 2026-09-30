@@ -34,6 +34,7 @@ description: Use when starting any conversation, before responding or exploring 
   | "I remember this skill" | Skills evolve. Read current version. |
   | "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
   | "I know what that means" | Knowing the concept ≠ using the skill. Invoke it. |
+  | "I'll note that I skipped the review" | Disclosure is not review. Run it before reporting. |
   | "I know where this is going" | Early confidence is not permission to skip inspection, planning, or verification. |
 
   ## Pace Control
@@ -47,6 +48,10 @@ description: Use when starting any conversation, before responding or exploring 
   1. **`bp:onboarding-to-a-project`** first for projects; skip only for abstract design with no project involved.
   2. **`bp:brainstorming`** next for design, using project conventions.
   3. **Other process skills** for planning, TDD, debugging, review, and verification.
+
+  ## Elevated risk
+
+  Size never lowers risk. Work is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema. However small the change, elevated-risk work needs a failing test for the risk first (`bp:test-driven-development`), an independent review (`bp:requesting-code-review`) before any completion claim, and verification evidence in the report (`bp:verification-before-completion`). Saying you skipped a step does not satisfy it: elevated-risk work is not complete until the review has returned.
 
   ## Lazy-load contract
 

@@ -25,6 +25,8 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [tests/install/](tests/install/) — installer tests for Antigravity and Agent Skills (`--agents`).
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
+- [tests/benchmark/](tests/benchmark/) — full-session benchmark; primary metric is cost per accepted task, scored by held-out acceptance tests.
+- `tests/*-eval/`, [tests/codex/](tests/codex/) — RED/GREEN behavior evals for skill changes, and the Codex conformance smoke.
 - [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
 - [docs/agent-support.md](docs/agent-support.md) — current support tiers and evidence by agent.
 - [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/) — release notes, starting with the v1.0.0 public baseline; new positioning changes belong in new release-note files, not retroactive edits to historical notes.
@@ -36,7 +38,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
-| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex smoke-tested; others rely on native `.agents/skills` discovery |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex passes the conformance smoke (discovery, explicit load, auto-trigger, risk gate) with the `AGENTS.md` bootstrap; others rely on native `.agents/skills` discovery |
 
 ## How the bootstrap works
 
@@ -85,6 +87,15 @@ tests/claude-code/run-skill-tests.sh --integration                            # 
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
 tests/claude-code/run-skill-tests.sh --verbose                                # stream Claude output
 tests/skill-triggering/run-all.sh                                             # verify naive prompts trigger the right skill
+tests/benchmark/run.sh                                                        # cost per accepted task: bearpaws vs no plugin (see tests/benchmark/README.md)
+tests/review-eval/run.sh <template> <label>                                   # reviewer catches planted defects; labels break attempts honestly
+tests/review-eval/routing.sh                                                  # SDD routes review by risk under pressure
+tests/routing-eval/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
+tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
+tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
+tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
+tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
+GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.

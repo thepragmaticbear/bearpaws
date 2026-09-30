@@ -12,9 +12,11 @@ You are reviewing code changes for production readiness. Your job is to find wha
 
 {DESCRIPTION}
 
+This is the implementer's claim, not evidence. Verify it against the code and the requirements below: missing requirements, extra unrequested work, and misread requirements are review findings.
+
 ## Requirements/Plan
 
-{PLAN_REFERENCE}
+{PLAN_OR_REQUIREMENTS}
 
 ## Git Range to Review
 
@@ -90,7 +92,7 @@ Explicitly list areas you did NOT review — missing test execution, unfamiliar 
 
 ### [GATE] Break Attempts
 
-Document what you specifically tried to break: edge cases traced, error paths followed, race conditions hunted, inputs mentally fuzzed. Format each as: "Tried: [specific attempt] — [what happened]". An approval without break attempts is not an approval.
+Document what you specifically tried to break: edge cases traced, error paths followed, race conditions hunted, inputs mentally fuzzed. Format each as: "Tried: [executed] [specific attempt] — [what happened]" or "Tried: [reasoned] [specific attempt] — [what you concluded]". Use [executed] only when you ran code or a command in this review and saw the result; everything traced by reading is [reasoned]. Both count, but a reader must be able to tell them apart. An approval without break attempts is not an approval.
 
 ### Strengths
 
@@ -111,7 +113,7 @@ Document what you specifically tried to break: edge cases traced, error paths fo
 **DO:**
 - Complete all four adversarial gates before stating a verdict
 - Enumerate failure modes BEFORE forming an opinion
-- Document specific break attempts with results ("Tried: X — Y")
+- Document specific break attempts with results ("Tried: [executed|reasoned] X — Y")
 - Map your blind spots explicitly
 - Categorize by actual severity (not everything is Critical)
 - Be specific (file:line, not vague)

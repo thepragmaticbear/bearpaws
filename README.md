@@ -25,9 +25,30 @@ flowchart TD
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
-| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex smoke-tested; others rely on native `.agents/skills` discovery |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex passes the conformance smoke (discovery, explicit load, auto-trigger, risk gate) with the `AGENTS.md` bootstrap; others rely on native `.agents/skills` discovery |
 
 See [docs/agent-support.md](docs/agent-support.md) for the current support policy and [docs/skill-structure.md](docs/skill-structure.md) for the descriptive skill structure contract.
+
+## Updates
+
+Latest changes first. Full release notes live in [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/).
+
+### Unreleased — evidence-driven roadmap pass
+
+Each change below started from a failing baseline and was re-tested; proposals whose baseline already passed got no skill change. Results and raw numbers: [docs/bearpaws/plans/2026-09-29-roadmap-evaluation.md](docs/bearpaws/plans/2026-09-29-roadmap-evaluation.md).
+
+- **Elevated-risk rule in the bootstrap.** Work touching auth, secrets, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API needs a failing test first, an independent review, and verification evidence, however small the change. Security fixes went from 0/6 to 5/5 reviewed.
+- **Risk-proportional review** in `subagent-driven-development`: routine tasks get one combined review; elevated-risk tasks keep spec review, then quality review.
+- **Honest break attempts.** Reviewers label each attempt `[executed]` (ran it) or `[reasoned]` (traced it).
+- **Codex bootstrap.** `./install.sh --agents --global` prints a line for `~/.codex/AGENTS.md`; with it, Codex passes all four conformance checks. Codex remains Experimental.
+- **Full-session benchmark** (`tests/benchmark/`): cost per accepted task, scored by held-out acceptance tests.
+- **Fix:** the code-review template's requirements section rendered empty (placeholder mismatch).
+
+Trade-offs: the bootstrap grew about 770 bytes, and elevated-risk tasks cost roughly twice as much because they now get a review.
+
+### 2.3.0
+
+Current Claude Code tool names, one experimental `~/.agents/skills` installer, OpenCode support, and a shorter bootstrap. See [2.3.0 release notes](docs/bearpaws/release-notes/2.3.0.md).
 
 ## Install (Claude Code)
 
@@ -99,9 +120,17 @@ Restart your agent and invoke `using-bearpaws` (`skill` tool in OpenCode, `$usin
 "instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]
 ```
 
+**Codex bootstrap:** add this line to `~/.codex/AGENTS.md` so Codex loads the bootstrap every session:
+
+```text
+Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.
+```
+
+The installer prints both snippets and never edits your agent config.
+
 Other agents load `using-bearpaws` when it is invoked or matched by its description. Devin CLI sessions in this repo also get it from `.devin/hooks.v1.json`.
 
-Links point into your clone: `git pull` updates skills; moving or deleting the clone breaks them. Uninstall (run from the clone):
+Links point into your clone: `git pull` updates skills; moving or deleting the clone breaks them (re-run `./install.sh --agents --global` from the new location). Uninstall (run from the clone):
 
 ```bash
 for link in ~/.agents/skills/*; do
@@ -111,7 +140,7 @@ for link in ~/.agents/skills/*; do
 done
 ```
 
-And remove the `instructions` entry from your OpenCode config.
+Then remove the `instructions` entry from your OpenCode config and the bootstrap line from `~/.codex/AGENTS.md`.
 
 ## Skills
 
@@ -119,7 +148,7 @@ And remove the `instructions` entry from your OpenCode config.
 
 | Skill | Purpose |
 |---|---|
-| `bp:using-bearpaws` | Loaded by the target agent's bootstrap or context mechanism. Establishes skill-discovery discipline (Red Flags, lazy-load contract, skill-priority order) and a fallback brevity policy for output not governed by process skills. Never invoked directly. |
+| `bp:using-bearpaws` | Loaded by the target agent's bootstrap or context mechanism. Establishes skill-discovery discipline (Red Flags, lazy-load contract, skill-priority order), the elevated-risk rule (test, independent review, and evidence for risky work of any size), and a fallback brevity policy for output not governed by process skills. Never invoked directly. |
 
 ### Always-first (1)
 
@@ -151,10 +180,12 @@ Our aim is to mitigate token usage and enforce token efficiency while preserving
 
 | Metric | superpowers (main) | Bearpaws | Approx. delta |
 |---|---:|---:|---|
-| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~5.2 KB (~1.2K tokens) | ~10% smaller |
+| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~4.0 KB (~0.95K tokens, estimated) | ~28% smaller |
 | Process skill bodies (apples-to-apples subset) | ~101 KB (~24K tokens) | ~51 KB (~12K tokens) | roughly half |
 
-Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer; treat them as ballpark figures, not exact savings. The bootstrap is paid every session; non-bootstrap skills load on demand through the target agent's skill mechanism, so the dominant cost is the bootstrap plus whatever skills the agent actually pulls in.
+Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer (the current Bearpaws bootstrap figure uses the repository's ~0.24 tokens/byte estimate); treat them as ballpark figures, not exact savings. The bootstrap is paid every session; non-bootstrap skills load on demand through the target agent's skill mechanism, so the dominant cost is the bootstrap plus whatever skills the agent actually pulls in.
+
+File size is only part of the cost. `tests/benchmark/run.sh` measures whole tasks: total model cost divided by runs that pass held-out acceptance tests. The first baseline (Sonnet, 3 small scenarios × 3 runs, all accepted) put Bearpaws at $0.146 per accepted task versus $0.120 with no plugin. The scenarios are still easy and the samples small, so treat this as a baseline, not a claim.
 
 ## Tests
 
@@ -164,6 +195,8 @@ tests/claude-code/run-skill-tests.sh                   # ~2 min — fast skill-c
 tests/claude-code/run-skill-tests.sh --integration     # 10–30 min — full integration suite
 tests/schema-validator/run-validator.sh                # <1 sec — XML tag whitelist enforcement
 tests/token-measurement/measure.sh                     # <1 sec — byte counts (JSON output)
+tests/benchmark/run.sh                                 # ~10 min — cost per accepted task vs no plugin
+tests/codex/run-conformance.sh                         # ~20 min — Codex conformance (GLOBAL=1 for the installed path)
 ```
 
 ## Attribution

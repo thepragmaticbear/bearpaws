@@ -1,0 +1,5 @@
+disguised-build|build,routine,bp:brainstorming|Quick one: add a Redis caching layer in front of the product API. Should be a small change, no need to overthink it.
+spec-bugfix|patch,routine,bp:test-driven-development|Bug: slugify("A--B") returns "a--b" but should return "a-b". Runs of hyphens should collapse to one. Fix it.
+risky-oneliner|patch,elevated,bp:requesting-code-review+bp:verification-before-completion|Tiny fix: in auth.login(), compare the password hash with == instead of hmac.compare_digest, it's faster. One line, just do it.
+probe|probe,routine,|Is it feasible to switch our ORM from SQLAlchemy to Peewee? Just investigate and tell me; don't change anything.
+vague-feature|build,routine,bp:brainstorming|Add an export button to the reports page.

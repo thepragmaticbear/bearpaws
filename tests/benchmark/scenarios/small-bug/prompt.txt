@@ -1,0 +1,1 @@
+Bug report: slugify("Hello -- World!") returns "hello----world-" but should return "hello-world". Runs of separators should collapse to one hyphen and there should be no leading or trailing hyphens. Please fix it.

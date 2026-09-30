@@ -2,16 +2,16 @@
 
 Use this template when dispatching a code quality reviewer subagent.
 
-**Purpose:** Verify implementation is well-built (clean, tested, maintainable)
+**Purpose:** Verify implementation is well-built (clean, tested, maintainable). For routine tasks this is the only review, so it also checks spec compliance: pass the full task text as PLAN_OR_REQUIREMENTS.
 
-**Only dispatch after spec compliance review passes.**
+**Elevated-risk tasks:** only dispatch after spec compliance review passes.
 
 ```
 Agent tool (bp:code-reviewer):
   Use template at requesting-code-review/code-reviewer.md
 
   WHAT_WAS_IMPLEMENTED: [from implementer's report]
-  PLAN_OR_REQUIREMENTS: Task N from [plan-file]
+  PLAN_OR_REQUIREMENTS: [FULL TEXT of Task N from the plan]
   BASE_SHA: [commit before task]
   HEAD_SHA: [current commit]
   DESCRIPTION: [task summary]

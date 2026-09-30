@@ -151,5 +151,6 @@ test -f "$AGENTS_SKILLS/using-bearpaws/SKILL.md"
 test -f "$AGENTS_SKILLS/beta/mine.txt"
 
 grep -qF '"instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]' "$TMP_ROOT/bearpaws-install-agents.log"
+grep -qF 'Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.' "$TMP_ROOT/bearpaws-install-agents.log"
 
-echo "OK: Agents installer (global skills, preserves unrelated skills and name collisions, idempotent, OpenCode snippet)"
+echo "OK: Agents installer (global skills, preserves unrelated skills and name collisions, idempotent, OpenCode and Codex snippets)"

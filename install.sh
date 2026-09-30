@@ -248,6 +248,8 @@ main() {
             echo "  • Restart your agent; invoke using-bearpaws or let descriptions trigger skills"
             echo "  • OpenCode bootstrap: add to ~/.config/opencode/opencode.json:"
             echo '      "instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]'
+            echo "  • Codex bootstrap: add this line to ~/.codex/AGENTS.md:"
+            echo '      Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.'
         fi
     else
         log_error "$failed platform installations failed"

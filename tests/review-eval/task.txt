@@ -1,0 +1,5 @@
+Task 3: Add parse_duration(text) in src/duration.py.
+- Accept strings combining h, m and s units in that order, e.g. "1h30m", "45s", "2h5s".
+- Return the total number of seconds as an int.
+- Raise ValueError for empty input, unknown units, or units out of order or repeated.
+- Add unit tests in tests/test_duration.py.

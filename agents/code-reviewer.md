@@ -48,7 +48,8 @@ Your review MUST follow this structure. Sections marked [GATE] are adversarial c
 
 8. **[GATE] Break Attempts and Verdict**:
    - Document what you specifically tried to break: edge cases traced, error paths followed, race conditions hunted, inputs mentally fuzzed
-   - Format each as: "Tried: [specific attempt] — [what happened]"
+   - Format each as: "Tried: [executed] [specific attempt] — [what happened]" or "Tried: [reasoned] [specific attempt] — [what you concluded]"
+   - [executed] only when you ran code or a command in this review and saw the result; anything traced by reading is [reasoned]
    - Only after documenting break attempts may you state a verdict
    - An approval without break attempts is not an approval
 
