@@ -114,10 +114,16 @@ cmd_audit() {
   echo "Audit: scanning repo for version string '$current_version'..."
   echo ""
 
-  # Build grep exclude args
-  local -a exclude_args=()
+  # Build grep exclude args. grep matches --exclude/--exclude-dir against a
+  # file's or directory's own name, so a bare name skips it anywhere; an entry
+  # with a slash is a repo-relative path, filtered from the matches below.
+  local -a exclude_args=() path_excludes=()
   while IFS= read -r pattern; do
-    exclude_args+=("--exclude=$pattern" "--exclude-dir=$pattern")
+    if [[ "$pattern" == */* ]]; then
+      path_excludes+=("${pattern%/}")
+    else
+      exclude_args+=("--exclude=$pattern" "--exclude-dir=$pattern")
+    fi
   done < <(audit_excludes)
 
   # Also always exclude binary files and .git
@@ -136,6 +142,15 @@ cmd_audit() {
     match_file=$(echo "$match" | cut -d: -f1)
     # Make path relative to repo root
     local rel_path="${match_file#$REPO_ROOT/}"
+
+    local is_excluded=0
+    for ep in ${path_excludes[@]+"${path_excludes[@]}"}; do
+      if [[ "$rel_path" == "$ep" || "$rel_path" == "$ep"/* ]]; then
+        is_excluded=1
+        break
+      fi
+    done
+    [[ "$is_excluded" -eq 1 ]] && continue
 
     # Check if this file is in the declared list
     local is_declared=0

@@ -95,7 +95,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
 tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, and --grok installer
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
-tests/bump-version/run-tests.sh                                               # bump-version.sh rejects malformed versions, writes only declared fields
+tests/bump-version/run-tests.sh                                               # bump-version.sh rejects malformed versions, writes only declared fields, audit excludes
 tests/harness-wiring/run.sh                                                   # model-free discovery/bootstrap checks for installed codex, opencode, copilot, grok
 tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)

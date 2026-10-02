@@ -73,11 +73,12 @@ assert ctx.endswith("\n</warning>"), repr(ctx[-20:])
 PY
 then echo "OK: Claude Code wrapper text unchanged"; else fail "Claude Code wrapper text changed"; fi
 
-# Escaping: quotes, backslashes, tabs, CRLF and non-ASCII must round-trip.
+# Escaping: quotes, backslashes, tabs, CRLF, other control characters and
+# non-ASCII must round-trip.
 FAKE="$TMP_ROOT/fake-plugin"
 mkdir -p "$FAKE/hooks" "$FAKE/skills/using-bearpaws"
 cp "$HOOK" "$FAKE/hooks/session-start"
-printf -- '---\nname: using-bearpaws\n---\nquote " back \\ tab\there\r\ncrlf line\nunicode — ✓\n' \
+printf -- '---\nname: using-bearpaws\n---\nquote " back \\ tab\there\r\ncrlf line\nctl \001 \010 \014 \033 \037 end\nunicode — ✓\n' \
   > "$FAKE/skills/using-bearpaws/SKILL.md"
 esc_out="$TMP_ROOT/escape.json"
 if run_hook "$FAKE/hooks/session-start" "$esc_out" CLAUDE_PLUGIN_ROOT="$FAKE" && python3 - "$esc_out" "$FAKE/skills/using-bearpaws/SKILL.md" <<'PY'
@@ -102,6 +103,15 @@ for case in missing empty; do
     echo "OK: $case bootstrap fails loudly"
   fi
 done
+
+# The wrapper refuses to run without a script name instead of exec'ing a directory.
+if bash "$REPO_ROOT/hooks/run-hook.cmd" >"$TMP_ROOT/noarg.out" 2>"$TMP_ROOT/noarg.err"; then
+  fail "run-hook.cmd with no script name should exit non-zero"
+elif ! grep -q "missing script name" "$TMP_ROOT/noarg.err"; then
+  fail "run-hook.cmd with no script name should explain why on stderr"
+else
+  echo "OK: run-hook.cmd without a script name fails loudly"
+fi
 
 # Packaging: every hook config points at a script that exists.
 python3 - "$REPO_ROOT" <<'PY' && echo "OK: hook configs reference existing scripts" || fail "hook config references a missing script"

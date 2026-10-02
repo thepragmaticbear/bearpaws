@@ -34,13 +34,18 @@ if %ERRORLEVEL% equ 0 (
     exit /b %ERRORLEVEL%
 )
 
-REM No bash found - exit silently rather than error
-REM (plugin still works, just without SessionStart context injection)
+REM No bash found - exit 0 so the plugin still works without SessionStart
+REM context injection, but say why on stderr so the missing bootstrap is findable
+echo run-hook.cmd: bash not found, Bearpaws bootstrap skipped. Install Git for Windows to enable it. >&2
 exit /b 0
 CMDBLOCK
 
 # Unix: run the named script directly
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -z "${1:-}" ]; then
+    echo "run-hook.cmd: missing script name" >&2
+    exit 1
+fi
 SCRIPT_NAME="$1"
 shift
 exec bash "${SCRIPT_DIR}/${SCRIPT_NAME}" "$@"

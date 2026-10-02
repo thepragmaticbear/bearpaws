@@ -41,3 +41,19 @@ test "$(jq -r .name "$WORK/package.json")" = "$(jq -r .name "$REPO_ROOT/package.
 "$BUMP" --check >/dev/null
 
 echo "OK: valid versions are written to every declared field and nothing else"
+
+# Audit: path excludes (with a slash) skip only that path; undeclared files are reported
+jq '.audit.exclude += ["only/this/dir"]' "$WORK/.version-bump.json" > "$WORK/vb.tmp" && mv "$WORK/vb.tmp" "$WORK/.version-bump.json"
+mkdir -p "$WORK/only/this/dir" "$WORK/other/this/dir"
+echo "9.9.9-rc.1+build.5" > "$WORK/only/this/dir/note.txt"
+echo "9.9.9-rc.1+build.5" > "$WORK/other/this/dir/note.txt"
+echo "9.9.9-rc.1+build.5" > "$WORK/stray.txt"
+audit_out="$("$BUMP" --audit)"
+grep -qF "stray.txt" <<<"$audit_out"
+grep -qF "other/this/dir/note.txt" <<<"$audit_out"
+if grep -qF "only/this/dir/note.txt" <<<"$audit_out"; then
+  echo "FAIL: audit reported a file under an excluded path"
+  exit 1
+fi
+
+echo "OK: audit honors path excludes and reports undeclared files"
