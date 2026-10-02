@@ -135,13 +135,12 @@ cmd_audit() {
     declared_paths+=("$path")
   done < <(declared_files)
 
-  # Grep for the version string
+  # Grep for the version string, one NUL-terminated file name at a time so
+  # names with ':' or glob characters survive intact
   local found_undeclared=0
-  while IFS= read -r match; do
-    local match_file
-    match_file=$(echo "$match" | cut -d: -f1)
+  while IFS= read -r -d '' match_file; do
     # Make path relative to repo root
-    local rel_path="${match_file#$REPO_ROOT/}"
+    local rel_path="${match_file#"$REPO_ROOT"/}"
 
     local is_excluded=0
     for ep in ${path_excludes[@]+"${path_excludes[@]}"}; do
@@ -166,9 +165,11 @@ cmd_audit() {
         echo "UNDECLARED files containing '$current_version':"
         found_undeclared=1
       fi
-      echo "  $match"
+      while IFS= read -r line; do
+        echo "  $match_file:$line"
+      done < <(grep -nF -- "$current_version" "$match_file")
     fi
-  done < <(grep -rn "${exclude_args[@]}" -F "$current_version" "$REPO_ROOT" 2>/dev/null || true)
+  done < <(grep -rl --null "${exclude_args[@]}" -F -- "$current_version" "$REPO_ROOT" 2>/dev/null || true)
 
   if [[ "$found_undeclared" -eq 0 ]]; then
     echo "No undeclared files contain the version string. All clear."
@@ -182,8 +183,13 @@ cmd_audit() {
 cmd_bump() {
   local new_version="$1"
 
-  # Validate semver: X.Y.Z with optional -prerelease and +build, nothing else
-  if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+  # Validate strict SemVer 2.0.0: no leading zeros in numeric identifiers,
+  # no empty pre-release or build identifiers
+  local num='(0|[1-9][0-9]*)'
+  local pre_id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+  local build_id='[0-9A-Za-z-]+'
+  local semver="^$num\\.$num\\.$num(-$pre_id(\\.$pre_id)*)?(\\+$build_id(\\.$build_id)*)?\$"
+  if [[ ! "$new_version" =~ $semver ]]; then
     echo "error: '$new_version' doesn't look like a version (expected X.Y.Z[-pre][+build])" >&2
     exit 1
   fi

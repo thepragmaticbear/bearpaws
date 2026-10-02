@@ -333,14 +333,16 @@ copilot plugin install bp@bearpaws
 
 Other agents load `using-bearpaws` when it is invoked or matched by its description.
 
-Links point into your clone: `git pull` updates skills; moving or deleting the clone breaks them (re-run `./install.sh --agents --global` from the new location). Uninstall (run from the clone):
+Links point into your clone: `git pull` updates skills; moving or deleting the clone breaks them (re-run `./install.sh --agents --global` from the new location; it reclaims links it recorded in `~/.agents/skills/.bearpaws-roots`). Uninstall:
 
 ```bash
+roots=~/.agents/skills/.bearpaws-roots
 for link in ~/.agents/skills/*; do
-  case "$(readlink "$link" 2>/dev/null)" in
-    "$PWD/skills"/*) rm "$link" ;;
-  esac
+  target="$(readlink "$link" 2>/dev/null)" || continue
+  target="${target%/}"
+  grep -qxF -- "${target%/*}" "$roots" 2>/dev/null && rm "$link"
 done
+rm -f "$roots"
 ```
 
 Then remove the `instructions` entry from your OpenCode config, the bootstrap line from `~/.codex/AGENTS.md`, and `~/.grok/rules/bearpaws.md`.

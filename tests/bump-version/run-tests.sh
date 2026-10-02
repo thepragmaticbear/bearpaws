@@ -7,7 +7,8 @@ TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 trap 'echo "FAIL: line $LINENO: $BASH_COMMAND"' ERR
 
-WORK="$TMP_ROOT/repo"
+# Glob characters in the checkout path must not break repo-relative paths
+WORK="$TMP_ROOT/proj[1]/repo"
 mkdir -p "$WORK/scripts"
 cp "$REPO_ROOT/scripts/bump-version.sh" "$WORK/scripts/"
 cp "$REPO_ROOT/.version-bump.json" "$WORK/"
@@ -21,7 +22,8 @@ snapshot() { jq -S . "$WORK/package.json" "$WORK/.claude-plugin/plugin.json"; }
 
 # Versions that are not exactly X.Y.Z[-pre][+build] are rejected, files untouched
 before="$(snapshot)"
-for bad in '9.9.9" | .name = "pwned' '9.9.9garbage' '9.9' 'v9.9.9' '9.9.9 '; do
+for bad in '9.9.9" | .name = "pwned' '9.9.9garbage' '9.9' 'v9.9.9' '9.9.9 ' \
+           '01.2.3' '1.0.0-.' '1.0.0-a..b' '1.0.0-01' '1.0.0+' '1.0.0-'; do
   if "$BUMP" "$bad" >/dev/null 2>&1; then
     echo "FAIL: bump accepted malformed version: $bad"
     exit 1
@@ -48,10 +50,17 @@ mkdir -p "$WORK/only/this/dir" "$WORK/other/this/dir"
 echo "9.9.9-rc.1+build.5" > "$WORK/only/this/dir/note.txt"
 echo "9.9.9-rc.1+build.5" > "$WORK/other/this/dir/note.txt"
 echo "9.9.9-rc.1+build.5" > "$WORK/stray.txt"
+jq '.audit.exclude += ["col:on"]' "$WORK/.version-bump.json" > "$WORK/vb.tmp" && mv "$WORK/vb.tmp" "$WORK/.version-bump.json"
+mkdir -p "$WORK/col:on"
+echo "9.9.9-rc.1+build.5" > "$WORK/col:on/note.txt"
 audit_out="$("$BUMP" --audit)"
 grep -qF "stray.txt" <<<"$audit_out"
 grep -qF "other/this/dir/note.txt" <<<"$audit_out"
-if grep -qF "only/this/dir/note.txt" <<<"$audit_out"; then
+if sed -n '/^UNDECLARED/,$p' <<<"$audit_out" | grep -qE '(package|plugin|marketplace)\.json'; then
+  echo "FAIL: audit reported a declared file as undeclared: $audit_out"
+  exit 1
+fi
+if grep -qF "only/this/dir/note.txt" <<<"$audit_out" || grep -qF "col:on/note.txt" <<<"$audit_out"; then
   echo "FAIL: audit reported a file under an excluded path"
   exit 1
 fi

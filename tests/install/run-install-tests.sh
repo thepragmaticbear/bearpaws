@@ -205,7 +205,50 @@ esac
 test "$(readlink "$MOVE_SKILLS/delta")" = "$TMP_ROOT/other-pack/skills/delta"
 grep -qF 'Skipping delta' <<<"$out_move"
 
+grep -qE 'Removed [0-9]+ broken symlinks' <<<"$out_move"   # reclaiming is announced, never silent
+# Roots no link points into any more are pruned; the current checkout stays recorded
+grep -qxF "$NEW_CLONE/skills" "$MOVE_SKILLS/.bearpaws-roots"
+if grep -qxF "$OLD_CLONE/skills" "$MOVE_SKILLS/.bearpaws-roots"; then
+  echo "FAIL: stale root kept in .bearpaws-roots after its links were reclaimed"
+  exit 1
+fi
+# A live link into another recorded clone is repointed with a notice, and that root pruned
+THIRD_CLONE="$TMP_ROOT/third-clone"
+cp -R "$NEW_CLONE" "$THIRD_CLONE"
+out_third="$( cd "$THIRD_CLONE" && HOME="$MOVE_HOME" ./install.sh --agents --global 2>&1 )"
+grep -qF "Repointing gamma from $NEW_CLONE/skills" <<<"$out_third"
+test "$(readlink "$MOVE_SKILLS/gamma")" = "$THIRD_CLONE/skills/gamma/"
+test "$(cat "$MOVE_SKILLS/.bearpaws-roots")" = "$THIRD_CLONE/skills"
+
+# The README uninstall snippet removes every recorded Bearpaws link and the record, nothing else
+uninstall_snippet="$(sed -n '/^roots=~\/.agents\/skills\/.bearpaws-roots$/,/^rm -f "\$roots"$/p' "$REPO_ROOT/README.md")"
+test -n "$uninstall_snippet"
+HOME="$MOVE_HOME" bash -c "$uninstall_snippet"
+test "$(ls -A "$MOVE_SKILLS")" = "delta"
+test "$(readlink "$MOVE_SKILLS/delta")" = "$TMP_ROOT/other-pack/skills/delta"
+
 echo "OK: Agents installer reclaims its own links after the checkout moves, never another pack's"
+
+# Links this installer never made are skipped even if they lead to a Bearpaws checkout
+OTHER_HOME="$TMP_ROOT/other-home"
+OTHER_SKILLS="$OTHER_HOME/.agents/skills"
+DEV_CHECKOUT="$TMP_ROOT/dev-worktree"
+cp -R "$WORK" "$DEV_CHECKOUT"
+mkdir -p "$OTHER_SKILLS" "$TMP_ROOT/mypack/using-bearpaws"
+touch "$TMP_ROOT/mypack/using-bearpaws/SKILL.md"
+ln -s "$DEV_CHECKOUT/skills/gamma" "$OTHER_SKILLS/gamma"        # deliberate link to a dev worktree
+ln -s "../mypack/beta" "$OTHER_SKILLS/beta"                     # relative foreign link
+ln -s "$TMP_ROOT/gone-clone/skills/using-bearpaws" "$OTHER_SKILLS/using-bearpaws"   # pre-record install, clone gone
+out_other="$( cd "$WORK" && HOME="$OTHER_HOME" ./install.sh --agents --global 2>&1 )"
+test "$(readlink "$OTHER_SKILLS/gamma")" = "$DEV_CHECKOUT/skills/gamma"
+test "$(readlink "$OTHER_SKILLS/beta")" = "../mypack/beta"
+test "$(readlink "$OTHER_SKILLS/using-bearpaws")" = "$TMP_ROOT/gone-clone/skills/using-bearpaws"
+grep -qF 'Skipping gamma' <<<"$out_other"
+grep -qF 'Skipping beta' <<<"$out_other"
+# A dangling link shaped like an older Bearpaws install gets a hint, not silence
+grep -qF 'earlier Bearpaws checkout' <<<"$out_other"
+
+echo "OK: Agents installer never repoints links it did not record, and hints at pre-record links"
 
 # Install steps that fail make the install fail, not report success
 FAIL_HOME="$TMP_ROOT/fail-home"
@@ -277,6 +320,25 @@ if ( cd "$WORK" && HOME="$GROK_FAIL_HOME" ./install.sh --grok --global ) >"$TMP_
 fi
 if grep -qF 'completed successfully' "$TMP_ROOT/bearpaws-install-grok-fail.log"; then
   echo "FAIL: failed grok install still reported success"
+  exit 1
+fi
+
+# A rule that fails to land leaves no staged temp file in Grok's rules directory
+MV_SHIM="$TMP_ROOT/mv-shim"
+mkdir -p "$MV_SHIM"
+REAL_MV="$(command -v mv)"
+printf '%s\n' '#!/usr/bin/env bash' \
+  'for a in "$@"; do [[ "$a" == */rules/bearpaws.md ]] && { echo "mv: simulated failure" >&2; exit 1; }; done' \
+  "exec \"$REAL_MV\" \"\$@\"" > "$MV_SHIM/mv"
+chmod +x "$MV_SHIM/mv"
+GROK_MV_HOME="$TMP_ROOT/grok-mv-home"
+mkdir -p "$GROK_MV_HOME"
+if ( cd "$WORK" && HOME="$GROK_MV_HOME" PATH="$MV_SHIM:$PATH" ./install.sh --grok --global ) >/dev/null 2>&1; then
+  echo "FAIL: grok install should fail when the rule cannot be moved into place"
+  exit 1
+fi
+if ls -A "$GROK_MV_HOME/.grok/rules" | grep -q .; then
+  echo "FAIL: failed grok install left files in the rules directory: $(ls -A "$GROK_MV_HOME/.grok/rules")"
   exit 1
 fi
 

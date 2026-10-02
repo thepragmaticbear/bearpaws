@@ -165,7 +165,7 @@ Status: Experimental.
 
 Status: Experimental.
 
-- Install: `./install.sh --agents --global` links each skill into `~/.agents/skills/`, removing only broken links and skipping any existing entry it didn't link from this checkout. The repo ships `.agents/skills/` (per-skill links into `skills/`).
+- Install: `./install.sh --agents --global` links each skill into `~/.agents/skills/` and records the checkout it linked from in `~/.agents/skills/.bearpaws-roots`. On re-runs it removes or repoints only links into a recorded checkout (so a moved or re-cloned checkout reclaims its own links) and skips every other existing entry. The repo ships `.agents/skills/` (per-skill links into `skills/`).
 - Invocation: `$skill-name` or `/skills` (Codex), `/skill-name` (Devin CLI), or implicitly when a description matches.
 - Codex bootstrap: add ``Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.`` to `~/.codex/AGENTS.md`. The installer prints this line and never edits user config.
 - Devin CLI: discovers `~/.agents/skills` and loads `AGENTS.md`; put the bootstrap line in a project `AGENTS.md`. `.devin/hooks.v1.json` runs `hooks/session-start` only inside this checkout (it resolves `${DEVIN_PROJECT_DIR}/hooks/`). When `DEVIN_PROJECT_DIR` or `DEVIN_PLUGIN_ROOT` is set the hook emits `hookSpecificOutput.additionalContext`, the shape Devin documents for SessionStart context; previously it emitted top-level `additionalContext`. `devin plugins install --local` falls back to `.claude-plugin/plugin.json` for skills, but Devin reads plugin hooks only from a root `hooks.json`, which Bearpaws does not ship because Copilot CLI also reads that path. Not verified live.

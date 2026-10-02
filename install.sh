@@ -42,20 +42,23 @@ fi
 log_info "Bearpaws installation script"
 log_info "Repository root: $BEARPAWS_ROOT"
 
-# True if link $1, named $2 in the target dir, is a Bearpaws skill link: it
-# points at <skills root>/$2 where that root is this checkout ($3), a root
-# recorded in $4 by an earlier install (a moved or re-cloned checkout), or a
-# live Bearpaws checkout. Other packs' links fail all three and stay untouched.
-is_bearpaws_link() {
+# Print the skills root a Bearpaws link $1 (named $2) points into, and succeed,
+# only if that root is this checkout ($3) or one recorded in $4 by an earlier
+# install (a moved or re-cloned checkout). Links this installer never made,
+# including other packs' and hand-made links to another checkout, never match.
+bearpaws_link_root() {
     local link="$1" name="$2" platform_dir="$3" roots_file="$4"
     local target
     target="$(readlink "$link" 2>/dev/null)" || return 1
     target="${target%/}"
     [[ "${target##*/}" == "$name" ]] || return 1
     local root="${target%/*}"
-    [[ "$root" == "$platform_dir" ]] && return 0
-    [[ -f "$roots_file" ]] && grep -qxF -- "$root" "$roots_file" && return 0
-    [[ -f "$root/using-bearpaws/SKILL.md" ]]
+    if [[ "$root" == "$platform_dir" ]] \
+       || { [[ -f "$roots_file" ]] && grep -qxF -- "$root" "$roots_file"; }; then
+        printf '%s\n' "$root"
+        return 0
+    fi
+    return 1
 }
 
 # Function to create symlinks for a platform
@@ -74,7 +77,7 @@ create_symlinks() {
         local broken_symlinks=0
         for skill in "$target_dir"/*; do
             if [[ -L "$skill" && ! -e "$skill" ]] \
-               && is_bearpaws_link "$skill" "$(basename "$skill")" "$platform_dir" "$roots_file"; then
+               && bearpaws_link_root "$skill" "$(basename "$skill")" "$platform_dir" "$roots_file" >/dev/null; then
                 rm "$skill"
                 ((++broken_symlinks))
             fi
@@ -96,15 +99,43 @@ create_symlinks() {
             local skill_name="$(basename "$skill_dir")"
             local dest="$target_dir/$skill_name"
             # Never clobber entries we didn't create; refresh only our own links
-            if [[ -e "$dest" || -L "$dest" ]] \
-               && ! is_bearpaws_link "$dest" "$skill_name" "$platform_dir" "$roots_file"; then
-                log_warning "Skipping $skill_name: $dest exists and is not a Bearpaws link"
-                continue
+            if [[ -e "$dest" || -L "$dest" ]]; then
+                local old_root
+                if ! old_root="$(bearpaws_link_root "$dest" "$skill_name" "$platform_dir" "$roots_file")"; then
+                    local hint=""
+                    if [[ -L "$dest" && ! -e "$dest" && "$(readlink "$dest")" == */skills/"$skill_name"* ]]; then
+                        hint=" (dangling; if it is from an earlier Bearpaws checkout, remove it and re-run)"
+                    fi
+                    log_warning "Skipping $skill_name: $dest exists and is not a Bearpaws link$hint"
+                    continue
+                fi
+                if [[ "$old_root" != "$platform_dir" ]]; then
+                    log_info "Repointing $skill_name from $old_root"
+                fi
             fi
             ln -sfn "$skill_dir" "$dest"
             ((++skills_created))
         fi
     done
+    
+    # Keep only roots that this checkout is or that a link still points into
+    local kept_roots
+    kept_roots="$(
+        while IFS= read -r root; do
+            if [[ "$root" == "$platform_dir" ]]; then
+                printf '%s\n' "$root"
+                continue
+            fi
+            for link in "$target_dir"/*; do
+                if [[ -L "$link" ]] \
+                   && [[ "$(bearpaws_link_root "$link" "$(basename "$link")" "$platform_dir" "$roots_file" || true)" == "$root" ]]; then
+                    printf '%s\n' "$root"
+                    break
+                fi
+            done
+        done < "$roots_file"
+    )"
+    printf '%s\n' "$kept_roots" > "$roots_file"
     
     log_success "Created $skills_created symlinks in $target_dir"
 }
@@ -144,10 +175,14 @@ install_grok() {
     mkdir -p "$rules_dir"
     local staged
     staged="$(mktemp "$rules_dir/.bearpaws.md.XXXXXX")"
-    printf '%s\n%s\n' "$GROK_RULE_MARKER" \
-        'Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.' \
-        > "$staged"
-    mv -f "$staged" "$rule"
+    # Never leave the staged file behind in a directory Grok reads rules from
+    if ! { printf '%s\n%s\n' "$GROK_RULE_MARKER" \
+             'Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.' \
+             > "$staged" && mv -f "$staged" "$rule"; }; then
+        rm -f "$staged"
+        log_error "Failed to write $rule"
+        return 1
+    fi
     log_success "Installed Grok bootstrap rule: $rule"
 }
 
