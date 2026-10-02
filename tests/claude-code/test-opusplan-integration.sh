@@ -175,14 +175,18 @@ def rel(path):
 def norm(r):
     return re.sub(r"^\.?worktrees/[^/]+/", "", r) if r else r
 
+# Shell writes count too (heredocs, sed -i, scripts): any Bash command with a
+# write marker contributes the plan/src/test paths it names, in textual order.
+WRITE_MARKER = re.compile(r">|\btee\b|\bcp\b|\bmv\b|sed\s+-i|open\(|writeFile|python3?\s+-")
+PATH_RE = re.compile(r"(docs/bearpaws/plans/[^\s'\"]+\.md|(?<![\w/])(?:src|test)/[^\s'\"]+)")
 writes = []
 for n, i in exec_uses:
     if n in ("Write", "Edit", "MultiEdit"):
         writes.append(norm(rel(i.get("file_path"))))
     elif n == "Bash":
-        m = re.search(r"(docs/bearpaws/plans/\S+\.md)", i.get("command", ""))
-        if m and re.search(r"(>|tee|cp|mv)\s", i.get("command", "")):
-            writes.append(m.group(1))
+        cmd = i.get("command", "")
+        if WRITE_MARKER.search(cmd):
+            writes.extend(PATH_RE.findall(cmd))
 
 plan_idx = next((k for k, w in enumerate(writes) if w and w.startswith("docs/bearpaws/plans/")), None)
 code_idx = next((k for k, w in enumerate(writes) if w and re.match(r"(src|test)/", w)), None)

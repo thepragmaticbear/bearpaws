@@ -57,10 +57,13 @@ while [[ $# -gt 0 ]]; do
             echo "  --help, -h           Show this help"
             echo ""
             echo "Tests:"
+            echo "  test-native-plan-static.sh           Native planning contract (static)"
             echo "  test-subagent-driven-development.sh  Test skill loading and requirements"
+            echo "  test-native-plan-mode.sh             Planning in Plan Mode leaves the repo untouched"
             echo ""
             echo "Integration Tests (use --integration):"
             echo "  test-subagent-driven-development-integration.sh  Full workflow execution"
+            echo "  test-opusplan-integration.sh                     Plan Mode -> approval -> execution (opusplan)"
             exit 0
             ;;
         *)
@@ -73,12 +76,15 @@ done
 
 # List of skill tests to run (fast unit tests)
 tests=(
+    "test-native-plan-static.sh"
     "test-subagent-driven-development.sh"
+    "test-native-plan-mode.sh"
 )
 
 # Integration tests (slow, full execution)
 integration_tests=(
     "test-subagent-driven-development-integration.sh"
+    "test-opusplan-integration.sh"
 )
 
 # Add integration tests if requested

@@ -35,6 +35,10 @@ See [docs/agent-support.md](docs/agent-support.md) for the current support polic
 
 Latest changes first. Full release notes live in [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/).
 
+### 2.4.0 — Claude Code native planning
+
+`bp:writing-plans` works inside Claude Code's native Plan Mode, and approval hands off straight to execution after the plan is saved. `/model opusplan` is a supported pairing and needs no BearPaws model logic. See the [2.4.0 release notes](docs/bearpaws/release-notes/2.4.0.md).
+
 ### 2.3.1 — proposed evidence-driven roadmap follow-up
 
 Behavior changes started from failing baselines; proposals whose baseline already passed got no skill change. See the [roadmap evaluation](docs/bearpaws/plans/2026-09-29-roadmap-evaluation.md), [continuation checklist](docs/bearpaws/plans/2026-09-30-roadmap-continuation.md), and [three-way benchmark](docs/benchmarks/2026-09-30-three-way.md).
@@ -65,6 +69,16 @@ claude plugin install bp@bearpaws
 ```
 
 Or pass it on the command line without installing: `claude --plugin-dir /path/to/bearpaws`.
+
+### Recommended Claude Code setup
+
+For non-trivial work, BearPaws pairs well with Claude Code's built-in `/model opusplan` setting: Claude Code uses Opus in native Plan Mode and Sonnet for execution, in the same session. BearPaws governs how planning and implementation are done; Claude Code chooses the model for each phase. `opusplan` is recommended, not required, and BearPaws never switches models itself.
+
+```text
+Plan Mode: bp:writing-plans (read-only) -> you approve -> plan saved to docs/bearpaws/plans/ -> subagent-driven-development or executing-plans -> review + verification
+```
+
+Plan approval counts as the go-ahead; BearPaws does not ask a second time. See [`skills/using-bearpaws/references/claude-code.md`](skills/using-bearpaws/references/claude-code.md).
 
 ## Install — Google Antigravity
 
@@ -202,7 +216,7 @@ python3 tests/benchmark/test_integrity.py              # <3 sec — benchmark is
 python3 tests/codex/test_conformance.py                # <1 sec — Codex conformance unit tests
 tests/token-measurement/measure.sh                     # <1 sec — byte counts (JSON output)
 tests/skill-triggering/run-all.sh                      # ~2 min — naive-prompt triggering
-tests/claude-code/run-skill-tests.sh                   # ~2 min — fast skill-content tests
+tests/claude-code/run-skill-tests.sh                   # ~5 min — fast skill-content + native Plan Mode tests
 tests/claude-code/run-skill-tests.sh --integration     # 10–30 min — full integration suite
 tests/benchmark/run.sh                                 # ~10 min — cost per accepted task vs no plugin
 tests/codex/run-conformance.sh                         # ~20 min — Codex conformance (GLOBAL=1 for the installed path)

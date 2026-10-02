@@ -20,6 +20,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
   <rules>
     <rule>**Save plans to:** `docs/bearpaws/plans/YYYY-MM-DD-{feature-name}.md` (user prefs override).</rule>
+    <rule>**In native planning mode** (the harness blocks project writes until the user approves a plan): build and self-review the plan in the harness's plan artifact. Do not leave native planning mode to save the plan. After approval, save it to the path above with `**Status:** Approved` before the first implementation change.</rule>
     <rule>**Scope check:** If spec covers multiple independent subsystems, suggest separate plans — one per subsystem. Each plan produces working, testable software on its own.</rule>
   </rules>
 
@@ -28,6 +29,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
     <step>**Define tasks** — each task produces self-contained changes. Each step is one action (2-5 min): write failing test, run it, implement minimal code, run tests, commit.</step>
     <step>**Self-review** — (1) spec coverage: can you point to a task for every requirement? (2) placeholder scan: no TBD/TODO/vague steps. (3) type consistency: names in later tasks match definitions in earlier tasks. Fix inline.</step>
     <step>**Execution handoff** — offer choice: **Subagent-Driven** (bp:subagent-driven-development, recommended) or **Inline** (bp:executing-plans).</step>
+    <step>**After native plan approval** — follow the native-approval gate below instead of offering a choice.</step>
   </process>
 
   ## Plan document header
@@ -85,6 +87,10 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
   - [ ] **Step 5: Commit**
   ````
+
+  <gate name="native-approval">
+    Native plan approval is the go-ahead: do not ask again whether to start or how to execute. Before any code change, in order: (1) set up the workspace, (2) save the approved plan, (3) invoke `Skill` with bp:subagent-driven-development (tasks mostly independent) or bp:executing-plans. "I'll work through the plan inline" means invoking bp:executing-plans, not editing directly.
+  </gate>
 
   <gate name="no-placeholders">
     Every step must contain actual content. These are plan failures — never write them:

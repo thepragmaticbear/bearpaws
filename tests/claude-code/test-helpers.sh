@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Helper functions for Claude Code skill tests
 
+# Nested runs must not inherit the parent Claude Code session's identity, or a
+# child `claude -p` reuses the parent's session id (and --resume can target it).
+unset CLAUDE_CODE_SESSION_ID CLAUDE_CODE_REMOTE_SESSION_ID CLAUDE_CODE_CHILD_SESSION \
+      SESSION_INGRESS_URL CLAUDE_SESSION_INGRESS_TOKEN_FILE \
+      CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2 CLAUDE_CODE_SYNC_SESSION_REFS 2>/dev/null || true
+
 # Portable timeout: prefer GNU timeout (Linux) → gtimeout (macOS coreutils) → no-op fallback
 portable_timeout() {
     local duration=$1

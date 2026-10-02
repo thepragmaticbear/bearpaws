@@ -12,10 +12,12 @@ description: Use when starting any conversation, before responding or exploring 
   </warning>
 
   <process>
-    <step>**Claude Code:** Invoke `Skill` and follow it; do not `Read` skill files.</step>
+    <step>**Claude Code:** Invoke `Skill` and follow it; do not `Read` skill files. Use the Claude Code capability mapping when a skill action overlaps a native capability.</step>
     <step>**In Antigravity:** Use native Agent Skills and the capability mapping.</step>
     <step>**Other Agent Skills agents:** Load `.agents/skills/` or `~/.agents/skills/` via the native tool (`skill` in OpenCode) or read `SKILL.md`. Users can type `$skill-name` (Codex) or `/skill-name` (Devin CLI).</step>
   </process>
+
+  <see file="references/claude-code.md"/>
 
   ## Red Flags
 

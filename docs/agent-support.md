@@ -59,12 +59,14 @@ How it works:
 - `hooks/run-hook.cmd` provides a cross-platform wrapper.
 - `hooks/session-start` reads `skills/using-bearpaws/SKILL.md`, wraps it in hard warning context, and emits Claude Code's `hookSpecificOutput` shape.
 - Claude Code consumes native `SKILL.md` skill directories.
+- `skills/using-bearpaws/references/claude-code.md` maps BearPaws intents to Claude Code capabilities, including native Plan Mode: `bp:writing-plans` plans read-only in Plan Mode, and after approval the plan is saved to `docs/bearpaws/plans/` before execution. Model choice (for example `/model opusplan`) stays with Claude Code and the user.
 
 Current test coverage:
 
 - Triggering tests invoke `claude -p` and scan stream JSON for `Skill` tool calls.
 - Explicit skill request tests check that named skills trigger before unrelated tool use.
 - Claude Code workflow tests cover selected complex behavior, especially `subagent-driven-development`.
+- Native Plan Mode tests: `test-native-plan-static.sh` (contract text), `test-native-plan-mode.sh` (planning leaves the repo untouched), and the integration test `test-opusplan-integration.sh` (approval → saved plan → execution skill).
 - Schema validator checks tag whitelist drift and code-review gate alignment.
 
 Risk:

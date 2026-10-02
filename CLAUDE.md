@@ -85,6 +85,7 @@ tests/antigravity/run-adapter-tests.sh                                        # 
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
+bash tests/claude-code/test-native-plan-static.sh                             # native Plan Mode contract (static, no CLI)
 tests/claude-code/run-skill-tests.sh --verbose                                # stream Claude output
 tests/skill-triggering/run-all.sh                                             # verify naive prompts trigger the right skill
 tests/benchmark/run.sh                                                        # cost per accepted task: bearpaws vs no plugin (see tests/benchmark/README.md)
