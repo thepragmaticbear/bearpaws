@@ -104,6 +104,7 @@ Agent tool (general-purpose):
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
     - Files changed
+    - Assumptions you relied on (what you took as true without verifying)
     - Self-review findings (if any)
     - Any issues or concerns
 

@@ -21,7 +21,7 @@ A workflow that only scales with complexity misses that distinction. BearPaws tr
 
 |  | **Low risk** | **High risk** |
 |---|---|---|
-| **Low complexity** | **Quick path:** implement with TDD where it applies, verify with fresh evidence | **Guarded path:** failing test for the risk first, independent review, verification evidence |
+| **Low complexity** | **Quick path:** implement with TDD where it applies, verify with fresh evidence | **Guarded path:** pin existing behavior, failing test for the risk first, narrow diff, stated assumptions, independent review, verification evidence |
 | **High complexity** | **Structured workflow:** written plan, a fresh subagent per task, one combined review per task | **Maximum rigor:** written plan, a fresh subagent per task, spec review then quality review, a final review |
 
 These four names are a mental model for this README. They are not labels the agent prints. The rules behind them are concrete: complexity decides whether a written plan and subagent execution are needed, and risk sets the review and evidence floor.
@@ -80,10 +80,14 @@ Higher-risk changes should have both a lower chance of failure and a lower chanc
   - a public API or schema
 - That classification sets a minimum process floor. Size never lowers it, and the implementer can't downgrade a task halfway through because it "looks easy."
 
-**2. During implementation (prevention).**
-- Elevated-risk work starts with a failing test for the risk, written and watched failing before the fix.
-- Implementation and review are done by different agents.
-- Non-trivial work follows an explicit plan. In Claude Code that plan is made read-only in native Plan Mode.
+**2. During implementation (prevention).** Elevated-risk work follows stronger constraints:
+- **Prove the existing behavior.** Tests pin the behavior that must not change, and the agent runs them and sees them pass before editing.
+- **Fail first.** A failing test for the risk is written and watched failing before the fix.
+- **Narrow change.** The diff is limited to the fix, with no unrelated cleanup.
+- **Explicit assumptions.** The report lists what the agent took as true without checking, so a reviewer can challenge it.
+- **Separation.** Implementation and review are done by different agents.
+
+Non-trivial work also follows an explicit plan. In Claude Code that plan is made read-only in native Plan Mode.
 
 **3. After implementation (detection).** Evidence replaces confidence:
 - Tests must actually run, fresh, with their output read.
@@ -100,10 +104,11 @@ BearPaws ends with:
 > **BearPaws:** "Show me."
 
 For risky work, "show me" means:
-1. The failing test before the fix.
-2. The passing test after it.
-3. The relevant checks.
-4. A review by someone other than the implementer.
+1. The tests that pin current behavior, passing before the change.
+2. The failing test before the fix.
+3. The passing tests after it.
+4. The relevant checks.
+5. A review by someone other than the implementer.
 
 Superpowers-style rigor answers *how do we engineer this correctly?* BearPaws adds *how much proof do we need before we trust this change?*
 
@@ -137,7 +142,7 @@ flowchart TD
     Brainstorm --> Plan[bp:writing-plans<br/>native Plan Mode where available]
     Plan --> Risk{Elevated<br/>risk?}
     Risk -->|routine| Light[Implement with TDD<br/>combined review per task under subagent execution]
-    Risk -->|elevated| Strong[Failing test for the risk first<br/>spec review, then quality review]
+    Risk -->|elevated| Strong[Pin existing behavior + failing test first<br/>narrow diff + stated assumptions<br/>spec review, then quality review]
     Light --> Verify[bp:verification-before-completion<br/>bp:finishing-a-development-branch]
     Strong --> Verify
 ```
@@ -174,6 +179,7 @@ Latest changes first. Full release notes live in [docs/bearpaws/release-notes/](
 ### 2.4.0 — Claude Code native planning
 
 - **Native Plan Mode.** `bp:writing-plans` plans read-only inside Claude Code's Plan Mode.
+- **Stronger elevated-risk floor.** Elevated-risk work now pins behavior that must not change before editing, keeps the diff to the fix, and lists its assumptions. In a new authorization eval, all 5 runs pinned 5 behaviors before editing (the baseline pinned 2), and all 5 listed assumptions (baseline 0/3).
 - **No second confirmation.** Your approval is the go-ahead. The agent sets up the workspace, saves the plan to `docs/bearpaws/plans/`, then invokes `bp:subagent-driven-development` or `bp:executing-plans`.
 - **Before and after.** Before this change, approved plans were coded inline with no saved plan and no execution skill. After it, both happen, in single runs on Opus-then-Sonnet and on Sonnet only.
 - **Model choice stays with Claude Code.** `/model opusplan` is a supported pairing, BearPaws adds no hook or model logic, and portable skills stay model-neutral.
@@ -342,7 +348,7 @@ The numbers below are point-in-time measurements against superpowers `main` and 
 
 | Metric | superpowers (main) | BearPaws | Approx. delta |
 |---|---:|---:|---|
-| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~4.0 KB (~0.95K tokens, estimated) | ~28% smaller |
+| Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~4.2 KB (~1.0K tokens, estimated) | ~24% smaller |
 | Process skill bodies (apples-to-apples subset) | ~101 KB (~24K tokens) | ~51 KB (~12K tokens) | roughly half |
 
 Token counts were measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer. The current BearPaws bootstrap figure uses the repository's ~0.24 tokens/byte estimate. Treat them as ballpark figures, not exact savings.
@@ -361,6 +367,7 @@ tests/token-measurement/measure.sh                     # <1 sec — byte counts 
 tests/skill-triggering/run-all.sh                      # ~2 min — naive-prompt triggering
 tests/claude-code/run-skill-tests.sh                   # ~5 min — fast skill-content + native Plan Mode tests
 tests/claude-code/run-skill-tests.sh --integration     # 10–30 min — full integration suite
+tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>  # ~3 min — elevated-risk floor (pin, narrow diff, assumptions)
 tests/benchmark/run.sh                                 # ~10 min — cost per accepted task vs no plugin
 tests/codex/run-conformance.sh                         # ~20 min — Codex conformance (GLOBAL=1 for the installed path)
 ```

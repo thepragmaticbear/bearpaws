@@ -53,7 +53,7 @@ description: Use when starting any conversation, before responding or exploring 
 
   ## Elevated risk
 
-  Size never lowers risk. Work is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema. However small the change, elevated-risk work needs a failing test for the risk first (`bp:test-driven-development`), an independent review (`bp:requesting-code-review`) before any completion claim, and verification evidence in the report (`bp:verification-before-completion`). Saying you skipped a step does not satisfy it. Dispatch the review before your final report; if it has not returned, the report's status is INCOMPLETE, never done.
+  Size never lowers risk. Work is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema. However small the change, elevated-risk work needs tests pinning the behavior that must not change, run and seen passing in a step before your edit; a failing test for the risk first (`bp:test-driven-development`); a diff limited to the fix, with no unrelated cleanup; an **Assumptions:** list in the report (what you took as true without checking); an independent review (`bp:requesting-code-review`) before any completion claim, and verification evidence in the report (`bp:verification-before-completion`). Saying you skipped a step does not satisfy it. Dispatch the review before your final report; if it has not returned, the report's status is INCOMPLETE, never done.
 
   ## Lazy-load contract
 

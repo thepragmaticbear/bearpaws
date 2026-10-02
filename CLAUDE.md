@@ -93,6 +93,7 @@ tests/review-eval/run.sh <template> <label>                                   # 
 tests/review-eval/routing.sh                                                  # SDD routes review by risk under pressure
 tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
+tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # elevated-risk floor: pin behavior, narrow diff, assumptions
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
