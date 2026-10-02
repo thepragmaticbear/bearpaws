@@ -24,6 +24,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/antigravity/](tests/antigravity/) — static adapter tests for Antigravity plugin integrity.
 - [tests/install/](tests/install/) — installer tests for Antigravity, Agent Skills (`--agents`), and Grok (`--grok`).
+- [tests/bump-version/](tests/bump-version/) — version-bump tooling tests (version validation, declared fields only).
 - [tests/hooks/](tests/hooks/) — SessionStart payload shape per harness, escaping, and loud failure.
 - [tests/harness-wiring/](tests/harness-wiring/) — model-free checks that Codex, OpenCode, Copilot CLI, and Grok Build load the installed skills and bootstrap.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
@@ -94,6 +95,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
 tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, and --grok installer
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
+tests/bump-version/run-tests.sh                                               # bump-version.sh rejects malformed versions, writes only declared fields
 tests/harness-wiring/run.sh                                                   # model-free discovery/bootstrap checks for installed codex, opencode, copilot, grok
 tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)

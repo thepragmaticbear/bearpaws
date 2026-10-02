@@ -42,10 +42,28 @@ fi
 log_info "Bearpaws installation script"
 log_info "Repository root: $BEARPAWS_ROOT"
 
+# True if link $1, named $2 in the target dir, is a Bearpaws skill link: it
+# points at <skills root>/$2 where that root is this checkout ($3), a root
+# recorded in $4 by an earlier install (a moved or re-cloned checkout), or a
+# live Bearpaws checkout. Other packs' links fail all three and stay untouched.
+is_bearpaws_link() {
+    local link="$1" name="$2" platform_dir="$3" roots_file="$4"
+    local target
+    target="$(readlink "$link" 2>/dev/null)" || return 1
+    target="${target%/}"
+    [[ "${target##*/}" == "$name" ]] || return 1
+    local root="${target%/*}"
+    [[ "$root" == "$platform_dir" ]] && return 0
+    [[ -f "$roots_file" ]] && grep -qxF -- "$root" "$roots_file" && return 0
+    [[ -f "$root/using-bearpaws/SKILL.md" ]]
+}
+
 # Function to create symlinks for a platform
 create_symlinks() {
     local platform_dir="$1"
     local target_dir="$2"
+    # Skills roots this installer has linked from, one per line
+    local roots_file="$target_dir/.bearpaws-roots"
     
     if [[ -d "$target_dir" ]]; then
         log_warning "$target_dir already exists, checking existing symlinks..."
@@ -55,15 +73,10 @@ create_symlinks() {
         # when their targets are temporarily unavailable.
         local broken_symlinks=0
         for skill in "$target_dir"/*; do
-            if [[ -L "$skill" && ! -e "$skill" ]]; then
-                case "$(readlink "$skill" 2>/dev/null)" in
-                    "$platform_dir"/*)
-                        rm "$skill"
-                        ((++broken_symlinks))
-                        ;;
-                    *)
-                        ;;
-                esac
+            if [[ -L "$skill" && ! -e "$skill" ]] \
+               && is_bearpaws_link "$skill" "$(basename "$skill")" "$platform_dir" "$roots_file"; then
+                rm "$skill"
+                ((++broken_symlinks))
             fi
         done
         
@@ -73,6 +86,9 @@ create_symlinks() {
     fi
     
     mkdir -p "$target_dir"
+    if [[ ! -f "$roots_file" ]] || ! grep -qxF -- "$platform_dir" "$roots_file"; then
+        printf '%s\n' "$platform_dir" >> "$roots_file"
+    fi
     
     local skills_created=0
     for skill_dir in "$platform_dir"/*/; do
@@ -80,14 +96,10 @@ create_symlinks() {
             local skill_name="$(basename "$skill_dir")"
             local dest="$target_dir/$skill_name"
             # Never clobber entries we didn't create; refresh only our own links
-            if [[ -e "$dest" || -L "$dest" ]]; then
-                case "$(readlink "$dest" 2>/dev/null)" in
-                    "$platform_dir/$skill_name"|"$platform_dir/$skill_name"/) ;;
-                    *)
-                        log_warning "Skipping $skill_name: $dest exists and is not a Bearpaws link"
-                        continue
-                        ;;
-                esac
+            if [[ -e "$dest" || -L "$dest" ]] \
+               && ! is_bearpaws_link "$dest" "$skill_name" "$platform_dir" "$roots_file"; then
+                log_warning "Skipping $skill_name: $dest exists and is not a Bearpaws link"
+                continue
             fi
             ln -sfn "$skill_dir" "$dest"
             ((++skills_created))
@@ -254,18 +266,16 @@ main() {
     
     for platform in "${platforms[@]}"; do
         case $platform in
-            antigravity)
-                if ! install_antigravity; then
-                    ((++failed))
-                fi
-                ;;
-            agents)
-                if ! install_agents; then
-                    ((++failed))
-                fi
-                ;;
-            grok)
-                if ! install_grok; then
+            antigravity|agents|grok)
+                # bash ignores set -e inside anything run as an if/&&/|| condition,
+                # so run each installer as a plain subshell with errexit on: the
+                # first failing step stops that installer and fails the install.
+                set +e
+                ( set -e; "install_$platform" )
+                local status=$?
+                set -e
+                if [[ $status -ne 0 ]]; then
+                    log_error "$platform installation failed"
                     ((++failed))
                 fi
                 ;;

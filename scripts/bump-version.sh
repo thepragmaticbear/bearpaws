@@ -31,13 +31,14 @@ read_json_field() {
   jq -r "$jq_path" "$file"
 }
 
-# Write a dotted field path in a JSON file, preserving formatting.
+# Write a dotted field path in a JSON file (jq re-serializes it with 2-space indent).
+# The value goes in via --arg, never into the jq program text.
 write_json_field() {
   local file="$1" field="$2" value="$3"
   local jq_path
   jq_path=$(echo "$field" | sed -E 's/\.([0-9]+)/[\1]/g' | sed 's/^/./' | sed 's/\.\././g')
   local tmp="${file}.tmp"
-  jq "$jq_path = \"$value\"" "$file" > "$tmp" && mv "$tmp" "$file"
+  jq --arg v "$value" "$jq_path = \$v" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
 # Read the list of declared files from config.
@@ -166,9 +167,9 @@ cmd_audit() {
 cmd_bump() {
   local new_version="$1"
 
-  # Validate semver-ish format
-  if ! echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
-    echo "error: '$new_version' doesn't look like a version (expected X.Y.Z)" >&2
+  # Validate semver: X.Y.Z with optional -prerelease and +build, nothing else
+  if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+    echo "error: '$new_version' doesn't look like a version (expected X.Y.Z[-pre][+build])" >&2
     exit 1
   fi
 

@@ -100,6 +100,29 @@ test ! -e "$PLUGIN/skills/alpha"
 
 echo "OK: Antigravity plugin installer (real files, idempotency, update reconciliation)"
 
+# A copy that fails mid-install keeps the working install instead of replacing it
+echo keep > "$PLUGIN/installed-marker"
+CP_SHIM="$TMP_ROOT/cp-shim"
+mkdir -p "$CP_SHIM"
+REAL_CP="$(command -v cp)"
+printf '%s\n' '#!/usr/bin/env bash' \
+  'for a in "$@"; do [[ "$a" == */agents/. ]] && { echo "cp: simulated failure" >&2; exit 1; }; done' \
+  "exec \"$REAL_CP\" \"\$@\"" > "$CP_SHIM/cp"
+chmod +x "$CP_SHIM/cp"
+if ( cd "$WORK" && HOME="$TEST_HOME" PATH="$CP_SHIM:$PATH" ./install.sh --antigravity --global ) >"$TMP_ROOT/bearpaws-install-antigravity-fail.log" 2>&1; then
+  echo "FAIL: antigravity install should fail when copying fails"
+  exit 1
+fi
+grep -qx keep "$PLUGIN/installed-marker"
+test -f "$PLUGIN/agents/code-reviewer.md"
+if ls -A "$TEST_HOME/.gemini/config/plugins" | grep -q '^\.bearpaws-'; then
+  echo "FAIL: failed antigravity install left staging or backup directories behind"
+  exit 1
+fi
+rm "$PLUGIN/installed-marker"
+
+echo "OK: Antigravity installer keeps the existing install when a copy fails"
+
 # ========== Agents Installer Tests ==========
 AGENTS_HOME_DIR="$TMP_ROOT/agents-home"
 AGENTS_SKILLS="$AGENTS_HOME_DIR/.agents/skills"
@@ -156,6 +179,49 @@ grep -qF 'Before responding to any request, read `~/.agents/skills/using-bearpaw
 
 echo "OK: Agents installer (global skills, preserves unrelated skills and name collisions, idempotent, OpenCode and Codex snippets)"
 
+# A moved or re-cloned checkout reclaims its own stale links instead of skipping them
+MOVE_HOME="$TMP_ROOT/move-home"
+MOVE_SKILLS="$MOVE_HOME/.agents/skills"
+OLD_CLONE="$TMP_ROOT/old-clone"
+NEW_CLONE="$TMP_ROOT/new-clone"
+cp -R "$WORK" "$OLD_CLONE"
+mkdir -p "$MOVE_SKILLS"
+( cd "$OLD_CLONE" && HOME="$MOVE_HOME" ./install.sh --agents --global ) >/dev/null 2>&1
+# Another pack's skill of the same name, from a checkout that is also gone, is not ours
+rm "$MOVE_SKILLS/delta"
+ln -s "$TMP_ROOT/other-pack/skills/delta" "$MOVE_SKILLS/delta"
+mv "$OLD_CLONE" "$NEW_CLONE"
+out_move="$( cd "$NEW_CLONE" && HOME="$MOVE_HOME" ./install.sh --agents --global 2>&1 )"
+if grep -qE 'Skipping (gamma|using-bearpaws|beta)' <<<"$out_move"; then
+  echo "FAIL: reinstall from a moved checkout skipped its own stale links: $out_move"
+  exit 1
+fi
+test -f "$MOVE_SKILLS/gamma/SKILL.md"
+test -f "$MOVE_SKILLS/using-bearpaws/SKILL.md"
+case "$(readlink "$MOVE_SKILLS/gamma")" in
+  "$NEW_CLONE"/skills/gamma|"$NEW_CLONE"/skills/gamma/) ;;
+  *) echo "FAIL: gamma not repointed at the new checkout"; exit 1 ;;
+esac
+test "$(readlink "$MOVE_SKILLS/delta")" = "$TMP_ROOT/other-pack/skills/delta"
+grep -qF 'Skipping delta' <<<"$out_move"
+
+echo "OK: Agents installer reclaims its own links after the checkout moves, never another pack's"
+
+# Install steps that fail make the install fail, not report success
+FAIL_HOME="$TMP_ROOT/fail-home"
+mkdir -p "$FAIL_HOME/.agents"
+touch "$FAIL_HOME/.agents/skills"   # a file where the skills directory belongs
+if out_fail="$( cd "$WORK" && HOME="$FAIL_HOME" ./install.sh --agents --global 2>&1 )"; then
+  echo "FAIL: agents install should fail when ~/.agents/skills cannot be created: $out_fail"
+  exit 1
+fi
+if grep -qF 'completed successfully' <<<"$out_fail"; then
+  echo "FAIL: failed agents install still reported success"
+  exit 1
+fi
+
+echo "OK: Agents installer fails loudly when a step fails"
+
 # ========== Grok Build Installer Tests ==========
 GROK_HOME_DIR="$TMP_ROOT/grok-home"
 GROK_RULE="$GROK_HOME_DIR/.grok/rules/bearpaws.md"
@@ -200,5 +266,18 @@ mkdir -p "$RELOC_HOME"
 ( cd "$WORK" && HOME="$RELOC_HOME" GROK_HOME="$RELOC_HOME/custom-grok" ./install.sh --grok --global ) >/dev/null 2>&1
 test -f "$RELOC_HOME/custom-grok/rules/bearpaws.md"
 test ! -e "$RELOC_HOME/.grok"
+
+# A rule that cannot be written fails the install
+GROK_FAIL_HOME="$TMP_ROOT/grok-fail-home"
+mkdir -p "$GROK_FAIL_HOME/.grok"
+touch "$GROK_FAIL_HOME/.grok/rules"   # a file where the rules directory belongs
+if ( cd "$WORK" && HOME="$GROK_FAIL_HOME" ./install.sh --grok --global ) >"$TMP_ROOT/bearpaws-install-grok-fail.log" 2>&1; then
+  echo "FAIL: grok install should fail when the rule cannot be written"
+  exit 1
+fi
+if grep -qF 'completed successfully' "$TMP_ROOT/bearpaws-install-grok-fail.log"; then
+  echo "FAIL: failed grok install still reported success"
+  exit 1
+fi
 
 echo "OK: Grok installer (requires --global, skills via ~/.agents/skills, owned rule, idempotent, never clobbers, GROK_HOME)"
