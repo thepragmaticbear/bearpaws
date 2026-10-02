@@ -18,8 +18,9 @@ Current tiers:
 |---|---|---|
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
-| OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
-| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex discovery and activation smoke-tested with the `AGENTS.md` bootstrap; expanded conformance requires completed-action evidence. Others rely on native `.agents/skills` discovery. |
+| OpenCode | Experimental | Wiring checked in CI: repo-level and global `.agents/skills` discovery, `instructions` bootstrap resolves; live bootstrap smoke-tested |
+| Grok Build | Experimental | `./install.sh --grok --global`; `grok inspect` lists the bootstrap rule and all skills (1.0.45, built from source); no live session run |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex skills and `AGENTS.md` bootstrap checked in CI, activation smoke-tested; Copilot CLI installs the plugin (CI); Devin and Cursor hook payloads follow their docs, unverified live. Expanded conformance requires completed-action evidence. |
 
 ## Claude Code
 
@@ -146,7 +147,19 @@ Status: Experimental.
 - Skills: OpenCode scans `.agents/skills/` and `~/.agents/skills/` and invokes them with its native `skill` tool. It enforces the Agent Skills frontmatter rules (name `^[a-z0-9]+(-[a-z0-9]+)*$`, ≤64 chars, equals folder; description 1–1024 chars), which `tests/schema-validator/run-validator.sh` checks in CI.
 - Bootstrap: `"instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]` in `~/.config/opencode/opencode.json`. The installer prints this line and never edits user config.
 - Evidence: smoke test 2026-09-28, OpenCode 1.18.29: skills discovered from `.agents/skills` (pass; tested with the earlier directory-symlink layout); bootstrap loaded via a `~`-prefixed `instructions` path, confirmed against a no-`instructions` control run that could not answer (pass).
+- Wiring check 2026-10-02, OpenCode 1.18.34 (`tests/harness-wiring/run.sh`, runs in CI, no model): all 15 skills discovered from repo-level per-skill links and from `./install.sh --agents --global`; `opencode debug config` resolves the `instructions` bootstrap path. This closes the per-skill-link gap above; it does not re-prove that the model reads the bootstrap.
 - Known limitations: no OpenCode tool-name mapping reference; Claude Code tool names (`Agent`, `Skill`) in skills are interpreted by the model.
+
+## Grok Build
+
+Status: Experimental.
+
+- Install: `./install.sh --grok --global` links skills into `~/.agents/skills/`, which Grok scans at its user tier, and writes `~/.grok/rules/bearpaws.md` (`$GROK_HOME/rules/` when set). Grok loads home rules in every project, whatever the folder trust. The file is Bearpaws-owned (marker comment); the installer refuses to overwrite a `bearpaws.md` it did not create. Uninstall: delete that file and the skill links.
+- Why a rule and not the hook: Grok Build ignores `SessionStart` stdout (user guide, Hooks → Passive Hooks), and hooks from plugins and Claude-compatibility imports have been reported as never dispatched (xai-org/plugin-marketplace#236). The rule carries the same one-line bootstrap as Codex.
+- Claude compatibility: Grok also scans `~/.claude/skills`, installed Claude plugins, and `CLAUDE.md`, so a Claude Code install gives Grok the skills but not the bootstrap. Grok exposes `CLAUDE_PLUGIN_ROOT` to plugin hooks; if it ever runs `hooks/session-start`, it gets the Claude shape and discards it.
+- Invocation: `/skill-name`, or automatically from descriptions.
+- Evidence: wiring check 2026-10-02, grok 1.0.45 built from source at commit 2bdd1d6 (`tests/harness-wiring/run.sh`, no model, not in CI because there is no package to pin). After `./install.sh --grok --global`, `grok inspect --json` lists `~/.grok/rules/bearpaws.md` as a `global` instruction (46 tokens), and lists all 15 skills with `user` source from `~/.agents/skills`. Negative control: after `--agents` alone, the rule check fails. No live session was run, because that needs an xAI login.
+- Known limitations: no tool-name mapping (Grok's tools include `run_terminal_command`, `read_file`, `search_replace`, `grep`); no live conformance driver yet; project-level skills and `AGENTS.md` need folder trust. In this repo `AGENTS.md` is a symlink to `CLAUDE.md`, and Grok reads both names.
 
 ## Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …)
 
@@ -155,9 +168,12 @@ Status: Experimental.
 - Install: `./install.sh --agents --global` links each skill into `~/.agents/skills/`, removing only broken links and skipping any existing entry it didn't link from this checkout. The repo ships `.agents/skills/` (per-skill links into `skills/`).
 - Invocation: `$skill-name` or `/skills` (Codex), `/skill-name` (Devin CLI), or implicitly when a description matches.
 - Codex bootstrap: add ``Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.`` to `~/.codex/AGENTS.md`. The installer prints this line and never edits user config.
-- Devin CLI: `.devin/hooks.v1.json` runs `hooks/session-start`, which emits top-level `additionalContext` when `DEVIN_PROJECT_DIR` is set.
+- Devin CLI: discovers `~/.agents/skills` and loads `AGENTS.md`; put the bootstrap line in a project `AGENTS.md`. `.devin/hooks.v1.json` runs `hooks/session-start` only inside this checkout (it resolves `${DEVIN_PROJECT_DIR}/hooks/`). When `DEVIN_PROJECT_DIR` or `DEVIN_PLUGIN_ROOT` is set the hook emits `hookSpecificOutput.additionalContext`, the shape Devin documents for SessionStart context; previously it emitted top-level `additionalContext`. `devin plugins install --local` falls back to `.claude-plugin/plugin.json` for skills, but Devin reads plugin hooks only from a root `hooks.json`, which Bearpaws does not ship because Copilot CLI also reads that path. Not verified live.
+- Copilot CLI: `copilot plugin marketplace add <path-or-repo>` then `copilot plugin install bp@bearpaws` reads `.claude-plugin/marketplace.json` and installs all 15 skills (wiring check, Copilot CLI 1.0.91, runs in CI). Copilot consumes top-level `additionalContext` from `sessionStart` hooks; the hook emits that shape when `COPILOT_CLI` is set. Hook execution was not observed: Copilot requires login before a session starts.
+- Cursor: `.cursor-plugin/plugin.json` points Cursor at `skills/` and `hooks/hooks-cursor.json` (`sessionStart` → `hooks/run-hook.cmd session-start`), which emits `additional_context` when `CURSOR_PLUGIN_ROOT` is set. The manifest mirrors the upstream Superpowers Cursor packaging; it was not run in Cursor here.
 - Evidence: installer test (global linking, the `--global` requirement, preserved unrelated skills); smoke test 2026-09-28, codex-cli 0.156.1: skills discovered via per-skill links in a plain repo (pass); brainstorming loaded on request, SKILL.md read, answered `no-implementation` (pass); a symlinked `.agents/skills` directory was not discovered (fail, with and without project trust); inside a Bearpaws checkout (clone or worktree) only the `bp:` plugin skills were listed (see limitations).
 - Historical conformance: the 2026-09-29 four-check suite reported discovery, explicit activation, auto-triggering, and the review-skill gate with an `AGENTS.md` bootstrap; the global path was also exercised on 2026-09-30. These checks mostly matched text in transcripts and did not independently prove a returned reviewer verdict. The expanded global run stopped during C4. Treat historical smoke results as partial evidence, not eight-surface conformance.
+- Wiring check 2026-10-02, codex-cli 0.160.0 (`tests/harness-wiring/run.sh`, runs in CI, no model): `codex debug prompt-input` lists all 15 skills from repo-level per-skill links and from `./install.sh --agents --global`, and includes the bootstrap from repo `AGENTS.md` and from `~/.codex/AGENTS.md`. Codex 0.160 lists them as `bp:<name>` because the links resolve into a directory with `.claude-plugin/plugin.json`; the conformance suite already strips that prefix.
 - Current conformance: `tests/codex/run-conformance.sh` checks completed actions, successful tool mapping, correlated review completion, fail-closed verification, and completion evidence. Nonzero CLI exits and unfinished turns are blocked, not successful conformance. See the [continuation evidence](bearpaws/plans/2026-09-30-roadmap-continuation.md) for fresh results. Promotion still requires a maintainer decision.
 - Discovery limitations: there is no automatic bootstrap outside hook-capable agents. Repo-local per-skill links need `core.symlinks=true` (Developer Mode on Windows); a directory-level symlink is ignored. In a Bearpaws checkout Codex may list installed `bp:` plugin skills rather than the repo-local copies. Use the documented global install and bootstrap line for other projects. Security reviews can take about 14 minutes.
 
@@ -195,8 +211,9 @@ Minimum practical tests by tier:
 |---|---|
 | Claude Code | Existing trigger, explicit-request, schema, and selected workflow tests. |
 | Google Antigravity IDE | Real-file plugin install test, static adapter test, and manual promotion gates A–K. |
-| OpenCode | Spec validator + manual discovery smoke test. |
-| Other Agent Skills agents | `--agents` installer test + manual activation proof before promotion. |
+| OpenCode | Spec validator + `tests/harness-wiring/` (CI) + manual bootstrap smoke test. |
+| Grok Build | `--grok` installer test + `tests/harness-wiring/` when `grok` is installed + manual activation proof before promotion. |
+| Other Agent Skills agents | `--agents` installer test, `tests/hooks/` payload shapes, `tests/harness-wiring/` for Codex and Copilot CLI (CI), + manual activation proof before promotion. |
 
 Do not add a full per-agent trigger matrix unless the maintenance cost is explicitly accepted.
 
@@ -205,7 +222,7 @@ Do not add a full per-agent trigger matrix unless the maintenance cost is explic
 Recommended public posture:
 
 - Claude Code and Google Antigravity IDE are primary supported targets.
-- OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless and until validated.
+- OpenCode, Grok Build, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless and until validated.
 - Bearpaws is an independent skills toolkit that evolves on its own cadence.
 - Attribution and MIT license compliance remain.
 

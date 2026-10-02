@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Bearpaws installation script
 # Installs Bearpaws for Antigravity, and experimental ~/.agents/skills wiring for other Agent Skills agents
+# (plus a Grok Build bootstrap rule)
 
 set -euo pipefail
 
@@ -107,6 +108,37 @@ install_agents() {
     create_symlinks "$BEARPAWS_ROOT/skills" "$HOME/.agents/skills"
 }
 
+# Install for Grok Build: skills via ~/.agents/skills (scanned at Grok's user
+# tier) and a bootstrap rule in $GROK_HOME/rules, which Grok loads in every
+# project. Grok ignores SessionStart hook output, so a rule is the bootstrap.
+GROK_RULE_MARKER="<!-- Managed by Bearpaws install.sh --grok. Delete this file to remove the bootstrap. -->"
+install_grok() {
+    log_info "Setting up experimental Grok Build wiring..."
+    if [[ "${INSTALL_GLOBAL:-}" != "true" ]]; then
+        log_error "Grok installation currently requires --global"
+        log_info "Use: ./install.sh --grok --global"
+        return 1
+    fi
+
+    local rules_dir="${GROK_HOME:-$HOME/.grok}/rules"
+    local rule="$rules_dir/bearpaws.md"
+    if [[ -e "$rule" || -L "$rule" ]] && ! grep -qF "$GROK_RULE_MARKER" "$rule" 2>/dev/null; then
+        log_error "$rule exists and was not created by Bearpaws; leaving it untouched"
+        return 1
+    fi
+
+    create_symlinks "$BEARPAWS_ROOT/skills" "$HOME/.agents/skills"
+
+    mkdir -p "$rules_dir"
+    local staged
+    staged="$(mktemp "$rules_dir/.bearpaws.md.XXXXXX")"
+    printf '%s\n%s\n' "$GROK_RULE_MARKER" \
+        'Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.' \
+        > "$staged"
+    mv -f "$staged" "$rule"
+    log_success "Installed Grok bootstrap rule: $rule"
+}
+
 # Install for Google Antigravity
 install_antigravity() {
     log_info "Setting up Google Antigravity plugin..."
@@ -181,6 +213,10 @@ main() {
                 platforms+=("agents")
                 shift
                 ;;
+            --grok)
+                platforms+=("grok")
+                shift
+                ;;
             --global)
                 export INSTALL_GLOBAL="true"
                 shift
@@ -188,12 +224,13 @@ main() {
             --help|-h)
                 echo "Bearpaws installation script"
                 echo ""
-                echo "Usage: $0 --antigravity --global | --agents --global"
+                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global"
                 echo ""
                 echo "Options:"
                 echo "  --antigravity Install BearPaws plugin for Google Antigravity"
                 echo "  --agents      Link skills into ~/.agents/skills (Codex, Devin, OpenCode, Cursor, Copilot, ...)"
-                echo "  --global      Required for both targets"
+                echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
+                echo "  --global      Required for every target"
                 echo "  --help        Show this help message"
                 exit 0
                 ;;
@@ -227,6 +264,11 @@ main() {
                     ((++failed))
                 fi
                 ;;
+            grok)
+                if ! install_grok; then
+                    ((++failed))
+                fi
+                ;;
             *)
                 log_error "Unknown platform: $platform"
                 ((++failed))
@@ -250,6 +292,11 @@ main() {
             echo '      "instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]'
             echo "  • Codex bootstrap: add this line to ~/.codex/AGENTS.md:"
             echo '      Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.'
+            echo "  • Devin CLI: put the same line in your project's AGENTS.md"
+        fi
+        if [[ " ${platforms[*]} " =~ " grok " ]]; then
+            echo "  • Grok Build (experimental): skills linked into ~/.agents/skills/; bootstrap rule in ${GROK_HOME:-~/.grok}/rules/bearpaws.md"
+            echo "  • Run 'grok inspect' to confirm the rule and skills load"
         fi
     else
         log_error "$failed platform installations failed"

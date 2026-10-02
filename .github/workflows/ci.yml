@@ -23,3 +23,50 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: tests/token-measurement/measure.sh
+
+  hook-tests:
+    name: hook-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tests/hooks/run-hook-tests.sh
+
+  install-tests:
+    name: install-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tests/install/run-install-tests.sh
+
+  antigravity-adapter:
+    name: antigravity-adapter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tests/antigravity/run-adapter-tests.sh
+
+  codex-offline:
+    name: codex-offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tests/codex/test_conformance.py
+
+  # Model-free: installs Bearpaws into a throwaway HOME and asks each pinned CLI
+  # what it loaded. Bump a pin only after rerunning this job against it.
+  harness-wiring:
+    name: harness-wiring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install --no-save --prefix "$RUNNER_TEMP/clis" @openai/codex@0.160.0 opencode-ai@1.18.34 @github/copilot@1.0.91
+      - run: tests/harness-wiring/run.sh
+        env:
+          HARNESSES: codex opencode copilot
+          REQUIRE: codex opencode copilot
+          CODEX_BIN: ${{ runner.temp }}/clis/node_modules/.bin/codex
+          OPENCODE_BIN: ${{ runner.temp }}/clis/node_modules/.bin/opencode
+          COPILOT_BIN: ${{ runner.temp }}/clis/node_modules/.bin/copilot

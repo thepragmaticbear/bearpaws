@@ -4,6 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
+trap 'echo "FAIL: line $LINENO: $BASH_COMMAND"' ERR
 
 WORK="$TMP_ROOT/bearpaws"
 mkdir -p "$WORK"
@@ -154,3 +155,50 @@ grep -qF '"instructions": ["~/.agents/skills/using-bearpaws/SKILL.md"]' "$TMP_RO
 grep -qF 'Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.' "$TMP_ROOT/bearpaws-install-agents.log"
 
 echo "OK: Agents installer (global skills, preserves unrelated skills and name collisions, idempotent, OpenCode and Codex snippets)"
+
+# ========== Grok Build Installer Tests ==========
+GROK_HOME_DIR="$TMP_ROOT/grok-home"
+GROK_RULE="$GROK_HOME_DIR/.grok/rules/bearpaws.md"
+BOOTSTRAP_LINE='Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md` and follow it.'
+mkdir -p "$GROK_HOME_DIR"
+
+if ( cd "$WORK" && HOME="$GROK_HOME_DIR" ./install.sh --grok ) >/dev/null 2>&1; then
+  echo "FAIL: install should require --global for grok"
+  exit 1
+fi
+test ! -e "$GROK_RULE"
+
+( cd "$WORK" && HOME="$GROK_HOME_DIR" ./install.sh --grok --global ) >"$TMP_ROOT/bearpaws-install-grok.log" 2>&1
+
+# Skills come from ~/.agents/skills, which Grok scans at the user tier
+test -L "$GROK_HOME_DIR/.agents/skills/gamma"
+test -f "$GROK_HOME_DIR/.agents/skills/using-bearpaws/SKILL.md"
+# Bootstrap is a real, Bearpaws-owned rule file Grok loads in every project
+test -f "$GROK_RULE"
+test ! -L "$GROK_RULE"
+grep -qF "$BOOTSTRAP_LINE" "$GROK_RULE"
+grep -qF 'Managed by Bearpaws' "$GROK_RULE"
+
+# Idempotent: rerun refreshes our own rule without duplicating the line
+( cd "$WORK" && HOME="$GROK_HOME_DIR" ./install.sh --grok --global ) >/dev/null 2>&1
+test "$(grep -cF "$BOOTSTRAP_LINE" "$GROK_RULE")" -eq 1
+
+# A user-authored bearpaws.md is never overwritten, and the install fails loudly
+FOREIGN_HOME="$TMP_ROOT/grok-foreign-home"
+mkdir -p "$FOREIGN_HOME/.grok/rules"
+echo "my own rule" > "$FOREIGN_HOME/.grok/rules/bearpaws.md"
+if ( cd "$WORK" && HOME="$FOREIGN_HOME" ./install.sh --grok --global ) >"$TMP_ROOT/bearpaws-install-grok-foreign.log" 2>&1; then
+  echo "FAIL: grok install should fail rather than overwrite a foreign rule"
+  exit 1
+fi
+grep -qx "my own rule" "$FOREIGN_HOME/.grok/rules/bearpaws.md"
+grep -qF "not created by Bearpaws" "$TMP_ROOT/bearpaws-install-grok-foreign.log"
+
+# GROK_HOME relocates Grok's config root
+RELOC_HOME="$TMP_ROOT/grok-reloc-home"
+mkdir -p "$RELOC_HOME"
+( cd "$WORK" && HOME="$RELOC_HOME" GROK_HOME="$RELOC_HOME/custom-grok" ./install.sh --grok --global ) >/dev/null 2>&1
+test -f "$RELOC_HOME/custom-grok/rules/bearpaws.md"
+test ! -e "$RELOC_HOME/.grok"
+
+echo "OK: Grok installer (requires --global, skills via ~/.agents/skills, owned rule, idempotent, never clobbers, GROK_HOME)"

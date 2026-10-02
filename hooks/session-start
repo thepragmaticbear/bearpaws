@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # SessionStart hook for bearpaws plugin
 # Platforms: Claude Code (CLAUDE_PLUGIN_ROOT), Cursor (CURSOR_PLUGIN_ROOT),
-#            Devin CLI (DEVIN_PROJECT_DIR), Copilot CLI (COPILOT_CLI),
-#            and any SDK-standard platform (additionalContext).
+#            Devin CLI (DEVIN_PROJECT_DIR / DEVIN_PLUGIN_ROOT), Copilot CLI
+#            (COPILOT_CLI), and any SDK-standard platform (additionalContext).
+# Grok Build ignores SessionStart output; it bootstraps from ~/.grok/rules.
+# tests/hooks/run-hook-tests.sh pins the shape each platform receives.
 
 set -euo pipefail
 
@@ -45,11 +47,13 @@ session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your boot
 if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
   # Cursor sets CURSOR_PLUGIN_ROOT (may also set CLAUDE_PLUGIN_ROOT)
   printf '{\n  "additional_context": "%s"\n}\n' "$session_context"
-elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; then
-  # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI
+elif { [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; } \
+     || [ -n "${DEVIN_PROJECT_DIR:-}" ] || [ -n "${DEVIN_PLUGIN_ROOT:-}" ]; then
+  # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI. Devin CLI reads
+  # the same nested hookSpecificOutput shape for SessionStart context.
   printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
 else
-  # Devin CLI, Copilot CLI, or unknown platform — SDK standard format
+  # Copilot CLI or unknown platform — SDK standard format
   printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
 fi
 

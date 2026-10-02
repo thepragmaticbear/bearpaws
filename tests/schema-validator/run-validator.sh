@@ -49,7 +49,7 @@ validate_skill_frontmatter() {
     ruby -e '
       require "yaml"
       f, dir = ARGV
-      content = File.read(f)
+      content = File.read(f, encoding: "UTF-8")
       parts = content.split(/^---\s*$/, 3)
       if parts.size < 3 || !content.start_with?("---")
         puts "SPEC VIOLATION: #{f}: frontmatter must start and end with ---"

@@ -17,6 +17,13 @@ tests/
 │   └── run-skill-tests.sh                 # Test runner (if exists)
 ```
 
+## Other-harness checks (no model needed)
+
+- `tests/hooks/run-hook-tests.sh` runs `hooks/session-start` under each harness's environment variables. It checks the JSON shape that harness reads, escaping, and loud failure on a missing bootstrap.
+- `tests/harness-wiring/run.sh` installs Bearpaws into a throwaway HOME. It then asks each installed CLI what it loaded: `codex debug prompt-input`, `opencode debug skill` and `debug config`, `copilot plugin install`, `grok inspect --json`. Missing CLIs are skipped unless listed in `REQUIRE`. Exit codes: 0 pass, 1 fail, 2 blocked. CI runs it with pinned Codex, OpenCode, and Copilot versions.
+
+These checks prove wiring only. Whether the agent then follows the skills needs a live run, such as `tests/codex/run-conformance.sh`.
+
 ## Running Tests
 
 ### Integration Tests

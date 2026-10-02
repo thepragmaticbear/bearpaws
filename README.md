@@ -4,7 +4,7 @@
 
 BearPaws separates difficulty from danger. A change can be easy to implement and still expensive to get wrong. Elevated-risk changes get stronger testing, independent review, and verification requirements before they can be called complete. Low-risk work stays lightweight, however large it is.
 
-Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. See [Attribution](#attribution) for the project's origin and license.
+Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode, Grok Build, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. See [Attribution](#attribution) for the project's origin and license.
 
 ## Difficulty is not danger
 
@@ -151,7 +151,13 @@ Other principles:
 
 - **Deliberate.** Planning and implementation stay separate where that improves reliability. In Claude Code, your plan approval hands off to execution after the plan is saved, with no second confirmation.
 - **Context-efficient.** Skills and references load only when needed. See [Design principles](#design-principles-why-the-architecture-is-lightweight).
-- **Harness-independent.** Skills define the methodology. Adapters map it onto each agent's native capabilities.
+- **Harness-independent.** Skills define the methodology. Adapters map it onto each agent's native capabilities. The bootstrap reaches each agent in the way it supports:
+  - a SessionStart hook (Claude Code, Copilot CLI, Cursor, Devin CLI);
+  - a plugin rule (Antigravity);
+  - a rules file the installer writes (Grok Build);
+  - a one-line instruction you add (Codex, OpenCode).
+
+  `tests/harness-wiring/` checks this wiring without calling a model.
 
 ## BearPaws vs. Superpowers
 
@@ -167,14 +173,25 @@ This is a difference in design, not a measured cost advantage. In the current ni
 |---|---|---|
 | Claude Code | Primary | Working |
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
-| OpenCode | Experimental | Smoke-tested: native `.agents/skills` discovery + `instructions` bootstrap |
-| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex discovery and activation smoke-tested with the `AGENTS.md` bootstrap; expanded conformance requires completed-action evidence. Others rely on native `.agents/skills` discovery. |
+| OpenCode | Experimental | Wiring checked in CI: repo-level and global `.agents/skills` discovery, `instructions` bootstrap resolves; live bootstrap smoke-tested |
+| Grok Build | Experimental | `./install.sh --grok --global`; `grok inspect` lists the bootstrap rule and all skills (1.0.45, built from source); no live session run |
+| Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex skills and `AGENTS.md` bootstrap checked in CI, activation smoke-tested; Copilot CLI installs the plugin (CI); Devin and Cursor hook payloads follow their docs, unverified live. Expanded conformance requires completed-action evidence. |
 
 See [docs/agent-support.md](docs/agent-support.md) for the current support policy and [docs/skill-structure.md](docs/skill-structure.md) for the descriptive skill structure contract.
 
 ## Updates
 
 Latest changes first. Full release notes live in [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/).
+
+### 2.5.0 — other-harness cleanup and Grok Build
+
+- **Grok Build (experimental).** `./install.sh --grok --global` links skills and writes a bootstrap rule to `~/.grok/rules/bearpaws.md`. Grok ignores SessionStart hook output, so a rule is the bootstrap.
+- **Devin hook fix.** The SessionStart hook now sends Devin the nested `hookSpecificOutput` shape Devin documents, instead of a top-level key.
+- **Cursor packaging.** `.cursor-plugin/plugin.json` makes the hook's existing Cursor branch reachable.
+- **Model-free wiring checks in CI.** Codex, OpenCode, and Copilot CLI are installed at pinned versions and asked what they loaded. No API keys needed.
+- **Tests that were silently broken.** The Antigravity adapter test could never pass, and the schema validator crashed under a non-UTF-8 locale. Both are fixed, and both now run in CI with the hook and installer tests.
+
+See the [2.5.0 release notes](docs/bearpaws/release-notes/2.5.0.md).
 
 ### 2.4.0 — Claude Code native planning
 
@@ -270,7 +287,7 @@ rm -rf ~/.gemini/config/plugins/bearpaws
 
 BearPaws uses native Antigravity plugin packaging, rules, skills, and subagents — not Gemini CLI compatibility mode.
 
-## Experimental Install (OpenCode, Codex, Devin, Cursor, Copilot, …)
+## Experimental Install (OpenCode, Codex, Grok Build, Devin, Cursor, Copilot, …)
 
 Codex, Devin, OpenCode, and other Agent Skills agents read `~/.agents/skills/`. One command links every BearPaws skill there without touching unrelated skills:
 
@@ -294,7 +311,27 @@ Before responding to any request, read `~/.agents/skills/using-bearpaws/SKILL.md
 
 The installer prints both snippets and never edits your agent config.
 
-Other agents load `using-bearpaws` when it is invoked or matched by its description. Devin CLI sessions in this repo also get it from `.devin/hooks.v1.json`.
+**Grok Build:** one command links the skills and adds a bootstrap rule that Grok loads in every project:
+
+```bash
+./install.sh --grok --global      # writes ~/.grok/rules/bearpaws.md ($GROK_HOME/rules/ if set)
+grok inspect                      # confirm the rule and skills are listed
+```
+
+The installer only writes a `bearpaws.md` it owns, and it refuses to overwrite one you wrote.
+
+**Copilot CLI:** installs from the same plugin marketplace as Claude Code, with skills plus a SessionStart hook:
+
+```bash
+copilot plugin marketplace add /path/to/bearpaws
+copilot plugin install bp@bearpaws
+```
+
+**Cursor:** the repo ships `.cursor-plugin/plugin.json` (skills plus a `sessionStart` hook). It has not been verified in Cursor.
+
+**Devin CLI:** reads `~/.agents/skills`. Put the Codex bootstrap line in your project's `AGENTS.md`. Sessions inside this repo also get the bootstrap from `.devin/hooks.v1.json`.
+
+Other agents load `using-bearpaws` when it is invoked or matched by its description.
 
 Links point into your clone: `git pull` updates skills; moving or deleting the clone breaks them (re-run `./install.sh --agents --global` from the new location). Uninstall (run from the clone):
 
@@ -306,7 +343,7 @@ for link in ~/.agents/skills/*; do
 done
 ```
 
-Then remove the `instructions` entry from your OpenCode config and the bootstrap line from `~/.codex/AGENTS.md`.
+Then remove the `instructions` entry from your OpenCode config, the bootstrap line from `~/.codex/AGENTS.md`, and `~/.grok/rules/bearpaws.md`.
 
 ## Skills
 
@@ -359,7 +396,9 @@ File size is only part of the cost. The [nine-scenario comparison](docs/benchmar
 
 ```bash
 tests/schema-validator/run-validator.sh                # <1 sec — XML tag whitelist enforcement
-tests/install/run-install-tests.sh                     # <2 sec — Antigravity & --agents installer tests
+tests/install/run-install-tests.sh                     # <2 sec — Antigravity, --agents & --grok installer tests
+tests/hooks/run-hook-tests.sh                          # <1 sec — SessionStart payload shape per harness
+tests/harness-wiring/run.sh                            # ~15 sec — model-free wiring checks for installed codex/opencode/copilot/grok
 tests/antigravity/run-adapter-tests.sh                 # <1 sec — Antigravity adapter static assertions
 python3 tests/benchmark/test_integrity.py              # <3 sec — benchmark isolation & scoring tests
 python3 tests/codex/test_conformance.py                # <1 sec — Codex conformance unit tests
