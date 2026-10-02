@@ -2,34 +2,119 @@
 
 **Adaptive engineering discipline for coding agents.**
 
-BearPaws gives coding agents a structured software-development workflow without forcing every task through the same amount of process.
-
-It reads the project first, classifies the risk of the change, and applies the matching level of planning, testing, review, and verification. Routine work stays lightweight. Higher-risk work gets stronger safeguards and independent review.
+BearPaws separates difficulty from danger. A change can be easy to implement and still expensive to get wrong. Elevated-risk changes get stronger testing, independent review, and verification requirements before they can be called complete. Low-risk work stays lightweight, however large it is.
 
 Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. See [Attribution](#attribution) for the project's origin and license.
 
-## Why BearPaws?
+## Difficulty is not danger
 
-Most agent workflows aim for one of two extremes. Some move fast with minimal structure. Others put every change through a heavyweight process.
+Most agent workflows scale rigor with one question: *how complicated is this task?*
 
-BearPaws takes a different approach: **the workflow should fit the work.**
+BearPaws asks a second one: *what happens if this task goes wrong?*
 
-- **Project-aware.** `bp:onboarding-to-a-project` reads the repository's conventions, commands, and constraints before any change.
-- **Risk-aware.** Changes touching authentication, secrets, money, data deletion or migration, untrusted input, concurrency, or public APIs need a failing test first, an independent review, and verification evidence, however small they are. Routine tasks get a single combined review.
-- **Evidence-driven.** Work is complete when fresh verification shows it, not when an agent says so. Elevated-risk work without its independent review is reported INCOMPLETE, never done.
-- **Deliberate.** Planning and implementation stay separate where that improves reliability. In Claude Code, planning runs read-only in native Plan Mode. Your approval hands off to execution after the plan is saved.
-- **Context-efficient.** Skills and references load only when needed instead of flooding the model with instructions.
-- **Harness-independent.** Skills define the methodology. Adapters map it onto each supported agent's native capabilities.
+Those questions have different answers:
 
-These are instructions to the agent, not enforcement by the harness. The [benchmark](docs/benchmarks/2026-09-30-three-way.md) shows they usually hold but not always: reviews ran on four of six security tasks.
+- A one-line change to authentication logic is simple to write but carries high risk.
+- A 500-line UI refactor is complex but carries low risk.
 
-## BearPaws vs. Superpowers
+A workflow that only scales with complexity misses that distinction. BearPaws treats complexity and risk as separate axes.
 
-[Superpowers](https://github.com/obra/superpowers) gives coding agents a rigorous, consistent engineering process. BearPaws began as a fork of it and builds on that philosophy with a more adaptive model:
+|  | **Low risk** | **High risk** |
+|---|---|---|
+| **Low complexity** | **Quick path:** implement with TDD where it applies, verify with fresh evidence | **Guarded path:** failing test for the risk first, independent review, verification evidence |
+| **High complexity** | **Structured workflow:** written plan, a fresh subagent per task, one combined review per task | **Maximum rigor:** written plan, a fresh subagent per task, spec review then quality review, a final review |
 
-> Superpowers gives every task a rigorous workflow. BearPaws makes the workflow fit the task.
+These four names are a mental model for this README. They are not labels the agent prints. The rules behind them are concrete: complexity decides whether a written plan and subagent execution are needed, and risk sets the review and evidence floor.
 
-BearPaws considers the project and the risk of the change before deciding how much process is appropriate. This is a difference in design, not a measured cost advantage. In the current nine-scenario benchmark, BearPaws cost more per task than both Superpowers and no plugin (see [Design principles](#design-principles-why-the-architecture-is-lightweight)).
+The deciding factor is **blast radius, not code size**:
+
+| Change | Complexity | Potential risk | BearPaws treatment |
+|---|---|---|---|
+| Rename button text | Low | Low | Routine |
+| Rewrite animation system | High | Low | Routine, planned |
+| Change password-reset validation | Low | High | Elevated: authentication |
+| Modify tenant authorization | Medium | Very high | Elevated: authorization |
+| Add a database migration | Medium | High | Elevated: data migration |
+| Change payment rounding | Low | High | Elevated: money |
+| Refactor internal build tooling | High | Medium | Routine, planned; elevated if untrusted input reaches a shell |
+
+Risk has two levels: routine and elevated. BearPaws does not grade it any finer. When the classification is arguable, the change is elevated.
+
+## Why agents need this
+
+An experienced developer slows down near an ACL check, a migration, an `rm`, a shell call, a payment calculation, or credential handling. Agents don't reliably have that instinct. A model can be equally confident about
+
+```python
+padding = 12
+```
+
+and
+
+```python
+if user.organization_id == resource.organization_id:
+    allow()
+```
+
+even though the consequences of getting them wrong are wildly different.
+
+**BearPaws doesn't rely on the model knowing when to be careful. It writes into the workflow when extra care is required.**
+
+## Prevention and detection, in three stages
+
+Risk mitigation is not just "run more tests." BearPaws works on two fronts:
+
+- **Prevention** lowers the chance the agent makes a bad change at all.
+- **Detection** lowers the chance a bad change is declared finished.
+
+Higher-risk changes should have both a lower chance of failure and a lower chance of undetected failure.
+
+**1. Before implementation (prevention).**
+- Onboarding reads the project's conventions, commands, and constraints.
+- The change is classified against sensitive surfaces:
+  - authentication or authorization
+  - secrets or cryptography
+  - money
+  - data deletion or migration
+  - untrusted input reaching filesystem paths, SQL, shell, or deserialization
+  - concurrency
+  - a public API or schema
+- That classification sets a minimum process floor. Size never lowers it, and the implementer can't downgrade a task halfway through because it "looks easy."
+
+**2. During implementation (prevention).**
+- Elevated-risk work starts with a failing test for the risk, written and watched failing before the fix.
+- Implementation and review are done by different agents.
+- Non-trivial work follows an explicit plan. In Claude Code that plan is made read-only in native Plan Mode.
+
+**3. After implementation (detection).** Evidence replaces confidence:
+- Tests must actually run, fresh, with their output read.
+- Elevated-risk work needs an independent review. A missing review makes the outcome INCOMPLETE, never done.
+- Reviewers try to break the change and label each attempt `[executed]` or `[reasoned]`, so it's clear what was actually run.
+
+Most agent workflows end with:
+
+> **Agent:** "I changed the code and everything looks good."
+
+BearPaws ends with:
+
+> **Agent:** "I changed the code."
+> **BearPaws:** "Show me."
+
+For risky work, "show me" means:
+1. The failing test before the fix.
+2. The passing test after it.
+3. The relevant checks.
+4. A review by someone other than the implementer.
+
+Superpowers-style rigor answers *how do we engineer this correctly?* BearPaws adds *how much proof do we need before we trust this change?*
+
+### What this does not guarantee
+
+These rules are instructions to the agent, not enforcement by the harness. Results so far:
+
+- In the 2.3.1 A/B work, the elevated-risk rule raised reviewed security fixes from 0/6 to 5/5.
+- In the later [nine-scenario benchmark](docs/benchmarks/2026-09-30-three-way.md), reviews ran on four of six security tasks.
+
+The gates usually hold, but not always. Rigor also costs tokens: elevated-risk tasks cost roughly twice as much because they get a review.
 
 ## How it works
 
@@ -51,11 +136,25 @@ flowchart TD
     Onboard --> Brainstorm[bp:brainstorming<br/>design against discovered conventions]
     Brainstorm --> Plan[bp:writing-plans<br/>native Plan Mode where available]
     Plan --> Risk{Elevated<br/>risk?}
-    Risk -->|routine| Light[Implement with TDD<br/>one combined review]
+    Risk -->|routine| Light[Implement with TDD<br/>combined review per task under subagent execution]
     Risk -->|elevated| Strong[Failing test for the risk first<br/>spec review, then quality review]
     Light --> Verify[bp:verification-before-completion<br/>bp:finishing-a-development-branch]
     Strong --> Verify
 ```
+
+Other principles:
+
+- **Deliberate.** Planning and implementation stay separate where that improves reliability. In Claude Code, your plan approval hands off to execution after the plan is saved, with no second confirmation.
+- **Context-efficient.** Skills and references load only when needed. See [Design principles](#design-principles-why-the-architecture-is-lightweight).
+- **Harness-independent.** Skills define the methodology. Adapters map it onto each agent's native capabilities.
+
+## BearPaws vs. Superpowers
+
+[Superpowers](https://github.com/obra/superpowers) gives coding agents a rigorous, consistent engineering process. BearPaws began as a fork of it and builds on that philosophy with a more adaptive model:
+
+> Superpowers gives every task a rigorous workflow. BearPaws makes the workflow fit the task, scaled by blast radius rather than code size.
+
+This is a difference in design, not a measured cost advantage. In the current nine-scenario benchmark, BearPaws cost more per task than both Superpowers and no plugin.
 
 ## Support Status
 
