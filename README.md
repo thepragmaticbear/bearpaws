@@ -1,23 +1,60 @@
-# Bearpaws
+# BearPaws
 
-**Less context. Deliberate execution. Evidence at every gate.**
+**Adaptive engineering discipline for coding agents.**
 
-Bearpaws is a lightweight, project-aware development methodology for AI coding agents. It reads the project's conventions before changing code, scales review by risk, and loads supporting context only when needed. Built for developers who want disciplined agents with little orchestration overhead. See [Attribution](#attribution) for the project's origin and license.
+BearPaws gives coding agents a structured software-development workflow without forcing every task through the same amount of process.
 
-Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated.
+It reads the project first, classifies the risk of the change, and applies the matching level of planning, testing, review, and verification. Routine work stays lightweight. Higher-risk work gets stronger safeguards and independent review.
 
-**15 skills** covering TDD, debugging, planning, code review, parallel execution, plus a stack-agnostic onboarding skill. All skill bodies use a compact XML-like structure with lazy-loaded references.
+Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. See [Attribution](#attribution) for the project's origin and license.
 
-**How skills compose.** Standard flow when there's a project: (1) `bp:onboarding-to-a-project` identifies key files and stack from manifests, README, and similar files; (2) `bp:brainstorming` designs against those discovered conventions; (3) other process skills (writing-plans, TDD, debugging, code review) carry implementation. Onboarding → brainstorming → implementation. Onboarding is skipped only for purely abstract design questions with no project context.
+## Why BearPaws?
+
+Most agent workflows aim for one of two extremes. Some move fast with minimal structure. Others put every change through a heavyweight process.
+
+BearPaws takes a different approach: **the workflow should fit the work.**
+
+- **Project-aware.** `bp:onboarding-to-a-project` reads the repository's conventions, commands, and constraints before any change.
+- **Risk-aware.** Changes touching authentication, secrets, money, data deletion or migration, untrusted input, concurrency, or public APIs need a failing test first, an independent review, and verification evidence, however small they are. Routine tasks get a single combined review.
+- **Evidence-driven.** Work is complete when fresh verification shows it, not when an agent says so. Elevated-risk work without its independent review is reported INCOMPLETE, never done.
+- **Deliberate.** Planning and implementation stay separate where that improves reliability. In Claude Code, planning runs read-only in native Plan Mode. Your approval hands off to execution after the plan is saved.
+- **Context-efficient.** Skills and references load only when needed instead of flooding the model with instructions.
+- **Harness-independent.** Skills define the methodology. Adapters map it onto each supported agent's native capabilities.
+
+These are instructions to the agent, not enforcement by the harness. The [benchmark](docs/benchmarks/2026-09-30-three-way.md) shows they usually hold but not always: reviews ran on four of six security tasks.
+
+## BearPaws vs. Superpowers
+
+[Superpowers](https://github.com/obra/superpowers) gives coding agents a rigorous, consistent engineering process. BearPaws began as a fork of it and builds on that philosophy with a more adaptive model:
+
+> Superpowers gives every task a rigorous workflow. BearPaws makes the workflow fit the task.
+
+BearPaws considers the project and the risk of the change before deciding how much process is appropriate. This is a difference in design, not a measured cost advantage. In the current nine-scenario benchmark, BearPaws cost more per task than both Superpowers and no plugin (see [Design principles](#design-principles-why-the-architecture-is-lightweight)).
+
+## How it works
+
+**15 skills** cover onboarding, brainstorming, planning, TDD, debugging, code review, verification, and parallel execution. The standard flow on a project is:
+
+1. Onboard to the project.
+2. Design against its conventions.
+3. Plan.
+4. Implement with risk-proportional review and verification.
+
+Onboarding is skipped only for purely abstract design questions with no project context.
 
 ```mermaid
 flowchart TD
-    Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>loaded by agent bootstrap context<br/>Red Flags + skill priority + lazy-load contract<br/>fallback brevity policy]
+    Start([User prompt]) --> Bootstrap[bp:using-bearpaws<br/>loaded by agent bootstrap context<br/>skill discovery + elevated-risk rule + lazy-load contract]
     Bootstrap --> Check{Project<br/>context?}
-    Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>identify key files, stack, conventions<br/>read manifests, README, CLAUDE.md/AGENTS.md/GEMINI.md, sample files]
+    Check -->|YES &mdash; existing codebase| Onboard[bp:onboarding-to-a-project<br/>stack, conventions, commands<br/>manifests, README, CLAUDE.md/AGENTS.md/GEMINI.md, sample files]
     Check -->|NO &mdash; purely abstract design| Brainstorm
     Onboard --> Brainstorm[bp:brainstorming<br/>design against discovered conventions]
-    Brainstorm --> Process[Process skills<br/>writing-plans &middot; test-driven-development<br/>systematic-debugging &middot; requesting-code-review<br/>verification-before-completion &middot; finishing-a-development-branch]
+    Brainstorm --> Plan[bp:writing-plans<br/>native Plan Mode where available]
+    Plan --> Risk{Elevated<br/>risk?}
+    Risk -->|routine| Light[Implement with TDD<br/>one combined review]
+    Risk -->|elevated| Strong[Failing test for the risk first<br/>spec review, then quality review]
+    Light --> Verify[bp:verification-before-completion<br/>bp:finishing-a-development-branch]
+    Strong --> Verify
 ```
 
 ## Support Status
@@ -37,7 +74,12 @@ Latest changes first. Full release notes live in [docs/bearpaws/release-notes/](
 
 ### 2.4.0 — Claude Code native planning
 
-`bp:writing-plans` works inside Claude Code's native Plan Mode, and approval hands off straight to execution after the plan is saved. `/model opusplan` is a supported pairing and needs no BearPaws model logic. See the [2.4.0 release notes](docs/bearpaws/release-notes/2.4.0.md).
+- **Native Plan Mode.** `bp:writing-plans` plans read-only inside Claude Code's Plan Mode.
+- **No second confirmation.** Your approval is the go-ahead. The agent sets up the workspace, saves the plan to `docs/bearpaws/plans/`, then invokes `bp:subagent-driven-development` or `bp:executing-plans`.
+- **Before and after.** Before this change, approved plans were coded inline with no saved plan and no execution skill. After it, both happen, in single runs on Opus-then-Sonnet and on Sonnet only.
+- **Model choice stays with Claude Code.** `/model opusplan` is a supported pairing, BearPaws adds no hook or model logic, and portable skills stay model-neutral.
+
+See the [2.4.0 release notes](docs/bearpaws/release-notes/2.4.0.md).
 
 ### 2.3.1 — proposed evidence-driven roadmap follow-up
 
@@ -47,7 +89,7 @@ Behavior changes started from failing baselines; proposals whose baseline alread
 - **Risk-proportional review** in `subagent-driven-development`: routine tasks get one combined review; elevated-risk tasks keep spec review, then quality review.
 - **Honest break attempts.** Reviewers label each attempt `[executed]` (ran it) or `[reasoned]` (traced it).
 - **Codex bootstrap & conformance.** `./install.sh --agents --global` prints a line for `~/.codex/AGENTS.md`. The conformance suite (`tests/codex/evidence.py`, `tests/codex/run-conformance.sh`) checks 8 surfaces with completed-action evidence; Codex remains Experimental.
-- **Full-session benchmark & verifier isolation** (`tests/benchmark/`): nine scenarios, three arms, acceptance checks, tokens, cost, duration, recovery, and process evidence. Seatbelt sandboxing and snapshot fingerprinting isolate checkers from tested agents on macOS. All 81 runs passed acceptance; Bearpaws cost more than both comparison arms.
+- **Full-session benchmark & verifier isolation** (`tests/benchmark/`): nine scenarios, three arms, acceptance checks, tokens, cost, duration, recovery, and process evidence. Seatbelt sandboxing and snapshot fingerprinting isolate checkers from tested agents on macOS. All 81 runs passed acceptance; BearPaws cost more than both comparison arms.
 - **Reviewer project conventions.** Reviews receive onboarding's conventions, with repository-guidance lookup when the controller omits them.
 - **Fixes:** Code-review template placeholder alignment; Codex conformance acceptance guards against empty/skipped test discovery; session turn/token accumulation deduplication.
 
@@ -125,7 +167,7 @@ BearPaws uses native Antigravity plugin packaging, rules, skills, and subagents 
 
 ## Experimental Install (OpenCode, Codex, Devin, Cursor, Copilot, …)
 
-Codex, Devin, OpenCode, and other Agent Skills agents read `~/.agents/skills/`. One command links every Bearpaws skill there without touching unrelated skills:
+Codex, Devin, OpenCode, and other Agent Skills agents read `~/.agents/skills/`. One command links every BearPaws skill there without touching unrelated skills:
 
 ```bash
 ./install.sh --agents --global
@@ -193,18 +235,20 @@ Then remove the `instructions` entry from your OpenCode config and the bootstrap
 | `bp:using-git-worktrees` | Isolate feature work in git worktrees |
 | `bp:writing-skills` | Author and test new skills (meta) |
 
-## Token efficiency
+## Design principles: why the architecture is lightweight
 
-Our aim is to mitigate token usage and enforce token efficiency while preserving practical skill-triggering usefulness. The numbers below are point-in-time measurements against superpowers `main` and will drift as either project changes — treat them as direction, not commitments.
+Process should cost context only when it earns it. The bootstrap is paid every session, so it stays small. Every other skill and reference loads on demand through the agent's own skill mechanism. Skill bodies use a compact XML-like structure.
 
-| Metric | superpowers (main) | Bearpaws | Approx. delta |
+The numbers below are point-in-time measurements against superpowers `main` and will drift as either project changes. Treat them as direction, not commitments.
+
+| Metric | superpowers (main) | BearPaws | Approx. delta |
 |---|---:|---:|---|
 | Bootstrap injected per session | ~5.5 KB (~1.4K tokens) | ~4.0 KB (~0.95K tokens, estimated) | ~28% smaller |
 | Process skill bodies (apples-to-apples subset) | ~101 KB (~24K tokens) | ~51 KB (~12K tokens) | roughly half |
 
-Token counts measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer (the current Bearpaws bootstrap figure uses the repository's ~0.24 tokens/byte estimate); treat them as ballpark figures, not exact savings. The bootstrap is paid every session; non-bootstrap skills load on demand through the target agent's skill mechanism, so the dominant cost is the bootstrap plus whatever skills the agent actually pulls in.
+Token counts were measured with `tiktoken` `cl100k_base` as a proxy for Anthropic's tokenizer. The current BearPaws bootstrap figure uses the repository's ~0.24 tokens/byte estimate. Treat them as ballpark figures, not exact savings.
 
-File size is only part of the cost. The [nine-scenario comparison](docs/benchmarks/2026-09-30-three-way.md) passed the original 27/27 acceptance checks in each arm: corrected cost was $0.065 per task without a plugin, $0.113 with Bearpaws, and $0.098 with Superpowers. Bearpaws dispatched reviews on four of six security tasks, with two missed gates. Stronger checks are revalidated separately in the report. These small scenarios do not demonstrate an end-to-end efficiency advantage. The tagline describes the methodology's goal, not a guarantee that every required gate will run.
+File size is only part of the cost. The [nine-scenario comparison](docs/benchmarks/2026-09-30-three-way.md) passed the original 27/27 acceptance checks in each arm. Corrected cost per task was $0.065 without a plugin, $0.113 with BearPaws, and $0.098 with Superpowers. BearPaws dispatched reviews on four of six security tasks, with two missed gates. Stronger checks are revalidated separately in the report. These small scenarios do not demonstrate an end-to-end efficiency advantage.
 
 ## Tests
 
@@ -224,7 +268,7 @@ tests/codex/run-conformance.sh                         # ~20 min — Codex confo
 
 ## Attribution
 
-Bearpaws originated as a fork of **[superpowers](https://github.com/obra/superpowers)** v5.0.7 by Jesse Vincent and contributors, released under the MIT license. The MIT terms and upstream copyright are preserved in [LICENSE](LICENSE); Bearpaws now develops on its own line and is not affiliated with or endorsed by the superpowers project. Release notes are in [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/).
+BearPaws originated as a fork of **[superpowers](https://github.com/obra/superpowers)** v5.0.7 by Jesse Vincent and contributors, released under the MIT license. The MIT terms and upstream copyright are preserved in [LICENSE](LICENSE); BearPaws now develops on its own line and is not affiliated with or endorsed by the superpowers project. Release notes are in [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/).
 
 ## License
 
