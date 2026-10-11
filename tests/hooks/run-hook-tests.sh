@@ -120,6 +120,13 @@ root = sys.argv[1]
 claude = json.load(open(f"{root}/hooks/hooks.json"))
 cmd = claude["hooks"]["SessionStart"][0]["hooks"][0]["command"]
 assert "run-hook.cmd\" session-start" in cmd, cmd
+for event, mode in (("UserPromptSubmit", "reset"), ("PostToolUse", "record"), ("Stop", "stop")):
+    entry = claude["hooks"][event][0]
+    hook = entry["hooks"][0]
+    assert hook["command"] == f'"${{CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd" risk-gate {mode}', hook["command"]
+    assert hook.get("timeout") == 10, (event, hook.get("timeout"))
+assert claude["hooks"]["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Agent|Task"
+assert "matcher" not in claude["hooks"]["Stop"][0]
 cursor = json.load(open(f"{root}/hooks/hooks-cursor.json"))
 assert cursor["version"] == 1
 assert cursor["hooks"]["sessionStart"][0]["command"] == "./hooks/run-hook.cmd session-start"
@@ -127,7 +134,7 @@ manifest = json.load(open(f"{root}/.cursor-plugin/plugin.json"))
 assert manifest["hooks"] == "./hooks/hooks-cursor.json" and manifest["skills"] == "./skills/"
 devin = json.load(open(f"{root}/.devin/hooks.v1.json"))
 assert "hooks/session-start" in devin["SessionStart"][0]["hooks"][0]["command"]
-for script in ("run-hook.cmd", "session-start"):
+for script in ("run-hook.cmd", "session-start", "risk-gate"):
     path = f"{root}/hooks/{script}"
     assert os.access(path, os.X_OK), f"{path} not executable"
 PY

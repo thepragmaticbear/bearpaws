@@ -30,6 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: tests/hooks/run-hook-tests.sh
+      - run: tests/hooks/run-risk-gate-tests.sh
 
   install-tests:
     name: install-tests
