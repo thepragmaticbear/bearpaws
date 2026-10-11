@@ -30,7 +30,7 @@ State: one append-only log per session at `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}
 | Mode | Event | Behavior |
 |---|---|---|
 | `reset` | `UserPromptSubmit` | Truncate the session log. Each turn is judged on its own tool use. |
-| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` or `review` (an Agent/Task call whose `subagent_type`, `description`, or `prompt` matches `\breview(er\|ing)?\b`, the benchmark's heuristic). Subagent edits count too. |
+| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` (relative to the hook input's `cwd`) or `review` (an Agent/Task call whose `subagent_type` contains `review`, or whose `description` matches `^\W*(\w+\s+)?review(ing)?\b`, case-insensitive; never the `prompt`). Subagent edits count too. |
 | `stop` | `Stop` | Apply the gate below to `last_assistant_message` and the log. |
 
 ### 2. Gate rules (`stop` mode)
@@ -77,6 +77,10 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 - That "Pinned" and "Failing first" are true. Evals check those from tool order. The hook only checks that the receipt exists, that a review happened, and that the classification looks plausible.
 - Whether an asynchronous review returned. A dispatch after the last edit is enough for the gate. The bootstrap's "not returned → INCOMPLETE" rule stays instruction-only. Upgrade path: record `SubagentStop` for reviewer agents.
 - Other harnesses. They get the receipt as instruction only.
+- Edits made through the Bash tool (`sed -i`, redirects, `git apply`) are not recorded.
+- An agent running in the background from an earlier turn can record edits into a later turn.
+- Rule 2 checks only the `Risk:` line; `Verified:` and `Status:` are required by the skill text, not the hook.
+- An implementer's own PostToolUse events precede its parent's Agent event, so a review counts only by reviewer `subagent_type` or a description that starts with review.
 
 ## Testing
 
