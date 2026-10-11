@@ -27,14 +27,15 @@ dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/risk-gate"
 log="$dir/$sid.log"
 # The fallback may be a shared temp dir: owner-only, and refuse a dir or log someone else planted.
 umask 077
-mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$log" ] || exit 0
+mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log" ] || exit 0
 
 # ponytail: path-name heuristic, one nudge per turn; replace with a project-declared list if false positives annoy.
 SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
-LEAD='^[[:space:]>*_-]*'
+LEAD='^[[:space:]>*_#0-9.`-]*'
+TRAIL='[*_`]*'
 
 block() { jq -cn --arg r "$1" '{decision: "block", reason: $r}'; exit 0; }
-field() { grep -qiE "${LEAD}$1[*_]*:[*_[:space:]]*$2" <<<"$msg"; }
+field() { grep -qiE "${LEAD}$1${TRAIL}:[*_[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in
   reset)
@@ -44,12 +45,16 @@ case "$mode" in
     case "$(jq -r '.tool_name // empty' <<<"$input")" in
       Edit|Write|MultiEdit|NotebookEdit)
         path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
+        # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
+        cwd="$(jq -r '.cwd // empty' <<<"$input")"
+        [ -n "$cwd" ] && path="${path#"$cwd"/}"
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
         ;;
       Agent|Task)
-        if jq -e '[.tool_input.subagent_type, .tool_input.description, .tool_input.prompt]
-                  | map(. // "") | join(" ") | test("\\breview(er|ing)?\\b"; "i")' <<<"$input" >/dev/null; then
+        # Reviewer subagent_type, or a description that starts with "review". Never the prompt: an implementer's says "Self-review".
+        if jq -e '.tool_input | ((.subagent_type // "" | tostring | test("review"; "i"))
+                  or (.description // "" | tostring | test("^\\W*(\\w+\\s+)?review(ing)?\\b"; "i")))' <<<"$input" >/dev/null 2>&1; then
           echo review >>"$log"
         fi
         ;;
@@ -57,12 +62,13 @@ case "$mode" in
     ;;
   stop)
     [ -f "$log" ] && grep -q '^edit ' "$log" || exit 0
-    msg="$(jq -r '.last_assistant_message // empty' <<<"$input")"
+    msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
     else block "This turn edited files. End with a risk receipt: Risk, Verified, and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
     fi
-    field Status INCOMPLETE && exit 0
+    # Only the last Status line decides: a quoted "Status: INCOMPLETE" earlier must not override it.
+    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qi INCOMPLETE && exit 0
     if [ "$risk" = elevated ]; then
       last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"

@@ -27,6 +27,14 @@ edit() { # <path> [VAR=value ...]
   gate record "$(jq -cn --arg s "$SID" --arg p "$p" \
     '{session_id:$s,tool_name:"Edit",tool_input:{file_path:$p}}')" "$@"
 }
+editc() { # <cwd> <path>
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" --arg p "$2" \
+    '{session_id:$s,cwd:$c,tool_name:"Edit",tool_input:{file_path:$p}}')"
+}
+dispatch() { # <tool_name> <subagent_type> <description> [prompt]
+  gate record "$(jq -cn --arg s "$SID" --arg t "$1" --arg st "$2" --arg d "$3" --arg p "${4:-}" \
+    '{session_id:$s,tool_name:$t,tool_input:{subagent_type:$st,description:$d,prompt:$p}}')"
+}
 review() {
   gate record "$(jq -cn --arg s "$SID" \
     '{session_id:$s,tool_name:"Agent",tool_input:{subagent_type:"bp:code-reviewer",description:"Review authz fix",prompt:"Review the diff"}}')"
@@ -76,6 +84,62 @@ else
   echo "OK: CR in path is stripped from the log"
 fi
 
+# Only a reviewer subagent_type or a description that starts with "review" counts. Never the prompt.
+reset; edit src/authz.py; dispatch Agent general-purpose "Implement Task 2" "Do the task. Self-review before reporting."; stop "$ELEVATED"
+expect "implementer dispatch is not a review" block "independent review"
+reset; edit src/authz.py; dispatch Task bp:code-reviewer "Review authz fix"; stop "$ELEVATED"
+expect "review dispatched via Task counts" allow
+for row in "yes|bp:code-reviewer|Implement Task 3" \
+           "yes|general-purpose|Review spec compliance for Task 3" \
+           "yes|general-purpose|Code review of authz fix" \
+           "yes|general-purpose|Final review" \
+           "yes|general-purpose|Reviewing task 2" \
+           "no|general-purpose|Implement Task 2" \
+           "no|general-purpose|Fix the issues the reviewer found" \
+           "no|general-purpose|Fix reviewer findings" \
+           "no|general-purpose|Preview the page" \
+           "no|general-purpose|Previewing the page" \
+           "no|general-purpose|Reviewer follow-ups for Task 2"; do
+  IFS='|' read -r want st desc <<<"$row"
+  reset; edit src/authz.py; dispatch Agent "$st" "$desc" "Self-review before reporting"; stop "$ELEVATED"
+  if [ "$want" = yes ]; then expect "matcher: '$st' / '$desc' counts" allow
+  else expect "matcher: '$st' / '$desc' does not count" block "independent review"; fi
+done
+
+# A missing or non-string last_assistant_message fails open.
+reset; edit src/authz.py; gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,hook_event_name:"Stop"}')"
+expect "missing last_assistant_message: allow" allow
+reset; edit src/authz.py; gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,last_assistant_message:42}')"
+expect "non-string last_assistant_message: allow" allow
+
+# Paths are logged relative to cwd, so a sensitive-looking project dir does not nudge.
+CWD=/Users/maclean/repos/oauth-proxy
+reset; editc "$CWD" "$CWD/src/ui/button.py"; stop "$ROUTINE"; expect "sensitive project dir, routine path: allow" allow
+reset; editc "$CWD" "$CWD/src/auth/login.py"; stop "$ROUTINE"; expect "sensitive path under cwd still nudges" block "src/auth/login.py"
+if jq -e '.reason | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
+  fail "nudge reason leaks the absolute path: $(cat "$TMP_ROOT/out")"
+else
+  echo "OK: nudge reason shows the relative path"
+fi
+
+# Only the last Status line decides.
+QUOTED=$'The reviewer said:\n> Status: INCOMPLETE\n\n'
+reset; edit src/authz.py; stop "$QUOTED$ELEVATED"; expect "quoted INCOMPLETE then final COMPLETE: block" block "independent review"
+reset; edit src/authz.py; stop $'> Status: COMPLETE\n\n'"$ELEVATED_INCOMPLETE"; expect "quoted COMPLETE then final INCOMPLETE: allow" allow
+
+# Receipt line variants: heading, list item, code span.
+for r in '## Risk: routine' '1. Risk: routine' '`Risk: routine`'; do
+  reset; edit src/ui/button.py
+  stop "$(printf 'Done.\n\n%s\nVerified: pytest — 3 passed\nStatus: COMPLETE' "$r")"
+  expect "receipt variant '$r': allow" allow
+done
+
+# Every edit tool is recorded.
+reset; gate record "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"MultiEdit",tool_input:{file_path:"src/app.py"}}')"
+stop "Done."; expect "MultiEdit is recorded as an edit" block "risk receipt"
+reset; gate record "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"NotebookEdit",tool_input:{notebook_path:"nb/a.ipynb"}}')"
+stop "Done."; expect "NotebookEdit notebook_path is recorded as an edit" block "risk receipt"
+
 # Subagent edits carry agent_id and still count.
 reset
 gate record "$(jq -cn --arg s "$SID" '{session_id:$s,agent_id:"a1",agent_type:"general-purpose",tool_name:"Write",tool_input:{file_path:"src/app.py"}}')"
@@ -103,6 +167,18 @@ elif [ -s "$TMP_ROOT/sym/target" ]; then
   fail "symlinked log: hook wrote through the symlink"
 else
   echo "OK: symlinked log is refused"
+fi
+
+# A symlinked log dir is refused too.
+mkdir -p "$TMP_ROOT/symdir/data" "$TMP_ROOT/symdir/target"
+ln -s "$TMP_ROOT/symdir/target" "$TMP_ROOT/symdir/data/risk-gate"
+edit src/app.py "CLAUDE_PLUGIN_DATA=$TMP_ROOT/symdir/data"
+if [ "$(cat "$TMP_ROOT/rc")" != 0 ]; then
+  fail "symlinked log dir: hook exited $(cat "$TMP_ROOT/rc"), expected 0"
+elif [ -n "$(find "$TMP_ROOT/symdir/target" -type f)" ]; then
+  fail "symlinked log dir: hook wrote through the symlink"
+else
+  echo "OK: symlinked log dir is refused"
 fi
 
 # The log dir is owner-only. (A dir owned by someone else cannot be simulated without root.)
