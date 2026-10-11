@@ -10,6 +10,8 @@ Claude Code and Google Antigravity IDE are the primary supported targets. OpenCo
 
 Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to get the `using-bearpaws` bootstrap into the agent context so the agent learns to discover and invoke the rest of the skills.
 
+`AGENTS.md` is a symlink to this file, so Codex and other Agent Skills agents read the same guidance.
+
 ## Repository layout
 
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
@@ -98,6 +100,10 @@ tests/hooks/run-hook-tests.sh                                                 # 
 tests/bump-version/run-tests.sh                                               # bump-version.sh rejects malformed versions, writes only declared fields, audit excludes
 tests/harness-wiring/run.sh                                                   # model-free discovery/bootstrap checks for installed codex, opencode, copilot, grok
 tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
+tests/token-measurement/measure.sh                                            # bootstrap and skill-body byte counts (JSON)
+python3 tests/codex/test_conformance.py                                       # Codex conformance unit tests (no CLI)
+python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
+python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
@@ -115,6 +121,8 @@ tests/context-eval/run.sh <label>                                             # 
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, token measurement, hooks, install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.
 
