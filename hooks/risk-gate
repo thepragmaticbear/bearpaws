@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Risk gate for Claude Code. Blocks ending a turn that edited files without a
+# risk receipt, and elevated-risk work marked COMPLETE without an independent
+# review dispatched after the last edit.
+# Modes: reset (UserPromptSubmit), record (PostToolUse), stop (Stop).
+# Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
+# tests/hooks/run-risk-gate-tests.sh pins every rule.
+
+# No errexit: an internal failure must allow the turn, never block it.
+set -uo pipefail
+
+mode="${1:-}"
+[ "${BEARPAWS_ENFORCE:-1}" = 0 ] && exit 0
+# Claude Code only. Other harnesses that read hooks/hooks.json get a no-op.
+[ -n "${CLAUDE_PLUGIN_ROOT:-}" ] || exit 0
+[ -z "${COPILOT_CLI:-}${CURSOR_PLUGIN_ROOT:-}${DEVIN_PROJECT_DIR:-}${DEVIN_PLUGIN_ROOT:-}" ] || exit 0
+if ! command -v jq >/dev/null 2>&1; then
+  echo "bearpaws risk-gate: jq not found, risk gate disabled" >&2
+  exit 0
+fi
+
+input="$(cat)"
+sid="$(jq -r '.session_id // empty' <<<"$input" 2>/dev/null)"
+# session_id becomes a file name: accept only a plain token.
+[[ "$sid" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || exit 0
+dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/risk-gate"
+log="$dir/$sid.log"
+mkdir -p "$dir" 2>/dev/null || exit 0
+
+# ponytail: path-name heuristic, one nudge per turn; replace with a project-declared list if false positives annoy.
+SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
+LEAD='^[[:space:]>*_-]*'
+
+block() { jq -cn --arg r "$1" '{decision: "block", reason: $r}'; exit 0; }
+field() { grep -qiE "${LEAD}$1[*_]*:[*_[:space:]]*$2" <<<"$msg"; }
+
+case "$mode" in
+  reset)
+    : >"$log"
+    ;;
+  record)
+    case "$(jq -r '.tool_name // empty' <<<"$input")" in
+      Edit|Write|MultiEdit|NotebookEdit)
+        path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
+        path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
+        [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
+        ;;
+      Agent|Task)
+        if jq -e '[.tool_input.subagent_type, .tool_input.description, .tool_input.prompt]
+                  | map(. // "") | join(" ") | test("\\breview(er|ing)?\\b"; "i")' <<<"$input" >/dev/null; then
+          echo review >>"$log"
+        fi
+        ;;
+    esac
+    ;;
+  stop)
+    [ -f "$log" ] && grep -q '^edit ' "$log" || exit 0
+    msg="$(jq -r '.last_assistant_message // empty' <<<"$input")"
+    if field Risk elevated; then risk=elevated
+    elif field Risk routine; then risk=routine
+    else block "This turn edited files. End with a risk receipt: Risk, Verified, and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
+    fi
+    field Status INCOMPLETE && exit 0
+    if [ "$risk" = elevated ]; then
+      last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
+      last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
+      [ "${last_review:-0}" -gt "$last_edit" ] && exit 0
+      block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
+    fi
+    grep -qx nudged "$log" && exit 0
+    hits="$(grep '^edit ' "$log" | cut -c6- | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
+    [ -n "$hits" ] || exit 0
+    echo nudged >>"$log"
+    block "Edited ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt."
+    ;;
+esac
+exit 0
