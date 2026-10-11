@@ -25,7 +25,9 @@ sid="$(jq -r '.session_id // empty' <<<"$input" 2>/dev/null)"
 [[ "$sid" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || exit 0
 dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/risk-gate"
 log="$dir/$sid.log"
-mkdir -p "$dir" 2>/dev/null || exit 0
+# The fallback may be a shared temp dir: owner-only, and refuse a dir or log someone else planted.
+umask 077
+mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$log" ] || exit 0
 
 # ponytail: path-name heuristic, one nudge per turn; replace with a project-declared list if false positives annoy.
 SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'

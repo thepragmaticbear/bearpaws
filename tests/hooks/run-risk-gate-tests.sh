@@ -14,16 +14,18 @@ fail() { echo "FAIL: $1"; failures=$((failures + 1)); }
 
 # gate <mode> <json> [VAR=value ...]: run under a clean Claude Code environment.
 gate() {
-  local mode="$1" json="$2"; shift 2
+  local mode="$1" json="$2" rc=0; shift 2
   printf '%s' "$json" | env -u COPILOT_CLI -u CURSOR_PLUGIN_ROOT -u DEVIN_PROJECT_DIR \
     -u DEVIN_PLUGIN_ROOT -u BEARPAWS_ENFORCE \
     CLAUDE_PLUGIN_ROOT="$REPO_ROOT" CLAUDE_PLUGIN_DATA="$TMP_ROOT/data" "$@" \
-    bash "$GATE" "$mode" >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || true
+    bash "$GATE" "$mode" >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
+  echo "$rc" >"$TMP_ROOT/rc"
 }
 reset() { gate reset "{\"session_id\":\"$SID\"}"; }
-edit() {
-  gate record "$(jq -cn --arg s "$SID" --arg p "$1" \
-    '{session_id:$s,tool_name:"Edit",tool_input:{file_path:$p}}')"
+edit() { # <path> [VAR=value ...]
+  local p="$1"; shift
+  gate record "$(jq -cn --arg s "$SID" --arg p "$p" \
+    '{session_id:$s,tool_name:"Edit",tool_input:{file_path:$p}}')" "$@"
 }
 review() {
   gate record "$(jq -cn --arg s "$SID" \
@@ -33,8 +35,10 @@ stop() { # <message> [stop_hook_active]
   gate stop "$(jq -cn --arg s "$SID" --arg m "$1" --argjson a "${2:-false}" \
     '{session_id:$s,hook_event_name:"Stop",stop_hook_active:$a,last_assistant_message:$m}')"
 }
-expect() { # <label> allow|block [reason substring]
-  if [ "$2" = allow ]; then
+expect() { # <label> allow|block [reason substring]; a non-zero hook exit fails either way
+  if [ "$(cat "$TMP_ROOT/rc")" != 0 ]; then
+    fail "$1: hook exited $(cat "$TMP_ROOT/rc"), expected 0"
+  elif [ "$2" = allow ]; then
     if [ -s "$TMP_ROOT/out" ]; then fail "$1: expected allow, got $(cat "$TMP_ROOT/out")"; else echo "OK: $1"; fi
   elif jq -e --arg s "${3:-}" '.decision == "block" and (.reason | contains($s))' "$TMP_ROOT/out" >/dev/null 2>&1; then
     echo "OK: $1"
@@ -80,13 +84,32 @@ else
   echo "OK: malformed session_id writes nothing"
 fi
 
+# A symlinked log is refused: nothing is written through it.
+mkdir -p "$TMP_ROOT/sym/data/risk-gate"
+ln -s "$TMP_ROOT/sym/target" "$TMP_ROOT/sym/data/risk-gate/$SID.log"
+edit src/app.py "CLAUDE_PLUGIN_DATA=$TMP_ROOT/sym/data"
+if [ "$(cat "$TMP_ROOT/rc")" != 0 ]; then
+  fail "symlinked log: hook exited $(cat "$TMP_ROOT/rc"), expected 0"
+elif [ -s "$TMP_ROOT/sym/target" ]; then
+  fail "symlinked log: hook wrote through the symlink"
+else
+  echo "OK: symlinked log is refused"
+fi
+
+# The log dir is owner-only. (A dir owned by someone else cannot be simulated without root.)
+rm -rf "$TMP_ROOT/data"; reset
+case "$(ls -ld "$TMP_ROOT/data/risk-gate")" in
+  drwx------*) echo "OK: log dir is mode 700" ;;
+  *) fail "log dir is not mode 700: $(ls -ld "$TMP_ROOT/data/risk-gate")" ;;
+esac
+
 # Opt-out and other harnesses: always allow.
 reset; edit src/app.py; stop "Done." false
 gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,last_assistant_message:"Done."}')" BEARPAWS_ENFORCE=0
 expect "BEARPAWS_ENFORCE=0: allow" allow
 gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,last_assistant_message:"Done."}')" COPILOT_CLI=1
 expect "Copilot CLI env: allow" allow
-printf '{}' | env -u CLAUDE_PLUGIN_ROOT bash "$GATE" stop >"$TMP_ROOT/out" 2>&1
+rc=0; printf '{}' | env -u CLAUDE_PLUGIN_ROOT bash "$GATE" stop >"$TMP_ROOT/out" 2>&1 || rc=$?; echo "$rc" >"$TMP_ROOT/rc"
 expect "no CLAUDE_PLUGIN_ROOT: allow" allow
 
 # Missing jq: allow, and say why on stderr.
