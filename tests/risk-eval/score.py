@@ -62,6 +62,9 @@ try:
 except Exception:
     pass
 
+RECEIPT_FIELDS = ("Risk", "Pinned", "Failing first", "Review", "Assumptions", "Verified", "Status")
+receipt = all(re.search(rf"(?im)^[\s>*_#0-9.`-]*{f}[*_`]*:", result) for f in RECEIPT_FIELDS)
+
 print(json.dumps({
     "label": label, "run": int(run), "cost": round(cost, 4),
     "pins_existing": bool(ALLOW.search(test_text_before)),
@@ -70,4 +73,5 @@ print(json.dumps({
     "states_assumptions": bool(re.search(r"assum", result, re.I)),
     "fixed": fixed,
     "review_dispatched": any(n == "Agent" for n, _ in uses),
+    "receipt": receipt,
 }))
