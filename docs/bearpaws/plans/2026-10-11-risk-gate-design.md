@@ -29,7 +29,7 @@ State: one log per session, holding the edits not yet accepted by a receipt, at 
 
 | Mode | Event | Behavior |
 |---|---|---|
-| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` (relative to the hook input's `cwd`) or `review` (an Agent/Task call whose `subagent_type` contains `review` at a word boundary, or whose `description` starts with `review`, case-insensitive; only code, spec, final, security, independent, quality, plan, design, or re may precede it, and the description must not be followed by fix, feedback, comment, finding, or follow; never the `prompt`). Subagent edits count too. Paths under `$HOME/.claude*` (`~/.claude`, `~/.claude-team`, ...) or `$CLAUDE_CONFIG_DIR/` are Claude's own config, memory, and plan files and are not recorded. |
+| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` (relative to the hook input's `cwd`) or `review` (an Agent/Task call whose `subagent_type` contains `review` at a word boundary, or whose `description` starts with `review`, case-insensitive; only code, spec, final, security, independent, quality, plan, design, or re may precede it, and the description must not be followed by fix, feedback, comment, finding, or follow; never the `prompt`). Subagent edits count too. Paths under `$HOME/.claude/`, `$HOME/.claude.json`, or `$CLAUDE_CONFIG_DIR/` (for example `~/.claude-team` when that variable is set) are Claude's own config, memory, and plan files and are not recorded. Lookalike project directories such as `~/.claude-work/` or `~/.clauderc-project/` are recorded. |
 | `stop` | `Stop` | Apply the gate below to `last_assistant_message` and the log. |
 
 ### 2. Gate rules (`stop` mode)
@@ -37,10 +37,10 @@ State: one log per session, holding the edits not yet accepted by a receipt, at 
 Read the log in order. `edited` means at least one `edit` line. `reviewed` means a `review` line appears after the last `edit` line, so a review that predates a later edit does not count (same rule as Codex C4).
 
 1. Not `edited` → allow.
-2. No receipt line `Risk: routine|elevated` → block: "This turn edited files. End with a risk receipt: Risk: routine or Risk: elevated (surface), then Verified and Status lines (...). See bp:verification-before-completion." The line may carry a permissive prefix and suffix (`LEAD`/`TRAIL`: list markers, `>`, `#`, `*`, `_`, backticks), and the value may be wrapped in `*`, `_`, or backticks.
+2. No receipt line `Risk: routine|elevated` → block: "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified and Status lines (...). See bp:verification-before-completion." The line may carry a permissive prefix and suffix (`LEAD`/`TRAIL`: list markers, `>`, `#`, `*`, `_`, backticks), and the value may be wrapped in `*`, `_`, or backticks.
 3. The last `Status:` line in the message, whose value must be `INCOMPLETE`, → allow. Honest incompleteness is never blocked. A quoted earlier line or the pasted template `Status: COMPLETE | INCOMPLETE` does not count.
 4. `Risk: elevated` and not `reviewed` → block: "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch bp:requesting-code-review, or set Status: INCOMPLETE."
-5. `Risk: routine` and an edited path matches the sensitive-path pattern → block once per turn (marker line `nudged` in the log): "Edited <paths> look elevated-risk. Reclassify, or keep routine and say why in the receipt." The second time, allow. The `nudged` marker lives in the log, so it persists until a stop is accepted.
+5. `Risk: routine` and an edited path matches the sensitive-path pattern → block once per pending batch (marker line `nudged` in the log): "Edited <paths> look elevated-risk. Reclassify, or keep routine and say why in the receipt." The second time, allow. The `nudged` marker lives in the log, so it persists until a stop is accepted.
 
 Edited paths have CR and LF replaced with spaces before they are logged, so a crafted file name cannot forge a `review` line.
 6. Otherwise allow.
@@ -80,6 +80,7 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 - Other harnesses. They get the receipt as instruction only.
 - Edits made through the Bash tool (`sed -i`, redirects, `git apply`) are not recorded.
 - Background agents. Edits a background subagent makes after the controller ends its turn stay pending across turns until a receipt accepts them, so its report-back turn is judged (this closes the final-review FM-1 gap). The consequence: edits stay pending until a receipt accepts them, so a Q&A turn right after an unreceipted edit also needs a receipt.
+- Unreviewed elevated work marked INCOMPLETE stays pending for the rest of the session. Every later reply needs a receipt until a review is dispatched, or the agent reclassifies to routine after the nudge.
 - Rule 2 checks only the `Risk:` line; `Verified:` and `Status:` are required by the skill text, not the hook.
 - An implementer's own PostToolUse events precede its parent's Agent event, so a review counts only by reviewer `subagent_type` or a description that starts with review.
 - A reviewer described in other words, for example "Thorough review", is blocked. The agent clears that by rewording the description or setting `Status: INCOMPLETE`.

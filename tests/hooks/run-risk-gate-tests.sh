@@ -246,9 +246,18 @@ reset; edit src/ui/button.py; stop $'Done.\n\nRisk: `routine`\nVerified: pytest 
 expect "backticked Risk value: allow" allow
 # M-2: the missing-receipt reason names the allowed values.
 reset; edit src/app.py; stop "Done."; expect "reason names Risk: routine" block "Risk: routine or Risk: elevated (surface)"
+reset; edit src/app.py; stop "Done."; expect "reason says edits are pending" block "Edits are pending without a risk receipt."
+reset; edit src/app.py; stop "Done."
+if grep -q "This turn" "$TMP_ROOT/out"; then fail "block reason still says This turn"; else echo "OK: block reason has no This turn"; fi
 # M-3: Claude's own config, memory, and plan files are not edits.
 reset; edit "$HOME/.claude/projects/x/memory/prefs.md"; stop "Saved."; expect "write under ~/.claude is not an edit" allow
-reset; edit "$HOME/.claude-team/plans/p.md"; stop "Saved."; expect "write under ~/.claude-team is not an edit" allow
+H="$TMP_ROOT/home"
+reset; edit "$H/.claude/projects/x/memory/m.md" HOME="$H"; stop "Saved."; expect "temp HOME: write under ~/.claude is not an edit" allow
+reset; edit "$H/.claude.json" HOME="$H"; stop "Saved."; expect "temp HOME: ~/.claude.json is not an edit" allow
+reset; edit "$H/.claude-work/app/src/billing.py" HOME="$H"; stop "Done."; expect "~/.claude-work project is an edit" block "risk receipt"
+reset; edit "$H/.clauderc-project/main.py" HOME="$H"; stop "Done."; expect "~/.clauderc-project project is an edit" block "risk receipt"
+reset; edit "$H/.claude-team/projects/x/m.md" HOME="$H" CLAUDE_CONFIG_DIR="$H/.claude-team"; stop "Saved."; expect "~/.claude-team with CLAUDE_CONFIG_DIR is not an edit" allow
+reset; edit "$H/.claude-team/projects/x/m.md" HOME="$H"; stop "Done."; expect "~/.claude-team without CLAUDE_CONFIG_DIR is an edit" block "risk receipt"
 reset; edit "/cfg/dir/plans/p.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "write under CLAUDE_CONFIG_DIR is not an edit" allow
 reset; edit "$HOME/notes/.claude.md"; stop "Saved."; expect "other path under HOME is still an edit" block "risk receipt"
 reset; edit "/cfg/dirx/a.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "CLAUDE_CONFIG_DIR prefix needs the slash" block "risk receipt"

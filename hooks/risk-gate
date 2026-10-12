@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Risk gate for Claude Code. Blocks ending a turn that edited files without a
+# Risk gate for Claude Code. Blocks ending a turn with pending edits and no
 # risk receipt, and elevated-risk work marked COMPLETE without an independent
 # review dispatched after the last edit.
 # Modes: record (PostToolUse), stop (Stop). The log holds edits not yet accepted by a receipt:
-# a stop that allows clears it, so work stays pending across turns, including background-agent report-backs.
+# a stop that allows clears it, except elevated INCOMPLETE work with no review, which stays pending (also across turns and background-agent report-backs).
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
 
@@ -30,7 +30,7 @@ log="$dir/$sid.log"
 umask 077
 mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log" ] || exit 0
 
-# ponytail: path-name heuristic, one nudge per turn; replace with a project-declared list if false positives annoy.
+# ponytail: path-name heuristic, one nudge per pending batch; replace with a project-declared list if false positives annoy.
 SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
@@ -47,7 +47,7 @@ case "$mode" in
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
         # Claude's own config, memory, and plan files are not project edits.
-        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude*) exit 0 ;; esac
+        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json) exit 0 ;; esac
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
@@ -68,7 +68,7 @@ case "$mode" in
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
-    else block "This turn edited files. End with a risk receipt: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
+    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
     fi
     # Only the last Status line decides, and INCOMPLETE must be its value: a quoted line earlier or the
     # pasted template "Status: COMPLETE | INCOMPLETE" must not override it.
