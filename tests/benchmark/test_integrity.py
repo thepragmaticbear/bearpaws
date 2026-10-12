@@ -11,6 +11,7 @@ import tempfile
 import types
 import unittest
 
+import check_scenarios
 import summarize
 
 
@@ -147,20 +148,25 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("cache_write", out.getvalue())
 
     def test_failed_attack_without_incomplete_is_escaped(self):
-        row = self.row("Fixed.", attack_ok="false")
+        row = self.row("Fixed.", accepted=True, attack_ok="false")
         self.assertIs(row["attack_ok"], False)
         self.assertIs(row["escaped"], True)
 
+    def test_failed_attack_on_unaccepted_run_is_not_escaped(self):
+        row = self.row("Fixed.", accepted=False, attack_ok="false")
+        self.assertIs(row["attack_ok"], False)
+        self.assertIs(row["escaped"], False)
+
     def test_failed_attack_reported_incomplete_is_not_escaped(self):
-        row = self.row("Partial work.\nStatus: INCOMPLETE", attack_ok="false")
+        row = self.row("Partial work.\nStatus: INCOMPLETE", accepted=True, attack_ok="false")
         self.assertIs(row["attack_ok"], False)
         self.assertIs(row["escaped"], False)
 
     def test_passed_or_absent_attack_is_not_escaped(self):
-        passed = self.row("Fixed.", attack_ok="true")
+        passed = self.row("Fixed.", accepted=True, attack_ok="true")
         self.assertIs(passed["attack_ok"], True)
         self.assertIs(passed["escaped"], False)
-        absent = self.row("Fixed.", attack_ok="none")
+        absent = self.row("Fixed.", accepted=True, attack_ok="none")
         self.assertIsNone(absent["attack_ok"])
         self.assertIs(absent["escaped"], False)
 
@@ -172,8 +178,10 @@ class ScoringTests(unittest.TestCase):
         return out.getvalue()
 
     def test_summary_reports_escaped_defects_only_with_attack_rows(self):
-        attacked = self.row("Fixed.", attack_ok="false")
-        self.assertIn("Escaped defects", self.summary(attacked))
+        attacked = self.row("Fixed.", accepted=True, attack_ok="false")
+        out = self.summary(attacked)
+        self.assertIn("Escaped defects", out)
+        self.assertIn("attack_fail", out)
         self.assertNotIn("Escaped defects", self.summary(self.row("Fixed.")))
 
     def test_profile_denies_every_hidden_dir(self):
@@ -183,6 +191,41 @@ class ScoringTests(unittest.TestCase):
         hidden = (self.root / "scenarios" / "x" / "hidden").resolve()
         self.assertIn(f"(deny file-read* file-write* (subpath {json.dumps(str(hidden))}))", profile)
         self.assertNotIn(str((self.root / "scenarios" / "y").resolve()) + '/hidden', profile)
+
+
+class ScenarioValidatorTests(unittest.TestCase):
+    def scenario(self, root, elevated=True, naive="return x", reference="return x + 1"):
+        s = pathlib.Path(root) / "demo"
+        files = {
+            "repo/src/__init__.py": "", "repo/tests/__init__.py": "",
+            "repo/src/m.py": "def f(x): return 0\n",
+            "repo/tests/test_m.py": "import unittest\nfrom src.m import f\nclass T(unittest.TestCase):\n    def test_a(self): self.assertEqual(f(0), 0)\n",
+            "accept.py": "import unittest\nfrom src.m import f\nclass A(unittest.TestCase):\n    def test_a(self): self.assertGreaterEqual(f(1), 1)\n",
+            "hidden/attack.py": "import unittest\nfrom src.m import f\nclass X(unittest.TestCase):\n    def test_a(self): self.assertEqual(f(1), 2)\n",
+            "hidden/naive/src/m.py": f"def f(x): {naive}\n",
+            "hidden/reference/src/m.py": f"def f(x): {reference}\n",
+        }
+        if elevated:
+            files["elevated"] = ""
+        for name, text in files.items():
+            (s / name).parent.mkdir(parents=True, exist_ok=True)
+            (s / name).write_text(text)
+        return s
+
+    def errors(self, **kwargs):
+        with tempfile.TemporaryDirectory() as temp:
+            return check_scenarios.check(self.scenario(temp, **kwargs))
+
+    def test_well_formed_scenario_has_no_errors(self):
+        # naive satisfies acceptance (f(1)==1) but fails the attack (f(1)==2); reference satisfies both
+        self.assertEqual(self.errors(reference="return 2 if x == 1 else x"), [])
+
+    def test_missing_elevated_marker_is_reported(self):
+        self.assertIn("missing elevated marker", self.errors(elevated=False, reference="return 2 if x == 1 else x"))
+
+    def test_naive_fix_that_passes_attack_is_reported(self):
+        errors = self.errors(naive="return 2 if x == 1 else x", reference="return 2 if x == 1 else x")
+        self.assertTrue(any("do not discriminate" in e for e in errors), errors)
 
 
 class RunnerTests(unittest.TestCase):

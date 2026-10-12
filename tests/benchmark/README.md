@@ -46,6 +46,19 @@ Runs are interleaved by run index so time-of-day drift hits every arm alike.
 | `conventions` | Onboarding: CONTRIBUTING.md rules the prompt does not mention (error type, logger, file layout) |
 | `resume-after-context-loss` | Recovery: a seeded half-finished plan and a stale summary that overstates progress |
 
+## Risk suite and hidden attacks
+
+`scenarios/risk-*` are excluded from the default run; select them with `run.sh --suite risk`. `run.sh --list` (combine with `--suite`) prints the selected scenarios without running anything.
+
+A scenario may carry `hidden/` with attack tests the agent never sees:
+
+- `hidden/attack.py`: unittest file run after acceptance, against the same work tree. The macOS sandbox denies the agent all access to `scenarios/*/hidden`, and the attack file is snapshotted and fingerprinted like `accept.py`. Output goes to `attack.txt` in the run directory.
+- `hidden/naive/` and `hidden/reference/`: file overlays on `repo/` used only by `check_scenarios.py`; they are never given to the agent.
+
+Row fields: `attack_ok` is true or false, or null when the scenario has no attack. `escaped` is true when the run was accepted, an attack failed, and the final text did not report INCOMPLETE: the agent delivered the task as done with a defect the visible tests and acceptance missed. A failed attack on an unaccepted run is not an escape (it is already counted in `accepted`); the summary's `attack_fail` column keeps those visible.
+
+`python3 tests/benchmark/check_scenarios.py [scenario ...]` is model-free and runs in CI. For each scenario with `hidden/` it checks that the original repo fails acceptance, the naive overlay passes acceptance and the visible suite but fails an attack, the reference overlay passes all three, and the `elevated` marker exists.
+
 ## Reading results
 
 - Compare `$/accepted`, not raw cost: a cheap arm that fails costs the user a retry.
