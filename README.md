@@ -120,18 +120,21 @@ A fully specified small fix goes straight to TDD and verification; plans are for
 | `bp:using-git-worktrees` | Process | Isolate feature work in git worktrees |
 | `bp:writing-skills` | Process | Write and test skills with RED/GREEN evals |
 
-## Bearpaws vs Superpowers
+## How Bearpaws differs from Superpowers
+
+Bearpaws began as a fork of [Superpowers](https://github.com/obra/superpowers), and the core discipline is shared: brainstorm, plan, test first, debug systematically, review, verify. The main differences are how much process a change gets and how the end of a change is checked. The table lists those and a few smaller ones.
 
 | | Superpowers 6.4.2 | Bearpaws |
 |---|---|---|
-| Workflow scaling | The same rigorous workflow for every task | Scaled by complexity × risk |
-| Elevated-risk floor | No separate risk tier | Pinned behavior, failing test first, narrow diff, assumptions, independent review |
-| Enforcement | Instructions | Instructions, plus a Claude Code `Stop` hook |
-| Escaped defects (risk benchmark) | 12/30 | 9/30 (not significant, p = 0.59) |
-| Cost on risky work (risk benchmark) | $0.092 per task | $0.219 per task, about 2.4× |
-| Cost on routine work (2026-09-30 run) | $0.096 per task | $0.098 per task |
+| What sets the amount of process | Scope: the agent classifies a request as spike, bounded, or architectural and says so, so the human can override | Scope and blast radius, as two separate axes |
+| Small but risky changes | No separate risk tier. Risk is one input to choosing the reviewer's model, and a security-sensitive action stops execution to ask the human | A fixed floor for [elevated-risk changes](#difficulty-is-not-danger): pinned behavior, failing test first, narrow diff, stated assumptions, independent review |
+| Finishing a change | Verify before claiming done | Verify, then end every reply that changed files with a risk receipt (`Risk`, `Verified`, `Status`) |
+| Findings from review | Critical and Important findings go through a fix loop with re-review. Minor ones are logged for the final review | The same, plus: a same-risk defect found in the changed code is part of the fix even if it falls outside the request, or the work ends `INCOMPLETE` |
+| How the rules are applied | Instructions to the agent | Instructions, plus a Claude Code hook (see [Show me](#show-me)) |
+| Getting to know a project | Part of brainstorming | A separate onboarding step that runs first |
+| Trade-off | No added process for risk, so no added cost for it | Similar cost on routine work in the 2026-09-30 run; more time and cost on elevated work, for pinned tests, failing-first tests and reviews |
 
-Bearpaws began as a fork of [Superpowers](https://github.com/obra/superpowers), and its engineering discipline comes from there.
+Measured results, including where Bearpaws did no better, are in [Evidence](#evidence).
 
 ## Support status
 
