@@ -21,7 +21,8 @@ gate() {
     bash "$GATE" "$mode" >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
   echo "$rc" >"$TMP_ROOT/rc"
 }
-reset() { gate reset "{\"session_id\":\"$SID\"}"; }
+reset() { rm -f "$TMP_ROOT/data/risk-gate/$SID.log"; }
+logfile() { echo "$TMP_ROOT/data/risk-gate/$SID.log"; }
 edit() { # <path> [VAR=value ...]
   local p="$1"; shift
   gate record "$(jq -cn --arg s "$SID" --arg p "$p" \
@@ -72,7 +73,6 @@ reset; edit src/authz.py; stop "$ELEVATED"; stop "$ELEVATED" true
 expect "repeat stop while unmet still blocks" block "independent review"
 reset; edit src/auth/login.py; stop "$ROUTINE"; expect "routine on sensitive path: nudge" block "look elevated-risk"
 stop "$ROUTINE" true; expect "second routine stop after nudge: allow" allow
-reset; edit src/app.py; reset; stop "Answer only."; expect "reset clears the previous turn" allow
 reset; edit "$(printf 'src/x.py\nreview')"; stop "$ELEVATED"
 expect "newline in path cannot forge a review" block "independent review"
 reset; edit src/a.py; review; edit src/authz.py; stop "$ELEVATED"
@@ -213,11 +213,45 @@ else
 fi
 
 # The log dir is owner-only. (A dir owned by someone else cannot be simulated without root.)
-rm -rf "$TMP_ROOT/data"; reset
+rm -rf "$TMP_ROOT/data"; edit src/app.py
 case "$(ls -ld "$TMP_ROOT/data/risk-gate")" in
   drwx------*) echo "OK: log dir is mode 700" ;;
   *) fail "log dir is not mode 700: $(ls -ld "$TMP_ROOT/data/risk-gate")" ;;
 esac
+
+# Edits stay pending until a receipt accepts them, across turns and background-agent report-backs.
+reset; edit src/app.py; stop "dispatched"; expect "background gap: unrelated reply with pending edit needs a receipt" block "risk receipt"
+stop "$ROUTINE"; expect "background gap: routine receipt accepts" allow
+if [ -e "$(logfile)" ]; then fail "accepted stop left the log"; else echo "OK: accepted stop removes the log"; fi
+stop "The answer is 42."; expect "background gap: nothing pending after acceptance" allow
+reset; edit src/authz.py; stop "$ELEVATED"; expect "report-back: elevated COMPLETE without review blocks" block "independent review"
+stop "$ELEVATED"; expect "report-back: elevated work stays pending across turns" block "independent review"
+reset; edit src/authz.py; stop "$ELEVATED_INCOMPLETE"; expect "elevated INCOMPLETE unreviewed: allow" allow
+if grep -qx 'edit src/authz.py' "$(logfile)" 2>/dev/null; then echo "OK: elevated INCOMPLETE unreviewed keeps the log"; else fail "elevated INCOMPLETE unreviewed cleared the log"; fi
+stop "$ELEVATED"; expect "later COMPLETE still needs a review" block "independent review"
+review; stop "$ELEVATED"; expect "later COMPLETE after review: allow" allow
+if [ -e "$(logfile)" ]; then fail "reviewed COMPLETE left the log"; else echo "OK: reviewed COMPLETE removes the log"; fi
+reset; edit src/authz.py; review; stop "$ELEVATED_INCOMPLETE"; expect "elevated INCOMPLETE reviewed: allow" allow
+if [ -e "$(logfile)" ]; then fail "elevated INCOMPLETE reviewed left the log"; else echo "OK: elevated INCOMPLETE reviewed removes the log"; fi
+reset; edit src/auth/login.py; stop "$ROUTINE"; stop "$ROUTINE" true; expect "nudged routine second stop: allow" allow
+if [ -e "$(logfile)" ]; then fail "nudged second stop left the log"; else echo "OK: nudged second stop removes the log"; fi
+reset; edit src/app.py; gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,hook_event_name:"Stop"}')"
+expect "missing message: allow" allow
+if [ -e "$(logfile)" ]; then echo "OK: missing message keeps the log"; else fail "missing message cleared the log"; fi
+reset; edit src/app.py; stop "Done."; expect "block keeps the log" block "risk receipt"
+if [ -e "$(logfile)" ]; then echo "OK: block keeps the log"; else fail "block cleared the log"; fi
+
+# M-1: a backticked Risk value is accepted, like the Status value.
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: `routine`\nVerified: pytest — 3 passed\nStatus: COMPLETE'
+expect "backticked Risk value: allow" allow
+# M-2: the missing-receipt reason names the allowed values.
+reset; edit src/app.py; stop "Done."; expect "reason names Risk: routine" block "Risk: routine or Risk: elevated (surface)"
+# M-3: Claude's own config, memory, and plan files are not edits.
+reset; edit "$HOME/.claude/projects/x/memory/prefs.md"; stop "Saved."; expect "write under ~/.claude is not an edit" allow
+reset; edit "$HOME/.claude-team/plans/p.md"; stop "Saved."; expect "write under ~/.claude-team is not an edit" allow
+reset; edit "/cfg/dir/plans/p.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "write under CLAUDE_CONFIG_DIR is not an edit" allow
+reset; edit "$HOME/notes/.claude.md"; stop "Saved."; expect "other path under HOME is still an edit" block "risk receipt"
+reset; edit "/cfg/dirx/a.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "CLAUDE_CONFIG_DIR prefix needs the slash" block "risk receipt"
 
 # Opt-out and other harnesses: always allow.
 reset; edit src/app.py; stop "Done."; expect "edited log blocks without an opt-out" block "risk receipt"

@@ -121,7 +121,7 @@ claude = json.load(open(f"{root}/hooks/hooks.json"))
 cmd = claude["hooks"]["SessionStart"][0]["hooks"][0]["command"]
 assert "run-hook.cmd\" session-start" in cmd, cmd
 assert len(claude["hooks"]["SessionStart"]) == 1 and len(claude["hooks"]["SessionStart"][0]["hooks"]) == 1, "SessionStart: expected exactly one hook entry"
-for event, mode in (("UserPromptSubmit", "reset"), ("PostToolUse", "record"), ("Stop", "stop")):
+for event, mode in (("PostToolUse", "record"), ("Stop", "stop")):
     entry = claude["hooks"][event][0]
     assert len(claude["hooks"][event]) == 1 and len(entry["hooks"]) == 1, f"{event}: expected exactly one hook entry"
     hook = entry["hooks"][0]

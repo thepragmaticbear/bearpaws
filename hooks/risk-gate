@@ -2,7 +2,8 @@
 # Risk gate for Claude Code. Blocks ending a turn that edited files without a
 # risk receipt, and elevated-risk work marked COMPLETE without an independent
 # review dispatched after the last edit.
-# Modes: reset (UserPromptSubmit), record (PostToolUse), stop (Stop).
+# Modes: record (PostToolUse), stop (Stop). The log holds edits not yet accepted by a receipt:
+# a stop that allows clears it, so work stays pending across turns, including background-agent report-backs.
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
 
@@ -35,12 +36,9 @@ LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
 block() { jq -cn --arg r "$1" '{decision: "block", reason: $r}'; exit 0; }
-field() { grep -qiE "${LEAD}$1${TRAIL}:[*_[:space:]]*$2" <<<"$msg"; }
+field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in
-  reset)
-    : >"$log"
-    ;;
   record)
     case "$(jq -r '.tool_name // empty' <<<"$input")" in
       Edit|Write|MultiEdit|NotebookEdit)
@@ -48,6 +46,9 @@ case "$mode" in
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
+        # Claude's own config, memory, and plan files are not project edits.
+        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude*) exit 0 ;; esac
+        [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
         ;;
@@ -67,20 +68,23 @@ case "$mode" in
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
-    else block "This turn edited files. End with a risk receipt: Risk, Verified, and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
+    else block "This turn edited files. End with a risk receipt: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
     fi
     # Only the last Status line decides, and INCOMPLETE must be its value: a quoted line earlier or the
     # pasted template "Status: COMPLETE | INCOMPLETE" must not override it.
-    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && exit 0
+    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
     if [ "$risk" = elevated ]; then
       last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
-      [ "${last_review:-0}" -gt "$last_edit" ] && exit 0
+      [ "${last_review:-0}" -gt "$last_edit" ] && { rm -f "$log"; exit 0; }
+      # Elevated INCOMPLETE without a review is allowed but stays pending: a later COMPLETE still needs one.
+      [ "$incomplete" = 1 ] && exit 0
       block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
     fi
-    grep -qx nudged "$log" && exit 0
+    [ "$incomplete" = 1 ] && { rm -f "$log"; exit 0; }
+    grep -qx nudged "$log" && { rm -f "$log"; exit 0; }
     hits="$(grep '^edit ' "$log" | cut -c6- | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
-    [ -n "$hits" ] || exit 0
+    [ -n "$hits" ] || { rm -f "$log"; exit 0; }
     echo nudged >>"$log"
     block "Edited ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt."
     ;;
