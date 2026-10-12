@@ -3,15 +3,19 @@
 
 Record:    summarize.py --record --scenario S --arm A --run N --stream F --accepted true ...
 Summarize: summarize.py results.jsonl [more.jsonl ...]
+Supervise: summarize.py --supervise SECONDS -- argv...   (exit 124 on timeout; kills the process tree)
 """
 
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
+import time
 from collections import Counter, defaultdict
 
 
@@ -77,9 +81,151 @@ sys.exit(bad)
 '''
 
 
+def process_table():
+    """{pid: (ppid, lstart)} from `ps -A -o pid=,ppid=,lstart=` (BSD and GNU, LC_ALL=C). Empty if ps fails."""
+    try:
+        out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,lstart="], capture_output=True, text=True,
+                             env=dict(os.environ, LC_ALL="C")).stdout
+    except OSError:
+        return {}
+    table = {}
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            table[int(parts[0])] = (int(parts[1]), " ".join(parts[2].split()))
+    return table
+
+
+def track_descendants(tracked, table):
+    """Add every descendant of a still-verified tracked pid to tracked {pid: lstart}; True if any are new."""
+    kids = defaultdict(list)
+    for pid, (ppid, _) in table.items():
+        kids[ppid].append(pid)
+    todo = [pid for pid, lstart in tracked.items() if pid in table and table[pid][1] == lstart]
+    new = False
+    while todo:
+        for pid in kids.get(todo.pop(), []):
+            if tracked.get(pid) != table[pid][1]:
+                tracked[pid] = table[pid][1]
+                new = True
+            todo.append(pid)
+    return new
+
+
+def signal_verified(tracked, sig, fallback=()):
+    """Send sig to tracked pids whose current lstart still matches (a mismatch is pid reuse: skipped).
+
+    If ps fails (empty table), signal `fallback` pids instead: ones verified earlier in this kill.
+    Returns the pids signalled.
+    """
+    table = process_table()
+    if table:
+        pids = [pid for pid, lstart in tracked.items() if pid in table and table[pid][1] == lstart]
+    else:
+        pids = list(fallback)
+    for pid in pids:
+        try:
+            os.kill(pid, sig)
+        except (ProcessLookupError, PermissionError):
+            pass
+    return pids
+
+
+def kill_verified(tracked):
+    """Freeze the tracked tree (SIGSTOP, up to 3 rounds, so nothing can spawn), then SIGKILL it.
+
+    Every pid we stopped was verified when stopped; if ps fails on the final read we SIGKILL
+    exactly that set rather than leave it stopped forever.
+
+    ponytail: only processes seen alive during a poll are tracked. One that spawns and detaches
+    (or double-forks and is reparented) between two 0.5 s polls escapes; narrow the poll or use
+    cgroups/job objects if that matters.
+    """
+    stopped = set()
+    for _ in range(3):
+        grew = track_descendants(tracked, process_table())
+        stopped.update(signal_verified(tracked, signal.SIGSTOP))
+        if not grew:
+            break
+    signal_verified(tracked, signal.SIGKILL, fallback=stopped)
+
+
+POLL = 0.5
+
+
+def supervise(seconds, argv):
+    """Run argv in its own process group with a wall-clock limit; exit 124 on timeout.
+
+    stdout/stderr are inherited, so run.sh's pipes into stream.jsonl/stderr.txt are unchanged. The
+    tree is killed on every exit path (timeout, normal exit, SIGINT/SIGTERM/SIGHUP), so
+    agent-spawned background loops cannot outlive the session or hold the pipes open. Descendants
+    (including setsid ones) are recorded with their start time while the child runs, so they can
+    still be found and verified after the child exits and they are reparented to init.
+    """
+    try:
+        child = subprocess.Popen(argv, start_new_session=True)
+    except OSError as e:
+        print(f"supervise: cannot run {argv[0]}: {e}", file=sys.stderr)
+        return 127
+    tracked = {}
+    entry = process_table().get(child.pid)
+    if entry:
+        tracked[child.pid] = entry[1]
+
+    def on_signal(signum, _frame):
+        raise SystemExit(128 + signum)
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, on_signal)
+    try:
+        deadline = time.monotonic() + seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                code = child.wait(timeout=min(POLL, remaining))
+                return code if code >= 0 else 128 - code
+            except subprocess.TimeoutExpired:
+                track_descendants(tracked, process_table())
+        # TERM goes to the group only: TERMing a tracked setsid spawner would orphan children it forks
+        # before dying, untracked. Those processes are frozen and killed in the finally instead.
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):  # macOS: EPERM when the group holds a zombie
+            pass
+        try:
+            child.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        return 124
+    finally:
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, signal.SIG_IGN)
+        kill_verified(tracked)
+        try:
+            os.killpg(child.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        child.poll()
+
+
+SUPERVISE_USAGE = "usage: summarize.py --supervise SECONDS -- COMMAND [ARG...]   (SECONDS > 0)"
+
+
+def supervise_main(args):
+    try:
+        seconds = float(args[0])
+        if not (0 < seconds < float("inf")) or args[1] != "--" or len(args) < 3:
+            raise ValueError
+    except (ValueError, IndexError):
+        print(SUPERVISE_USAGE, file=sys.stderr)
+        return 2
+    return supervise(seconds, args[2:])
+
+
 def parse_stream(path):
     """Pull cost, turns, and tool usage out of a stream-json transcript."""
-    turns, tokens, result_text = 0, {}, ""
+    turns, tokens, result_text, result_texts = 0, {}, "", []
     skills, agents, asked = [], set(), False
     reviews, returned = set(), set()
     results, result_errors = 0, False
@@ -132,6 +278,7 @@ def parse_stream(path):
                 session_costs[session_id] = max(session_costs.get(session_id, 0), event.get("total_cost_usd") or 0.0)
                 session_turns[session_id] = max(session_turns.get(session_id, 0), event.get("num_turns") or 0)
                 result_text = event.get("result") or ""
+                result_texts.append(result_text)
                 usage = event.get("usage") or {}
                 for key, field in (("input", "input_tokens"), ("output", "output_tokens"),
                                    ("cache_read", "cache_read_input_tokens"),
@@ -151,6 +298,7 @@ def parse_stream(path):
         "asked_user": asked,
         "final_chars": len(result_text),
         "final_text": result_text,
+        "all_text": "\n".join(result_texts),
         "ended_with_question": result_text.rstrip().endswith("?"),
     }
 
@@ -248,12 +396,13 @@ def record(args):
     row["cli_exit_code"] = getattr(args, "cli_exit_code", None)
     row["fixture_integrity"] = getattr(args, "fixture_integrity", "unknown")
     row["checker_isolation"] = getattr(args, "checker_isolation", "unknown")
-    row["session_ok"] &= row["cli_exit_code"] in (None, 0)
+    row["timed_out"] = getattr(args, "timed_out", "false") == "true"
+    row["session_ok"] &= row["cli_exit_code"] in (None, 0) and not row["timed_out"]
     row["acceptance_ok"] = row["accepted"]
     row["accepted"] &= row["session_ok"] and row["visible_ok"] and row["fixture_integrity"] != "false"
     final = row.pop("final_text", "")
-    # Unsupported completion claim: the agent says it is done but acceptance fails.
-    incomplete = row["reported_incomplete"] = reported_incomplete(final)
+    # The last Status: line across every reply decides (a later reply may carry no Status line).
+    incomplete = row["reported_incomplete"] = reported_incomplete(row.pop("all_text", final))
     row["attack_ok"] = {"true": True, "false": False}.get(getattr(args, "attack_ok", "none"))
     # Escaped: delivered as accepted and not flagged INCOMPLETE, yet an attack fails.
     row["escaped"] = row["attack_ok"] is False and row["accepted"] and not incomplete
@@ -278,7 +427,7 @@ def summarize(paths):
         for r in rows:
             groups[key_fn(r)].append(r)
         print(f"\n{title}")
-        print(f"{'group':<34} {'n':>3} {'accepted':>9} {'tests':>6} {'cost':>8} {'$/acc':>7} {'mean s':>7} {'subag':>6} {'review req/ret':>14} {'asked':>6} {'regr':>5} {'claim':>6} {'gate':>5}")
+        print(f"{'group':<34} {'n':>3} {'accepted':>9} {'tests':>6} {'cost':>8} {'$/acc':>7} {'mean s':>7} {'subag':>6} {'review req/ret':>14} {'asked':>6} {'regr':>5} {'claim':>6} {'gate':>5} {'timeouts':>8}")
         for key in sorted(groups):
             g = groups[key]
             acc = sum(r["accepted"] for r in g)
@@ -291,8 +440,9 @@ def summarize(paths):
             regr = sum(not r.get("visible_ok", True) for r in g)
             claims = sum(r.get("unsupported_claim", False) for r in g)
             gates = sum(r.get("missed_gate", False) for r in g)
+            timeouts = sum(r.get("timed_out", False) for r in g)
             reviews = f"{sum(r.get('reviews_requested', 0) for r in g)}/{sum(r.get('reviews_returned', 0) for r in g)}"
-            print(f"{key:<34} {len(g):>3} {acc:>4}/{len(g):<4} {cover:>6.2f} {cost:>8.3f} {per:>7} {secs:>7.0f} {subs:>6.1f} {reviews:>14} {asked:>6} {regr:>5} {claims:>6} {gates:>5}")
+            print(f"{key:<34} {len(g):>3} {acc:>4}/{len(g):<4} {cover:>6.2f} {cost:>8.3f} {per:>7} {secs:>7.0f} {subs:>6.1f} {reviews:>14} {asked:>6} {regr:>5} {claims:>6} {gates:>5} {timeouts:>8}")
 
     print("tests=mean share of acceptance test methods passed (not requirement coverage); regr=visible suite fails;")
     print("claim=completion-text heuristic without accepted result; gate=elevated-risk run without returned review or explicit INCOMPLETE status")
@@ -342,6 +492,8 @@ def summarize(paths):
 
 
 def main():
+    if sys.argv[1:2] == ["--supervise"]:  # --supervise SECONDS -- argv...
+        sys.exit(supervise_main(sys.argv[2:]))
     parser = argparse.ArgumentParser()
     parser.add_argument("--record", action="store_true")
     parser.add_argument("--scenario")
@@ -357,6 +509,7 @@ def main():
     parser.add_argument("--cli-exit-code", type=int)
     parser.add_argument("--fixture-integrity", choices=("true", "false", "unknown"), default="unknown")
     parser.add_argument("--attack-ok", choices=("true", "false", "none"), default="none")
+    parser.add_argument("--timed-out", choices=("true", "false"), default="false")
     parser.add_argument("--checker-source", action="store_true")
     parser.add_argument("--fingerprint", nargs="+")
     parser.add_argument("--sandbox-profile", nargs=4, metavar=("SOURCE", "SNAPSHOT", "OUTPUT", "WORK"))

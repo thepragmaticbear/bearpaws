@@ -3,7 +3,7 @@
 #
 # Usage: tests/benchmark/run.sh [--runs N] [--arms "baseline bearpaws"] [--scenarios "a b"]
 #                               [--model MODEL] [--budget USD] [--jobs N] [--out DIR] [--interactive]
-#                               [--suite risk] [--list]
+#                               [--suite risk] [--list] [--session-timeout SECONDS]
 #
 # Default scenarios exclude risk-*; --suite risk selects only those (they carry hidden attacks).
 # --list prints the selected scenarios and exits.
@@ -30,6 +30,7 @@ SCENARIOS="$(ls "$SCRIPT_DIR/scenarios" | grep -v '^risk-' || true)"
 LIST=false
 MODEL="${BENCH_MODEL:-sonnet}"
 BUDGET=5
+SESSION_TIMEOUT="${BENCH_SESSION_TIMEOUT:-900}"
 JOBS=3
 ALLOW_UNISOLATED=false
 OUT="/tmp/bearpaws-tests/benchmark/$(date +%Y%m%d-%H%M%S)"
@@ -49,6 +50,7 @@ while [[ $# -gt 0 ]]; do
         --list) LIST=true; shift ;;
         --model) MODEL="$2"; shift 2 ;;
         --budget) BUDGET="$2"; shift 2 ;;
+        --session-timeout) SESSION_TIMEOUT="$2"; shift 2 ;;
         --jobs) JOBS="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --interactive) SUFFIX=""; shift ;;
@@ -57,6 +59,8 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
+
+[[ "$SESSION_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "--session-timeout must be a positive integer (seconds), got: $SESSION_TIMEOUT" >&2; exit 2; }
 
 if [[ "$LIST" == true ]]; then printf '%s\n' $SCENARIOS; exit 0; fi
 if [[ -z "${SCENARIOS//[[:space:]]/}" ]]; then echo "no scenarios selected" >&2; exit 2; fi
@@ -69,12 +73,14 @@ elif [[ "$(uname -s)" != Darwin || ! -x /usr/bin/sandbox-exec ]]; then
     exit 1
 fi
 
-# One claude -p session; appends to <rdir>/stream.jsonl. Uses plugin_args from the caller.
+# One claude -p session under a wall-clock supervisor (exit 124 after >= SESSION_TIMEOUT s = timed out; whole process tree killed);
+# appends to <rdir>/stream.jsonl. Uses plugin_args from the caller.
 session() {
     local work="$1" prompt="$2" rdir="$3"; shift 3
     (set -o pipefail
      cd "$work" || exit 1
-     ${isolation_args[@]+"${isolation_args[@]}"} env -u CLAUDECODE claude -p "$prompt" \
+     python3 "$SCRIPT_DIR/summarize.py" --supervise "$SESSION_TIMEOUT" -- \
+        ${isolation_args[@]+"${isolation_args[@]}"} env -u CLAUDECODE claude -p "$prompt" \
         --model "$MODEL" \
         --setting-sources project,local \
         --strict-mcp-config \
@@ -168,7 +174,7 @@ run_one() {
         --scenario "$scenario" --arm "$arm" --run "$run" \
         --stream "$rdir/stream.jsonl" --accepted "$accept_ok" \
         --accept-log "$rdir/accept.txt" --visible-ok "$visible_ok" \
-        --cli-exit-code "$cli_exit_code" --fixture-integrity "$fixture_integrity" \
+        --cli-exit-code "$cli_exit_code" --timed-out "$([[ $cli_exit_code -eq 124 && $((end - start)) -ge $SESSION_TIMEOUT ]] && echo true || echo false)" --fixture-integrity "$fixture_integrity" \
         --checker-isolation "$CHECKER_ISOLATION" --attack-ok "$attack_ok" \
         --elevated "$([ -f "$sdir/elevated" ] && echo true || echo false)" \
         --seconds $((end - start)) --tests-touched "$tests_touched" \
@@ -177,7 +183,7 @@ run_one() {
 }
 export -f run_one session run_checker
 CHECKER_SRC="$(python3 "$SCRIPT_DIR/summarize.py" --checker-source)"
-export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SUFFIX CHECKER_ISOLATION CHECKER_SRC
+export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SESSION_TIMEOUT SUFFIX CHECKER_ISOLATION CHECKER_SRC
 
 mkdir -p "$OUT"
 echo "Output: $OUT (model=$MODEL runs=$RUNS arms=[$ARMS])"
