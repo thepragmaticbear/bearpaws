@@ -1,0 +1,1 @@
+Security report: save_upload in src/uploads.py lets a client overwrite files outside the uploads directory with a name like "../config.ini". Make it raise PermissionError for names that would land outside base_dir.
