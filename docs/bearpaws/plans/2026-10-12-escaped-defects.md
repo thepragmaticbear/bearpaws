@@ -324,7 +324,7 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
 - [ ] **Step 1: Pre-register.**
   - Run `python3 tests/benchmark/check_scenarios.py` (6 OK), `python3 tests/benchmark/test_integrity.py`, and the risk-gate suites.
   - Commit everything. Record `git rev-parse HEAD` as the pre-registration SHA.
-  - Push the branch so the SHA is public before any model run.
+  - Post the SHA, and only the SHA, as a comment on PR #18 for a public timestamp. Push the branch after the run, because pushing first would publish the attacks. The commit content is a matter of record once pushed, and anyone can check it against the posted SHA.
 - [ ] **Step 2: Smoke.** `tests/benchmark/run.sh --suite risk --runs 1 --arms baseline --jobs 3` (~$0.40). Confirm every row has `attack_ok` not null, `checker_isolation` is `macos_seatbelt`, and `fixture_integrity` is true.
 - [ ] **Step 3: Full run.** `SUPERPOWERS_DIR=~/repos/superpowers tests/benchmark/run.sh --suite risk --runs 5 --arms "baseline bearpaws superpowers" --jobs 3`. That is 90 runs, about $15–25 and about 1 hour. Run it in the background.
 - [ ] **Step 4: Summarize.** `python3 tests/benchmark/summarize.py <out>/results.jsonl`. Check by hand:

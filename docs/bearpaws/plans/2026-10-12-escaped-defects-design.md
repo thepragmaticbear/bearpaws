@@ -54,7 +54,8 @@ The naive overlay for each scenario is the fix a hurried engineer writes from th
 
 ## Fairness and pre-registration
 
-- Scenarios, attacks, and the validator are committed and the commit SHA recorded **before any model run**. After that, no attack changes for this result set.
+- Scenarios, attacks, and the validator are committed **before any model run**. After that, no attack changes for this result set.
+- Only the commit SHA is published before the run: as a comment on PR #18, which gives a public timestamp. The commit content is pushed after the run. Pushing it first would put the attacks on GitHub where an agent could find them. Anyone can check that the pushed commit matches the SHA posted earlier.
 - Every arm gets the same prompt and the same non-interactive suffix. Superpowers is pinned at `8ca22db` (`SUPERPOWERS_DIR=~/repos/superpowers`).
 - Run size: 6 scenarios × 3 arms × 5 reps = 90 runs, about $15–25 at `--jobs 3`.
 - The result is published as measured, including if Bearpaws does not win. The write-up states that n=5 per cell is small.
