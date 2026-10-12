@@ -93,3 +93,39 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 ## Out of scope
 
 The escaped-defect benchmark (C), routine-path cost work (D), and the README rewrite (E). Each gets its own design after this ships.
+
+## Results (2026-10-12)
+
+Prompt-only `tests/risk-eval/run.sh` (3 runs each, sonnet, no plugin loaded):
+
+```
+baseline:   pins_existing 3/3  narrow_diff 3/3  states_assumptions 3/3  fixed 3/3  review_dispatched 2/3  receipt 0/3  tests-before-edit [5, 5, 5]  mean $0.129
+receipt:    pins_existing 3/3  narrow_diff 3/3  states_assumptions 3/3  fixed 3/3  review_dispatched 1/3  receipt 3/3  tests-before-edit [5, 5, 5]  mean $0.077
+receipt-r2: pins_existing 3/3  narrow_diff 3/3  states_assumptions 3/3  fixed 3/3  review_dispatched 2/3  receipt 3/3  tests-before-edit [5, 5, 5]  mean $0.209
+trimmed:    pins_existing 3/3  narrow_diff 3/3  states_assumptions 3/3  fixed 3/3  review_dispatched 3/3  receipt 3/3  tests-before-edit [5, 5, 5]  mean $0.213
+```
+
+In the prompt-only runs, reviews were skipped in some runs because the eval does not load the plugin (those runs said the bp skills were unavailable); `review_dispatched` there is not a hook result.
+
+Live, with `PLUGIN_DIR` set (hooks active):
+
+```
+live: pins_existing 3/3  narrow_diff 3/3  states_assumptions 3/3  fixed 3/3  review_dispatched 3/3  receipt 3/3  tests-before-edit [5, 5, 5]  mean $0.292
+```
+
+Bootstrap size (`bootstrap_additional_context_bytes`): 4381 (before the receipt) -> 4773 (receipt) -> 4673 (trimmed paragraph).
+
+`tests/verification-eval/run.sh`, before (582d098~1) and after (current) the `## Risk receipt` section; 3 runs per variant:
+
+```
+before/skip: caught 3/3  before/assert: caught 3/3
+after/skip:  caught 3/3  after/assert:  caught 3/3
+```
+
+Hook evidence (live runs):
+
+- Each transcript has `system` events `hook_started` / `hook_response` for `SessionStart:startup`, and the bootstrap arrived in `additionalContext`.
+- The risk-gate logs were written under `~/.claude-team/plugins/data/bp-inline/risk-gate/` (`CLAUDE_CONFIG_DIR` is `~/.claude-team`), named by the transcripts' session IDs. live-1: `edit src/authz.py`, `review`. live-3: `edit tests/test_authz.py`, `edit src/authz.py`, `review`. So the UserPromptSubmit and PostToolUse hooks ran, and the matcher counted the `bp:code-reviewer` / "Review authz fix" dispatch in both.
+- live-2's log is empty: its background review finished after the first turn, the notification started a second turn, and the UserPromptSubmit reset cleared the log.
+- No transcript shows a Stop-hook block. Stop-hook events do not appear in the stream-json output, and every session dispatched its review before the final reply, so no block was needed. The Stop hook running is therefore not directly evidenced.
+- live-2 ended its first turn with `Status: INCOMPLETE (waiting on review)` although it had dispatched a review.
