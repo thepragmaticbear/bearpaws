@@ -132,7 +132,7 @@ assert len(pre) == 1 and len(pre[0]["hooks"]) == 1, "PreToolUse: expected exactl
 assert pre[0]["matcher"] == "Bash", pre[0].get("matcher")
 assert pre[0]["hooks"][0]["command"] == '"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" risk-gate baseline', pre[0]["hooks"][0]["command"]
 assert pre[0]["hooks"][0].get("timeout") == 10, pre[0]["hooks"][0].get("timeout")
-assert claude["hooks"]["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Bash|Agent|Task"
+assert claude["hooks"]["PostToolUse"][0]["matcher"] == "Edit|Write|MultiEdit|NotebookEdit|Bash|Agent|Task|SendMessage"
 assert "matcher" not in claude["hooks"]["Stop"][0]
 cursor = json.load(open(f"{root}/hooks/hooks-cursor.json"))
 assert cursor["version"] == 1

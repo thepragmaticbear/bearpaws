@@ -2,6 +2,7 @@
 # Risk gate for Claude Code. Blocks ending a turn with pending edits and no
 # risk receipt, and elevated-risk work marked COMPLETE without an independent
 # review dispatched after the last edit.
+# Edits are logged as "edit <path>" or "edit-test <path>"; Bash edits are "edit (bash)", never test-only.
 # Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop). Bash edits are detected by a git tree fingerprint kept per repo in <session_id>.<repo hash>.tree, which accepted stops do not clear. The log holds edits not yet accepted by a receipt:
 # a stop that allows clears it, except elevated INCOMPLETE work with no review, which stays pending (also across turns and background-agent report-backs).
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
@@ -32,6 +33,11 @@ mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log"
 
 # ponytail: path-name heuristic, one nudge per pending batch; replace with a project-declared list if false positives annoy.
 SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
+# Review description: starts with "review", optionally preceded only by words from a closed list, and not followed by a fix word.
+# Shared by Agent/Task descriptions and SendMessage summaries.
+REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[\s-]+)*review(ing)?\b(?!\W*(fix|feedback|comment|finding|follow))'
+# Test files: a tests/test/__tests__ directory, or a conventional test file name. Name-only heuristic.
+TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.(jsx?|tsx?|mjs|cjs)|[^/]*_spec\.rb|[^/]*Test\.java)$'
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
@@ -100,25 +106,27 @@ case "$mode" in
         [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json) exit 0 ;; esac
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
-        [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
+        if [ -n "$path" ]; then
+          # edit-test: a test-file edit, which does not restart the review requirement. Bash edits are never test-only.
+          if [[ "$path" != /* && "$path" != *../* && "$path" =~ $TESTFILE ]]; then printf 'edit-test %s\n' "$path" >>"$log"; else printf 'edit %s\n' "$path" >>"$log"; fi
+        fi
         track_tree "$cwd" "$tool"
         ;;
       Bash)
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         ;;
-      Agent|Task)
-        # Reviewer subagent_type (word-boundary "review"), or a description that starts with "review",
-        # optionally preceded only by words from a closed list (code, spec, final, ...), and not followed by
-        # a fix word (fix, feedback, comment, finding, follow). Never the prompt: an implementer's says "Self-review".
-        if jq -e '.tool_input | ((.subagent_type // "" | tostring | test("\\breview"; "i"))
-                  or (.description // "" | tostring | test("^\\W*((code|spec|final|security|independent|quality|plan|design|re)[\\s-]+)*review(ing)?\\b(?!\\W*(fix|feedback|comment|finding|follow))"; "i")))' <<<"$input" >/dev/null 2>&1; then
+      Agent|Task|SendMessage)
+        # Reviewer subagent_type (word-boundary "review"), or a description (SendMessage: its summary, not when addressed to main, never its
+        # message) matching REVIEW_DESC. Never the prompt: an implementer's says "Self-review".
+        if jq -e --arg re "$REVIEW_DESC" '.tool_input | ((.subagent_type // "" | tostring | test("\\breview"; "i"))
+                  or ((if $tool == "SendMessage" then (if .to == "main" then null else .summary | strings end) else .description end) // "" | tostring | test($re; "i")))' --arg tool "$tool" <<<"$input" >/dev/null 2>&1; then
           echo review >>"$log"
         fi
         ;;
     esac
     ;;
   stop)
-    [ -f "$log" ] && grep -q '^edit ' "$log" || exit 0
+    [ -f "$log" ] && grep -qE '^edit(-test)? ' "$log" || exit 0
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
@@ -128,7 +136,9 @@ case "$mode" in
     # pasted template "Status: COMPLETE | INCOMPLETE" must not override it.
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
     if [ "$risk" = elevated ]; then
+      # The review must follow the last non-test edit; with only test edits, the last edit of any kind.
       last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
+      [ -n "$last_edit" ] || last_edit="$(grep -nE '^edit-test ' "$log" | tail -1 | cut -d: -f1)"
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
       [ "${last_review:-0}" -gt "$last_edit" ] && { rm -f "$log"; exit 0; }
       # Elevated INCOMPLETE without a review is allowed but stays pending: a later COMPLETE still needs one.
@@ -137,7 +147,7 @@ case "$mode" in
     fi
     [ "$incomplete" = 1 ] && { rm -f "$log"; exit 0; }
     grep -qx nudged "$log" && { rm -f "$log"; exit 0; }
-    hits="$(grep '^edit ' "$log" | cut -c6- | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
+    hits="$(grep -E '^edit(-test)? ' "$log" | sed -E 's/^edit(-test)? //' | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
     [ -n "$hits" ] || { rm -f "$log"; exit 0; }
     echo nudged >>"$log"
     block "Edited ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt."

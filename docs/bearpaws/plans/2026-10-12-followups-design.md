@@ -77,3 +77,23 @@ This run re-ran the frozen risk suite against the Bearpaws arm only, using the b
 - **Re-review cost:** Bash-edit detection with mandatory re-review added 39% more reviews and 17% more cost per run. It found no additional defects on this suite. The hole it closes is a different one: an agent that edits only through Bash can no longer finish elevated work with no review. None of these six scenarios exercises that path.
 - **Timeouts:** the 3 timeouts are `reset-token/2`, `reset-token/3` and `refund/3`. In each, the session called `ScheduleWakeup` to wait for a background reviewer and was cut off at 900 s. They are counted as not accepted and were not rerun. Long waits also appear in the earlier runs: the maximum was 1231 s in the pre-registered run and 1309 s in the review-findings run. The jsonl data has no field for the cause, but the C transcripts show `ScheduleWakeup` waits. This is the next lever: dispatch the required review in the foreground instead of waiting on a background review.
 - **Comparison:** this is a same-arm before/after on frozen scenarios and was not pre-registered.
+
+## Live trial findings (2026-10-12, interactive)
+
+A live session ran a scratch authorization fix under the gate:
+
+- Edit without a receipt: the gate sent non-error Stop feedback, and the agent added the receipt.
+- Elevated COMPLETE without a review: blocked.
+- Review 1 found a null-org bypass in the same risk class. The agent fixed it with its own failing tests rather than shipping it as out of scope.
+- A fix made after the review required a fresh review.
+
+The trial also found two gaps, both fixed on `feat/gate-review-loop`:
+
+1. A re-review sent via `SendMessage` was not counted. Now a `SendMessage` counts as a review when its summary matches the review rule and it is not addressed to `main`.
+2. Each review could request more tests, and each test edit restarted the review requirement.
+
+   Now edits to test files (classified only for relative paths with no `..`) don't restart it. Production edits and Bash edits still do.
+
+   A clean live probe confirmed this: a test-only edit after the review was followed by an accepted `Status: COMPLETE`.
+
+A related note: unresolved elevated work left INCOMPLETE stays pending for the rest of the session, so every later reply carries a receipt until a review clears it.
