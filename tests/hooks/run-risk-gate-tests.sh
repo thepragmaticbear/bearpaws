@@ -90,13 +90,30 @@ expect "implementer dispatch is not a review" block "independent review"
 reset; edit src/authz.py; dispatch Task bp:code-reviewer "Review authz fix"; stop "$ELEVATED"
 expect "review dispatched via Task counts" allow
 for row in "yes|bp:code-reviewer|Implement Task 3" \
+           "yes|bp:code-reviewer|Do the task" \
+           "yes|pr-review-toolkit:code-reviewer|Do the task" \
+           "no|preview-builder|Do the task" \
            "yes|general-purpose|Review spec compliance for Task 3" \
            "yes|general-purpose|Code review of authz fix" \
            "yes|general-purpose|Final review" \
            "yes|general-purpose|Reviewing task 2" \
+           "yes|general-purpose|Security review of authz" \
+           "yes|general-purpose|Final code review" \
+           "yes|general-purpose|Independent code review" \
+           "yes|general-purpose|Re-review Task 3" \
+           "yes|general-purpose|Spec review for Task 3" \
            "no|general-purpose|Implement Task 2" \
            "no|general-purpose|Fix the issues the reviewer found" \
            "no|general-purpose|Fix reviewer findings" \
+           "no|general-purpose|Fix review comments" \
+           "no|general-purpose|Address review feedback" \
+           "no|general-purpose|Apply review fixes" \
+           "no|general-purpose|Handle review findings for Task 3" \
+           "no|general-purpose|Skip review, just implement" \
+           "no|general-purpose|Implement review queue" \
+           "no|general-purpose|Respond to review" \
+           "no|general-purpose|Code review fixes" \
+           "no|general-purpose|Final review feedback for Task 3" \
            "no|general-purpose|Preview the page" \
            "no|general-purpose|Previewing the page" \
            "no|general-purpose|Reviewer follow-ups for Task 2"; do
@@ -121,6 +138,16 @@ if jq -e '.reason | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
 else
   echo "OK: nudge reason shows the relative path"
 fi
+
+# INCOMPLETE must be the Status value, not a word elsewhere on the line.
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: COMPLETE | INCOMPLETE}"
+expect "template line 'COMPLETE | INCOMPLETE': block" block "independent review"
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: COMPLETE (nothing left INCOMPLETE)}"
+expect "'COMPLETE (nothing left INCOMPLETE)': block" block "independent review"
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/**Status:** INCOMPLETE}"
+expect "markdown-bold '**Status:** INCOMPLETE': allow" allow
+reset; edit src/authz.py; stop "${ELEVATED_INCOMPLETE//$'\n'/$'\r\n'}"$'\r'
+expect "CRLF message ending 'Status: INCOMPLETE': allow" allow
 
 # Only the last Status line decides.
 QUOTED=$'The reviewer said:\n> Status: INCOMPLETE\n\n'
