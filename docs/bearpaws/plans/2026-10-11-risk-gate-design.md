@@ -30,7 +30,7 @@ State: one append-only log per session at `${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}
 | Mode | Event | Behavior |
 |---|---|---|
 | `reset` | `UserPromptSubmit` | Truncate the session log. Each turn is judged on its own tool use. |
-| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` (relative to the hook input's `cwd`) or `review` (an Agent/Task call whose `subagent_type` contains `review`, or whose `description` matches `^\W*(\w+\s+)?review(ing)?\b`, case-insensitive; never the `prompt`). Subagent edits count too. |
+| `record` | `PostToolUse` (matcher `Edit\|Write\|MultiEdit\|NotebookEdit\|Agent\|Task`) | Append `edit <path>` (relative to the hook input's `cwd`) or `review` (an Agent/Task call whose `subagent_type` contains `review` at a word boundary, or whose `description` starts with `review`, case-insensitive; only code, spec, final, security, independent, quality, plan, design, or re may precede it, and the description must not be followed by fix, feedback, comment, finding, or follow; never the `prompt`). Subagent edits count too. |
 | `stop` | `Stop` | Apply the gate below to `last_assistant_message` and the log. |
 
 ### 2. Gate rules (`stop` mode)
@@ -81,6 +81,7 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 - An agent running in the background from an earlier turn can record edits into a later turn.
 - Rule 2 checks only the `Risk:` line; `Verified:` and `Status:` are required by the skill text, not the hook.
 - An implementer's own PostToolUse events precede its parent's Agent event, so a review counts only by reviewer `subagent_type` or a description that starts with review.
+- A reviewer described in other words, for example "Thorough review", is blocked. The agent clears that by rewording the description or setting `Status: INCOMPLETE`.
 
 ## Testing
 
