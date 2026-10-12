@@ -79,7 +79,7 @@ track_tree() { # <cwd> <tool>
   return 0
 }
 
-block() { jq -cn --arg r "$1" '{decision: "block", reason: $r}'; exit 0; }
+block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
 field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in

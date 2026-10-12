@@ -52,7 +52,7 @@ expect() { # <label> allow|block [reason substring]; a non-zero hook exit fails 
     fail "$1: hook exited $(cat "$TMP_ROOT/rc"), expected 0"
   elif [ "$2" = allow ]; then
     if [ -s "$TMP_ROOT/out" ]; then fail "$1: expected allow, got $(cat "$TMP_ROOT/out")"; else echo "OK: $1"; fi
-  elif jq -e --arg s "${3:-}" '.decision == "block" and (.reason | contains($s))' "$TMP_ROOT/out" >/dev/null 2>&1; then
+  elif jq -se --arg s "${3:-}" 'length == 1 and (.[0] | (has("decision") | not) and (keys == ["hookSpecificOutput"]) and .hookSpecificOutput.hookEventName == "Stop" and (.hookSpecificOutput.additionalContext | contains($s)))' "$TMP_ROOT/out" >/dev/null 2>&1; then
     echo "OK: $1"
   else
     fail "$1: expected block containing '${3:-}', got '$(cat "$TMP_ROOT/out")'"
@@ -136,7 +136,7 @@ expect "non-string last_assistant_message: allow" allow
 CWD=/Users/maclean/repos/oauth-proxy
 reset; editc "$CWD" "$CWD/src/ui/button.py"; stop "$ROUTINE"; expect "sensitive project dir, routine path: allow" allow
 reset; editc "$CWD" "$CWD/src/auth/login.py"; stop "$ROUTINE"; expect "sensitive path under cwd still nudges" block "src/auth/login.py"
-if jq -e '.reason | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
+if jq -e '.hookSpecificOutput.additionalContext | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
   fail "nudge reason leaks the absolute path: $(cat "$TMP_ROOT/out")"
 else
   echo "OK: nudge reason shows the relative path"

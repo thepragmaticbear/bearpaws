@@ -14,6 +14,7 @@ From the Claude Code hooks reference (`code.claude.com/docs/en/hooks`, read 2026
 
 - `Stop` input carries `session_id`, `stop_hook_active`, and `last_assistant_message`. Use `last_assistant_message`; the transcript may not include the final message at Stop time.
 - `{"decision":"block","reason":"..."}` keeps Claude working and delivers `reason` as the explanation.
+- `{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"..."}}` is non-error feedback: the conversation continues so Claude can act on it, but the transcript shows it as hook feedback instead of a hook error. It has the same loop protections as `decision: "block"` (`stop_hook_active` and the eight-continuation cap).
 - Loop protection: `stop_hook_active` is true when Claude is already continuing because of a stop hook, and Claude Code overrides the next block after eight consecutive continuations (the count resets on any tool call).
 - `Stop` ignores matchers. `PostToolUse` receives `tool_name` and `tool_input`. `UserPromptSubmit` fires on each prompt, including the one a background subagent's report-back starts, so it cannot mark a turn boundary. Hooks inside subagents carry `agent_id`/`agent_type`.
 - The transcript JSONL format is internal and changes between versions. Do not parse it.
@@ -40,6 +41,8 @@ The latest fingerprint lives in a state file next to the log, one per repo: `<se
 - Edit, Write, MultiEdit, NotebookEdit: log `edit <path>` as before, then store the fingerprint of the cwd's repo.
 - Bash: if the fingerprint differs from the one stored for that repo, log `edit (bash)` and store it; if it is the same, log nothing; if that repo has no state file (only when the PreToolUse `baseline` could not write one), only store it as a baseline, never an edit.
 - `stop` never reads the `.tree` files. The sensitive-path nudge reads `(bash)` as a path and does not match it.
+
+**Output.** Every "block" below prints one JSON object, `{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"<reason>"}}`, and exits 0. It does not print `decision: "block"`: Claude Code shows that as "Stop hook error", which reads as a broken hook, while `additionalContext` continues the turn with the same text and is labelled hook feedback. Baseline and record modes, and every allow, print nothing. The tests treat "block" as exactly that shape, with no top-level `decision` key.
 
 Read the log in order. `edited` means at least one `edit` line, `edit (bash)` included. `reviewed` means a `review` line appears after the last `edit` line, so a review that predates a later edit does not count (same rule as Codex C4). A fix made through Bash after a review is an `edit (bash)`, so it needs a new review.
 
@@ -82,6 +85,7 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 
 ### 5. What the gate does not check
 
+- **Claude Code before 2.1.163.** Stop `additionalContext` was added in 2.1.163. An older build either ignores the field or rejects the output as invalid hook JSON, which may surface as a hook error. Either way the stop proceeds, so the gate fails open there. Enforcement needs Claude Code 2.1.163 or later.
 - That "Pinned" and "Failing first" are true. Evals check those from tool order. The hook only checks that the receipt exists, that a review happened, and that the classification looks plausible.
 - Whether an asynchronous review returned. A dispatch after the last edit is enough for the gate. The bootstrap's "not returned → INCOMPLETE" rule stays instruction-only. Upgrade path: record `SubagentStop` for reviewer agents.
 - Other harnesses. They get the receipt as instruction only.
@@ -150,3 +154,13 @@ Stop-gate probe (2026-10-12, controller): a `claude -p` session loaded with `--p
 Reset removal (final review FM-1): the `reset` mode and the `UserPromptSubmit` hook were removed. A background subagent's report-back fires UserPromptSubmit, so the reset wiped edits logged after the controller's turn ended, and the final COMPLETE reply was never judged (live-2 above). The log now clears only when a stop accepts the edits.
 
 Background-path probe (2026-10-12, after the reset removal): `claude -p` with `--plugin-dir` dispatched a background general-purpose subagent (`run_in_background: true`, "Append line") to edit `notes.txt` and replied "dispatched". Stop allowed that turn, because nothing was pending yet. The subagent's report-back started a new turn, and the controller replied "all done". The Stop hook blocked it: `Stop hook feedback: This turn edited files. End with a risk receipt: Risk: routine or Risk: elevated (surface), ...`. The agent then added `Risk: routine / Verified: ... / Status: INCOMPLETE`, and the gate accepted it. Cost: $0.12. Before the change, the report-back reset would have let "all done" through unjudged (final review FM-1).
+
+Update (2026-10-12): the probes above saw `decision: "block"`. The gate now returns Stop `additionalContext` instead (section 2, Output); the model still sees "Stop hook feedback", but no hook error notification is shown.
+
+Live probes (2026-10-12) used Claude Code 2.1.296, `claude -p` and `--plugin-dir`.
+
+- **Bash heredoc write, then "done":** the turn continued and the agent appended `Risk: routine` / `Verified:` / `Status: COMPLETE`.
+- **Edit tool, same prompt:** same result.
+- **Control, `BEARPAWS_ENFORCE=0`:** a single "done" and no continuation.
+
+The feedback text itself does not appear in stream-json output.

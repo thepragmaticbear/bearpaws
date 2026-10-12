@@ -46,7 +46,7 @@ In Claude Code, a `Stop` hook enforces the floor:
 - Elevated work cannot end `Status: COMPLETE` unless a review was dispatched after the last edit. `Status: INCOMPLETE` is always allowed.
 - Routine work that edited sensitive-looking paths (auth, token, payment, migration, sql, …) gets a one-time nudge to reclassify or say why it is routine.
 
-Set `BEARPAWS_ENFORCE=0` to turn it off; it needs `jq` and does nothing without it. Elsewhere, these rules are instructions only. The hook checks that a receipt and a review exist, not that every line in the receipt is true.
+Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later; without either it does nothing. Elsewhere, these rules are instructions only. The hook checks that a receipt and a review exist, not that every line in the receipt is true.
 
 ## Evidence
 

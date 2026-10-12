@@ -59,3 +59,21 @@ Status: Approved (brainstorming)
   - a git failure fails open.
 - **Live probe:** a session that writes a file only via Bash heredoc must be blocked at Stop until it adds a receipt.
 - **Measurement:** rerun the frozen risk suite, Bearpaws arm only, 30 runs (about $9), using both branches. Report escapes, re-review counts, cost, timeouts, and the multi-reply rescoring, against the review-findings run.
+
+## Results (2026-10-12)
+
+This run re-ran the frozen risk suite against the Bearpaws arm only, using the build that merged #23 and #24. Its hooks, skills, runner and scenarios were byte-identical to `main` at `1b11155`. The run used Claude Code 2.1.296 on Sonnet, 5 reps per scenario, a $3 budget cap, and `--session-timeout 900`. Data: [`docs/benchmarks/2026-10-12-followups.jsonl`](../../benchmarks/2026-10-12-followups.jsonl), SHA-256 `701bcdf0817a7e61420063d0af9ceb71b963744ec26d1bd3bbe45caf9228ecf8`.
+
+| | Review-findings run (2.6.0) | Follow-ups build |
+|---|---:|---:|
+| Escaped | 3/30 | 3/30 |
+| Accepted | 30/30 | 27/30 (3 timed out) |
+| Reported INCOMPLETE | 5 | 5 |
+| Reviews requested/returned | 44/44 | 61/61 |
+| $/run | 0.291 | 0.341 |
+| Median seconds | 76 | ~69 (68.5) |
+
+- **Escapes:** all 3 are the reset-token single-use attack (runs 1, 4 and 5), the same attack as before. Every other scenario had 0 escapes. A likely fourth escape is hidden by the timeout: `reset-token/2` failed the attack but timed out without reporting INCOMPLETE, so it counts as not accepted rather than escaped.
+- **Re-review cost:** Bash-edit detection with mandatory re-review added 39% more reviews and 17% more cost per run. It found no additional defects on this suite. The hole it closes is a different one: an agent that edits only through Bash can no longer finish elevated work with no review. None of these six scenarios exercises that path.
+- **Timeouts:** the 3 timeouts are `reset-token/2`, `reset-token/3` and `refund/3`. In each, the session called `ScheduleWakeup` to wait for a background reviewer and was cut off at 900 s. They are counted as not accepted and were not rerun. Long waits also appear in the earlier runs: the maximum was 1231 s in the pre-registered run and 1309 s in the review-findings run. The jsonl data has no field for the cause, but the C transcripts show `ScheduleWakeup` waits. This is the next lever: dispatch the required review in the foreground instead of waiting on a background review.
+- **Comparison:** this is a same-arm before/after on frozen scenarios and was not pre-registered.
