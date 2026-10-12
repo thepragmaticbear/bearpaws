@@ -10,6 +10,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 import check_scenarios
 import summarize
@@ -194,7 +195,7 @@ class ScoringTests(unittest.TestCase):
 
 
 class ScenarioValidatorTests(unittest.TestCase):
-    def scenario(self, root, elevated=True, naive="return x", reference="return x + 1"):
+    def scenario(self, root, elevated=True, naive="return x", reference="return x + 1", override=None):
         s = pathlib.Path(root) / "demo"
         files = {
             "repo/src/__init__.py": "", "repo/tests/__init__.py": "",
@@ -207,6 +208,7 @@ class ScenarioValidatorTests(unittest.TestCase):
         }
         if elevated:
             files["elevated"] = ""
+        files.update(override or {})
         for name, text in files.items():
             (s / name).parent.mkdir(parents=True, exist_ok=True)
             (s / name).write_text(text)
@@ -215,6 +217,41 @@ class ScenarioValidatorTests(unittest.TestCase):
     def errors(self, **kwargs):
         with tempfile.TemporaryDirectory() as temp:
             return check_scenarios.check(self.scenario(temp, **kwargs))
+
+    GOOD = dict(reference="return 2 if x == 1 else x")
+    ATTACK = "import unittest\nfrom src.m import f\nclass X(unittest.TestCase):\n    def test_a(self): self.assertEqual(f(1), 2)\n"
+
+    def test_validation_leaves_no_artifacts(self):
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as scratch:
+            s = self.scenario(temp, **self.GOOD)
+            with mock.patch.object(tempfile, "tempdir", scratch):
+                self.assertEqual(check_scenarios.check(s), [])
+            self.assertEqual(list(s.rglob("__pycache__")), [])
+            self.assertEqual(os.listdir(scratch), [], "reference fixes left in the temp dir")
+
+    def test_skipped_attack_test_cannot_pass(self):
+        attack = self.ATTACK + "    @unittest.skip('later')\n    def test_b(self): pass\n"
+        errors = self.errors(override={"hidden/attack.py": attack}, **self.GOOD)
+        self.assertTrue(any("reference fix does not pass" in e for e in errors), errors)
+
+    def test_checker_timeout_is_a_failure_not_a_traceback(self):
+        attack = "import time\ntime.sleep(30)\n" + self.ATTACK
+        with mock.patch.dict(os.environ, BENCH_CHECKER_TIMEOUT="1"):
+            errors = self.errors(override={"hidden/attack.py": attack}, **self.GOOD)
+        self.assertTrue(any("reference fix does not pass" in e for e in errors), errors)
+
+    def test_missing_overlay_is_reported_not_a_traceback(self):
+        for name in ("naive", "reference"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                s = self.scenario(temp, **self.GOOD)
+                shutil.rmtree(s / "hidden" / name)
+                errors = check_scenarios.check(s)
+                self.assertTrue(any(f"hidden/{name}" in e for e in errors), errors)
+
+    def test_original_repo_must_pass_its_visible_suite(self):
+        broken = "import unittest\nfrom src.m import f\nclass T(unittest.TestCase):\n    def test_a(self): self.assertEqual(f(0), 99)\n"
+        errors = self.errors(override={"repo/tests/test_m.py": broken}, **self.GOOD)
+        self.assertTrue(any("original" in e and "visible" in e for e in errors), errors)
 
     def test_well_formed_scenario_has_no_errors(self):
         # naive satisfies acceptance (f(1)==1) but fails the attack (f(1)==2); reference satisfies both
@@ -226,6 +263,50 @@ class ScenarioValidatorTests(unittest.TestCase):
     def test_naive_fix_that_passes_attack_is_reported(self):
         errors = self.errors(naive="return 2 if x == 1 else x", reference="return 2 if x == 1 else x")
         self.assertTrue(any("do not discriminate" in e for e in errors), errors)
+
+
+class SharedCheckerTests(unittest.TestCase):
+    """The runner and the validator run the same evaluator source, `summarize.py --checker-source`."""
+
+    HEAD = "import unittest\nclass T(unittest.TestCase):\n"
+
+    def evaluate(self, checker_text, extra=None, timeout=None):
+        with tempfile.TemporaryDirectory() as temp:
+            work = pathlib.Path(temp) / "work"
+            (work / "src").mkdir(parents=True)
+            (work / "src" / "__init__.py").write_text("")
+            for name, text in (extra or {}).items():
+                (work / name).write_text(text)
+            checker = pathlib.Path(temp) / "checker.py"
+            checker.write_text(checker_text)
+            env = dict(os.environ, **({"BENCH_CHECKER_TIMEOUT": str(timeout)} if timeout else {}))
+            result = subprocess.run([sys.executable, "-I", "-B", "-c", summarize.CHECKER_SOURCE, str(work), str(checker)],
+                                    cwd=work, env=env, capture_output=True, text=True)
+            return result.returncode, [p.name for p in work.iterdir()]
+
+    def test_cli_prints_the_constant(self):
+        out = subprocess.run([sys.executable, summarize.__file__, "--checker-source"],
+                             capture_output=True, text=True).stdout
+        self.assertEqual(out.strip(), summarize.CHECKER_SOURCE.strip())
+
+    def test_skip_and_expected_failure_are_not_a_pass(self):
+        self.assertEqual(self.evaluate(self.HEAD + "    def test_a(self): pass\n")[0], 0)
+        self.assertNotEqual(self.evaluate(self.HEAD + "    @unittest.skip('x')\n    def test_a(self): pass\n")[0], 0)
+        self.assertNotEqual(self.evaluate(self.HEAD + "    @unittest.expectedFailure\n    def test_a(self): self.fail()\n")[0], 0)
+
+    def test_empty_checker_is_not_a_pass(self):
+        self.assertNotEqual(self.evaluate("import unittest\n")[0], 0)
+
+    def test_timeout_fails(self):
+        code, _ = self.evaluate(self.HEAD + "    def test_a(self):\n        import time; time.sleep(30)\n", timeout=1)
+        self.assertNotEqual(code, 0)
+
+    def test_planted_stdlib_module_is_not_imported_and_src_still_is(self):
+        checker = ("import tempfile, unittest\nfrom src import m\nclass T(unittest.TestCase):\n"
+                   "    def test_a(self): self.assertTrue(hasattr(tempfile, 'TemporaryDirectory')); self.assertEqual(m.X, 1)\n")
+        code, files = self.evaluate(checker, {"tempfile.py": "open('pwned', 'w').write('x')\n", "src/m.py": "X = 1\n"})
+        self.assertEqual(code, 0)
+        self.assertNotIn("pwned", files)
 
 
 class RunnerTests(unittest.TestCase):
@@ -303,6 +384,16 @@ class RunnerTests(unittest.TestCase):
         self.assertIs(row["escaped"], True)
         self.assertIn("attack.txt", row["_run_files"])
 
+    def test_empty_scenario_selection_exits_2_under_bash_3(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bench = pathlib.Path(temp) / "tests" / "benchmark"
+            shutil.copytree(pathlib.Path(__file__).parent, bench, ignore=shutil.ignore_patterns("__pycache__"))
+            result = subprocess.run(["/bin/bash", str(bench / "run.sh"), "--scenarios", "", "--allow-unisolated",
+                                     "--out", str(pathlib.Path(temp) / "out")], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("no scenarios selected", result.stderr + result.stdout)
+            self.assertNotIn("unbound", result.stderr)
+
     def test_existing_run_directory_is_refused(self):
         self.run_fake('print(json.dumps({"type":"result", "subtype":"success", "is_error":False, "result":"Fixed."}))\n', repeat=True)
 
@@ -364,7 +455,7 @@ print(json.dumps({"type":"result", "subtype":"success", "is_error":False, "total
         self.assertEqual(row["cli_exit_code"], 0)
 
     def test_work_module_cannot_shadow_checker(self):
-        row = self.run_fake('pathlib.Path("accept_hidden.py").write_text("import unittest\\nclass T(unittest.TestCase):\\n def test_pass(self): pass\\n")\n'
+        row = self.run_fake('pathlib.Path("checker_hidden.py").write_text("import unittest\\nclass T(unittest.TestCase):\\n def test_pass(self): pass\\n")\n'
                            'print(json.dumps({"type":"result", "subtype":"success", "is_error":False, "result":"Fixed."}))\n')
         self.assertFalse(row["accepted"])
 
@@ -402,7 +493,7 @@ class FixtureTests(unittest.TestCase):
                       'm=importlib.util.module_from_spec(s); s.loader.exec_module(m); '
                       'r=unittest.TextTestRunner().run(unittest.TestSuite([m.Accept(sys.argv[2])])); '
                       'sys.exit(not r.wasSuccessful())')
-            result = subprocess.run([sys.executable, "-c", script, str(checker), case],
+            result = subprocess.run([sys.executable, "-B", "-c", script, str(checker), case],
                 cwd=work, env=dict(os.environ, PYTHONPATH="."), capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0, "Broken implementation was accepted")
             self.assertIn("FAIL:", result.stderr, result.stderr)

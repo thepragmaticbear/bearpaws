@@ -59,6 +59,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$LIST" == true ]]; then printf '%s\n' $SCENARIOS; exit 0; fi
+if [[ -z "${SCENARIOS//[[:space:]]/}" ]]; then echo "no scenarios selected" >&2; exit 2; fi
 
 CHECKER_ISOLATION=macos_seatbelt
 if [[ "$ALLOW_UNISOLATED" == true ]]; then
@@ -86,17 +87,10 @@ session() {
 }
 
 # run_checker <snapshot> <work> <log>: run a held-out unittest file against <work>; exit status is the verdict.
-# Load the exact snapshot path: work/<name>.py must not shadow it.
+# The evaluator source is shared with check_scenarios.py (summarize.py --checker-source). It loads the exact
+# snapshot path, so work/<name>.py cannot shadow it.
 run_checker() {
-    (cd "$2" && python3 -I -c '
-import importlib.util, sys, unittest
-sys.path.insert(0, sys.argv[2])
-spec = importlib.util.spec_from_file_location("checker_hidden", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromModule(module))
-sys.exit(not result.wasSuccessful() or result.testsRun == 0 or bool(result.skipped) or bool(result.expectedFailures))
-' "$1" "$2" > "$3" 2>&1)
+    (cd "$2" && python3 -I -B -c "$CHECKER_SRC" "$2" "$1" > "$3" 2>&1)
 }
 
 run_one() {
@@ -158,12 +152,7 @@ run_one() {
 
     # Regression check: the repo's own (visible) suite must still pass at the end.
     local visible_ok=false
-    if (cd "$work" && python3 -I -c '
-import os, sys, unittest
-sys.path.insert(0, os.getcwd())
-result = unittest.TextTestRunner().run(unittest.defaultTestLoader.discover("tests", top_level_dir="."))
-sys.exit(not result.wasSuccessful() or result.testsRun == 0)
-' > "$rdir/visible.txt" 2>&1); then
+    if (cd "$work" && python3 -I -B -c "$CHECKER_SRC" "$work" > "$rdir/visible.txt" 2>&1); then
         visible_ok=true
     fi
     fixture_after=$(python3 "$SCRIPT_DIR/summarize.py" --fingerprint "$sdir" "$hidden")
@@ -186,7 +175,8 @@ sys.exit(not result.wasSuccessful() or result.testsRun == 0)
     echo "$scenario/$arm/$run accepted=$accept_ok"
 }
 export -f run_one session run_checker
-export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SUFFIX CHECKER_ISOLATION
+CHECKER_SRC="$(python3 "$SCRIPT_DIR/summarize.py" --checker-source)"
+export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SUFFIX CHECKER_ISOLATION CHECKER_SRC
 
 mkdir -p "$OUT"
 echo "Output: $OUT (model=$MODEL runs=$RUNS arms=[$ARMS])"
@@ -200,6 +190,7 @@ for run in $(seq 1 "$RUNS"); do
         done
     done
 done
+[[ ${#jobs_list[@]} -gt 0 ]] || { echo "no scenarios selected" >&2; exit 2; }
 printf '%s\n' "${jobs_list[@]}" | xargs -P "$JOBS" -L 1 bash -c 'run_one "$0" "$1" "$2"'
 
 python3 "$SCRIPT_DIR/summarize.py" "$OUT/results.jsonl"

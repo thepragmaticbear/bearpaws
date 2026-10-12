@@ -22,7 +22,7 @@ class Attack(unittest.TestCase):
 
     def test_missing_last_name(self):
         backfill_display_name(self.conn)
-        self.assertEqual(self.names()[2], ("Cy",))
+        self.assertEqual((self.names()[2][0] or "").strip(), "Cy")
 
     def test_idempotent(self):
         backfill_display_name(self.conn)

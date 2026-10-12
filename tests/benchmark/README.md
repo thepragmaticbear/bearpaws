@@ -13,6 +13,8 @@ tests/benchmark/run.sh --interactive                     # no "don't ask me" suf
 tests/benchmark/summarize.py /tmp/bearpaws-tests/benchmark/<stamp>/results.jsonl
 ```
 
+An empty scenario selection prints `no scenarios selected` and exits 2.
+
 Options: `--runs N`, `--arms`, `--scenarios`, `--model` (default `sonnet`, or `BENCH_MODEL`), `--budget` (USD cap per run, default 5), `--jobs` (parallel runs, default 3), `--out DIR`, `--allow-unisolated`.
 
 macOS runs use native `sandbox-exec` by default. Other platforms require `--allow-unisolated`, which labels each row `checker_isolation=integrity_only`. A failed native sandbox launch records an unhealthy, unaccepted run; it never silently falls back.
@@ -25,7 +27,7 @@ Each scenario/arm/run directory must be new. Existing directories are refused wi
 2. Run `claude -p` with the scenario prompt plus a fixed non-interactive suffix (same for every arm). `--setting-sources project,local` and `--strict-mcp-config` keep the user's installed plugins and MCP servers out of every arm; the arm adds only its own `--plugin-dir`.
 3. Snapshot `scenarios/<name>/accept.py` before the agent starts. The macOS sandbox denies agent writes to this benchmark's source directory and denies reads of its acceptance files and all reads/writes of the snapshot directory. Load the snapshot by its absolute path after the session, preventing `work/accept_hidden.py` shadowing. SHA-256 fingerprints before/after the session and checks detect persistent source or snapshot changes.
 4. Run the repo's visible suite again (regressions).
-   Both evaluator processes use Python `-I` and preload stdlib unittest before adding the work directory for source imports, preventing cwd `sitecustomize.py` and `unittest.py` startup shadowing.
+   Acceptance, attack, and visible runs all go through one evaluator, the `CHECKER_SOURCE` constant in `summarize.py` (`summarize.py --checker-source`), which `run.sh` and `check_scenarios.py` both execute as `python3 -I -B -c`. It preloads stdlib `unittest`, then appends (never prepends) the work directory to `sys.path`, so cwd `sitecustomize.py` and planted `unittest.py`/`tempfile.py` cannot shadow the stdlib. Order is acceptance, attack, visible. Hidden checkers fail on zero tests, skips, expected failures, and a timeout (`BENCH_CHECKER_TIMEOUT`, default 120 s).
 5. Append one JSON row to `results.jsonl`: acceptance-suite status, accepted (healthy session, acceptance success, visible suite success, and unchanged fixtures), share of acceptance test methods passed, cost, turns, tokens, root subagent dispatches, review requests/returns, user questions, seconds, lost test lines, completion-claim heuristic, and missed gates. Skipped acceptance tests do not count as passed and invalidate acceptance. Missing/error result events or nonzero CLI exit invalidate acceptance.
 
 Cost is cumulative within a Claude session: use the largest `total_cost_usd` per `session_id`, then sum sessions. Turns and token usage are segment values and are summed across root result events. Summaries expose input, output, cache-read, and cache-write totals separately. `accept_fraction` measures test methods, not requirement coverage; failed subtests count their parent method once.
@@ -57,7 +59,7 @@ A scenario may carry `hidden/` with attack tests the agent never sees:
 
 Row fields: `attack_ok` is true or false, or null when the scenario has no attack. `escaped` is true when the run was accepted, an attack failed, and the final text did not report INCOMPLETE: the agent delivered the task as done with a defect the visible tests and acceptance missed. A failed attack on an unaccepted run is not an escape (it is already counted in `accepted`); the summary's `attack_fail` column keeps those visible.
 
-`python3 tests/benchmark/check_scenarios.py [scenario ...]` is model-free and runs in CI. For each scenario with `hidden/` it checks that the original repo fails acceptance, the naive overlay passes acceptance and the visible suite but fails an attack, the reference overlay passes all three, and the `elevated` marker exists.
+`python3 tests/benchmark/check_scenarios.py [scenario ...]` is model-free and runs in CI. For each scenario with `hidden/` it checks that the original repo passes its visible suite and fails acceptance, the naive overlay passes acceptance and the visible suite but fails an attack, the reference overlay passes all three, and the `elevated` marker exists. It uses the runner's evaluator, so an attack with a skipped test cannot pass; a missing `hidden/naive` or `hidden/reference`, or a checker timeout, is a FAIL line, not a traceback. It runs with `-B` and in temporary trees that are removed afterwards, so it leaves no `__pycache__` (test names) in `scenarios/` and no reference fixes in `$TMPDIR`.
 
 ## Reading results
 

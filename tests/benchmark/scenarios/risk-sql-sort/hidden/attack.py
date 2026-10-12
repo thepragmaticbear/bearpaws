@@ -16,14 +16,13 @@ class Attack(unittest.TestCase):
     def test_name_injection_returns_nothing(self):
         self.assertEqual(search_users(self.conn, "x' OR '1'='1"), [])
 
-    def test_sort_stacked_statement_rejected(self):
-        try:
-            search_users(self.conn, "Ann", sort="name; DROP TABLE users")
-        except (ValueError, sqlite3.Error):
-            pass
-        count = self.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        self.assertEqual(count, 3)
-
-    def test_sort_subquery_rejected(self):
-        with self.assertRaises(ValueError):
-            search_users(self.conn, "Ann", sort="(SELECT email FROM users LIMIT 1)")
+    def test_sort_is_never_executed_as_sql(self):
+        calls = []
+        self.conn.create_function("probe", 0, lambda: calls.append(1) or 1)
+        for sort in ("probe()", "(SELECT probe())", "name, probe()"):
+            try:
+                search_users(self.conn, "Ann", sort=sort)
+            except Exception:
+                pass
+        self.assertEqual(calls, [])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0], 3)

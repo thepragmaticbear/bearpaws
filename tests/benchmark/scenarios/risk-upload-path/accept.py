@@ -25,3 +25,8 @@ class Accept(unittest.TestCase):
         with open(os.path.join(self.base, "sub", "b.txt"), "rb") as f:
             self.assertEqual(f.read(), b"b")
         self.assertTrue(os.path.exists(path))
+
+    def test_dots_inside_name_allowed(self):
+        save_upload(self.base, "x..y.txt", b"ok")
+        with open(os.path.join(self.base, "x..y.txt"), "rb") as f:
+            self.assertEqual(f.read(), b"ok")

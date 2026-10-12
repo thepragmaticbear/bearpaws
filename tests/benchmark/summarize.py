@@ -14,6 +14,37 @@ import sys
 from collections import defaultdict
 
 
+# The one evaluator for held-out checkers (accept, attack) and the visible suite, used by run.sh and
+# check_scenarios.py: `python3 -I -B -c SOURCE <work> [checker.py]`. Without a checker it runs the work
+# tree's tests/. Hard-fails on no tests, skips, expected failures, and a timeout (BENCH_CHECKER_TIMEOUT,
+# default 120s). The checker is loaded by exact path; <work> is appended to sys.path so a planted
+# work/tempfile.py cannot shadow the stdlib (stdlib unittest is imported first).
+CHECKER_SOURCE = r'''
+import importlib.util, os, signal, sys, unittest
+work = sys.argv[1]
+checker = sys.argv[2] if len(sys.argv) > 2 else None
+def timed_out(*_):
+    print("checker timed out", file=sys.stderr)
+    os._exit(1)
+signal.signal(signal.SIGALRM, timed_out)
+signal.alarm(int(os.environ.get("BENCH_CHECKER_TIMEOUT", "120")))
+if checker:
+    sys.path.append(work)
+    spec = importlib.util.spec_from_file_location("checker_hidden", checker)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    suite = unittest.defaultTestLoader.loadTestsFromModule(module)
+else:
+    sys.path.insert(0, work)
+    suite = unittest.defaultTestLoader.discover("tests", top_level_dir=".")
+result = unittest.TextTestRunner().run(suite)
+bad = not result.wasSuccessful() or result.testsRun == 0
+if checker:
+    bad = bad or bool(result.skipped) or bool(result.expectedFailures)
+sys.exit(bad)
+'''
+
+
 def parse_stream(path):
     """Pull cost, turns, and tool usage out of a stream-json transcript."""
     turns, tokens, result_text = 0, {}, ""
@@ -263,12 +294,15 @@ def main():
     parser.add_argument("--cli-exit-code", type=int)
     parser.add_argument("--fixture-integrity", choices=("true", "false", "unknown"), default="unknown")
     parser.add_argument("--attack-ok", choices=("true", "false", "none"), default="none")
+    parser.add_argument("--checker-source", action="store_true")
     parser.add_argument("--fingerprint", nargs="+")
     parser.add_argument("--sandbox-profile", nargs=4, metavar=("SOURCE", "SNAPSHOT", "OUTPUT", "WORK"))
     parser.add_argument("--checker-isolation", default="unknown")
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args()
-    if args.sandbox_profile:
+    if args.checker_source:
+        print(CHECKER_SOURCE)
+    elif args.sandbox_profile:
         print(sandbox_profile(*args.sandbox_profile))
     elif args.fingerprint:
         print(fingerprint(args.fingerprint))
