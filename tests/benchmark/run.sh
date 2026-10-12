@@ -3,6 +3,10 @@
 #
 # Usage: tests/benchmark/run.sh [--runs N] [--arms "baseline bearpaws"] [--scenarios "a b"]
 #                               [--model MODEL] [--budget USD] [--jobs N] [--out DIR] [--interactive]
+#                               [--suite risk] [--list]
+#
+# Default scenarios exclude risk-*; --suite risk selects only those (they carry hidden attacks).
+# --list prints the selected scenarios and exits.
 #
 # Arms:
 #   baseline     no plugins
@@ -22,7 +26,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 RUNS=3
 ARMS="baseline bearpaws"
-SCENARIOS="$(ls "$SCRIPT_DIR/scenarios")"
+SCENARIOS="$(ls "$SCRIPT_DIR/scenarios" | grep -v '^risk-' || true)"
+LIST=false
 MODEL="${BENCH_MODEL:-sonnet}"
 BUDGET=5
 JOBS=3
@@ -40,16 +45,21 @@ while [[ $# -gt 0 ]]; do
         --runs) RUNS="$2"; shift 2 ;;
         --arms) ARMS="$2"; shift 2 ;;
         --scenarios) SCENARIOS="$2"; shift 2 ;;
+        --suite) [[ "$2" == risk ]] || { echo "unknown suite: $2" >&2; exit 2; }; SCENARIOS="$(ls "$SCRIPT_DIR/scenarios" | grep '^risk-' || true)"; shift 2 ;;
+        --list) LIST=true; shift ;;
         --model) MODEL="$2"; shift 2 ;;
         --budget) BUDGET="$2"; shift 2 ;;
         --jobs) JOBS="$2"; shift 2 ;;
         --out) OUT="$2"; shift 2 ;;
         --interactive) SUFFIX=""; shift ;;
         --allow-unisolated) ALLOW_UNISOLATED=true; shift ;;
-        -h|--help) sed -n 2,15p "$0"; exit 0 ;;
+        -h|--help) sed -n 2,19p "$0"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
+
+if [[ "$LIST" == true ]]; then printf '%s\n' $SCENARIOS; exit 0; fi
+if [[ -z "${SCENARIOS//[[:space:]]/}" ]]; then echo "no scenarios selected" >&2; exit 2; fi
 
 CHECKER_ISOLATION=macos_seatbelt
 if [[ "$ALLOW_UNISOLATED" == true ]]; then
@@ -74,6 +84,13 @@ session() {
         --output-format stream-json --verbose \
         ${plugin_args[@]+"${plugin_args[@]}"} "$@" \
         2> >(cat >> "$rdir/stderr.txt") | cat >> "$rdir/stream.jsonl")
+}
+
+# run_checker <snapshot> <work> <log>: run a held-out unittest file against <work>; exit status is the verdict.
+# The evaluator source is shared with check_scenarios.py (summarize.py --checker-source). It loads the exact
+# snapshot path, so work/<name>.py cannot shadow it.
+run_checker() {
+    (cd "$2" && python3 -I -B -c "$CHECKER_SRC" "$2" "$1" > "$3" 2>&1)
 }
 
 run_one() {
@@ -111,10 +128,13 @@ run_one() {
     # Snapshot before the agent starts; digest stays in the controller's shell.
     # This detects persistent tampering; bypassPermissions is not OS isolation.
     local hidden fixture_before fixture_after fixture_integrity=false
-    hidden="$(mktemp -d)"
+    # Under $OUT, not $TMPDIR: the sandbox denies reads of $OUT except this run's work, so concurrent runs cannot see each other's snapshots.
+    hidden="$(mktemp -d "$OUT/.snap.XXXXXX")"
     cp "$sdir/accept.py" "$hidden/accept_hidden.py"
     chmod 400 "$hidden/accept_hidden.py"
-    fixture_before=$(python3 "$SCRIPT_DIR/summarize.py" --fingerprint "$sdir" "$hidden/accept_hidden.py")
+    local has_attack=false
+    if [ -f "$sdir/hidden/attack.py" ]; then cp "$sdir/hidden/attack.py" "$hidden/attack_hidden.py"; chmod 400 "$hidden/attack_hidden.py"; has_attack=true; fi
+    fixture_before=$(python3 "$SCRIPT_DIR/summarize.py" --fingerprint "$sdir" "$hidden")
     local isolation_args=()
     if [[ "$CHECKER_ISOLATION" == macos_seatbelt ]]; then
         isolation_args=(/usr/bin/sandbox-exec -p "$(python3 "$SCRIPT_DIR/summarize.py" --sandbox-profile "$SCRIPT_DIR" "$hidden" "$OUT" "$work")")
@@ -124,31 +144,19 @@ run_one() {
     session "$work" "$(cat "$sdir/prompt.txt")$SUFFIX" "$rdir" || cli_exit_code=$?
     end=$(date +%s)
 
-    # Load the exact snapshot path: work/accept_hidden.py must not shadow it.
-    local accept_ok=false
-    if (cd "$work" && python3 -I -c '
-import importlib.util, sys, unittest
-sys.path.insert(0, sys.argv[2])
-spec = importlib.util.spec_from_file_location("accept_hidden", sys.argv[1])
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromModule(module))
-sys.exit(not result.wasSuccessful() or result.testsRun == 0 or bool(result.skipped) or bool(result.expectedFailures))
-' "$hidden/accept_hidden.py" "$work" > "$rdir/accept.txt" 2>&1); then
-        accept_ok=true
+    local accept_ok=false attack_ok=none
+    run_checker "$hidden/accept_hidden.py" "$work" "$rdir/accept.txt" && accept_ok=true
+    if [[ "$has_attack" == true ]]; then
+        attack_ok=false
+        run_checker "$hidden/attack_hidden.py" "$work" "$rdir/attack.txt" && attack_ok=true
     fi
 
     # Regression check: the repo's own (visible) suite must still pass at the end.
     local visible_ok=false
-    if (cd "$work" && python3 -I -c '
-import os, sys, unittest
-sys.path.insert(0, os.getcwd())
-result = unittest.TextTestRunner().run(unittest.defaultTestLoader.discover("tests", top_level_dir="."))
-sys.exit(not result.wasSuccessful() or result.testsRun == 0)
-' > "$rdir/visible.txt" 2>&1); then
+    if (cd "$work" && python3 -I -B -c "$CHECKER_SRC" "$work" > "$rdir/visible.txt" 2>&1); then
         visible_ok=true
     fi
-    fixture_after=$(python3 "$SCRIPT_DIR/summarize.py" --fingerprint "$sdir" "$hidden/accept_hidden.py")
+    fixture_after=$(python3 "$SCRIPT_DIR/summarize.py" --fingerprint "$sdir" "$hidden")
     [[ "$fixture_before" == "$fixture_after" ]] && fixture_integrity=true
     rm -rf "$hidden"
 
@@ -161,14 +169,15 @@ sys.exit(not result.wasSuccessful() or result.testsRun == 0)
         --stream "$rdir/stream.jsonl" --accepted "$accept_ok" \
         --accept-log "$rdir/accept.txt" --visible-ok "$visible_ok" \
         --cli-exit-code "$cli_exit_code" --fixture-integrity "$fixture_integrity" \
-        --checker-isolation "$CHECKER_ISOLATION" \
+        --checker-isolation "$CHECKER_ISOLATION" --attack-ok "$attack_ok" \
         --elevated "$([ -f "$sdir/elevated" ] && echo true || echo false)" \
         --seconds $((end - start)) --tests-touched "$tests_touched" \
         >> "$OUT/results.jsonl"
     echo "$scenario/$arm/$run accepted=$accept_ok"
 }
-export -f run_one session
-export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SUFFIX CHECKER_ISOLATION
+export -f run_one session run_checker
+CHECKER_SRC="$(python3 "$SCRIPT_DIR/summarize.py" --checker-source)"
+export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SUFFIX CHECKER_ISOLATION CHECKER_SRC
 
 mkdir -p "$OUT"
 echo "Output: $OUT (model=$MODEL runs=$RUNS arms=[$ARMS])"
@@ -182,6 +191,7 @@ for run in $(seq 1 "$RUNS"); do
         done
     done
 done
+[[ ${#jobs_list[@]} -gt 0 ]] || { echo "no scenarios selected" >&2; exit 2; }
 printf '%s\n' "${jobs_list[@]}" | xargs -P "$JOBS" -L 1 bash -c 'run_one "$0" "$1" "$2"'
 
 python3 "$SCRIPT_DIR/summarize.py" "$OUT/results.jsonl"

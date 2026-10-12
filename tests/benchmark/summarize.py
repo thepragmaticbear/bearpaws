@@ -10,8 +10,40 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 from collections import defaultdict
+
+
+# The one evaluator for held-out checkers (accept, attack) and the visible suite, used by run.sh and
+# check_scenarios.py: `python3 -I -B -c SOURCE <work> [checker.py]`. Without a checker it runs the work
+# tree's tests/. Hard-fails on no tests, skips, expected failures, and a timeout (BENCH_CHECKER_TIMEOUT,
+# default 120s). The checker is loaded by exact path; <work> is appended to sys.path so a planted
+# work/tempfile.py cannot shadow the stdlib (stdlib unittest is imported first).
+CHECKER_SOURCE = r'''
+import importlib.util, os, signal, sys, unittest
+work = sys.argv[1]
+checker = sys.argv[2] if len(sys.argv) > 2 else None
+def timed_out(*_):
+    print("checker timed out", file=sys.stderr)
+    os._exit(1)
+signal.signal(signal.SIGALRM, timed_out)
+signal.alarm(int(os.environ.get("BENCH_CHECKER_TIMEOUT", "120")))
+if checker:
+    sys.path.append(work)
+    spec = importlib.util.spec_from_file_location("checker_hidden", checker)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    suite = unittest.defaultTestLoader.loadTestsFromModule(module)
+else:
+    sys.path.insert(0, work)
+    suite = unittest.defaultTestLoader.discover("tests", top_level_dir=".")
+result = unittest.TextTestRunner().run(suite)
+bad = not result.wasSuccessful() or result.testsRun == 0
+if checker:
+    bad = bad or bool(result.skipped) or bool(result.expectedFailures)
+sys.exit(bad)
+'''
 
 
 def parse_stream(path):
@@ -110,7 +142,15 @@ def accept_fraction(path):
 
 
 DONE_CLAIM = re.compile(r"\b(done|fixed|complete[sd]?|finished|all tests pass|now (raises|returns|works))\b", re.I)
-INCOMPLETE_STATUS = re.compile(r"^\s*(?:\*\*|#{1,6}\s*)?(?:status\s*:\s*)?incomplete\b", re.I | re.M)
+# Same rule as hooks/risk-gate: only the LAST "Status:" line decides, and INCOMPLETE must be its value.
+# LEAD/TRAIL mirror the hook (list markers, quotes, bold, backticks); no \b after INCOMPLETE, as in the hook.
+_STATUS_LINE = re.compile(r"^[ \t\r\f\v>*_#0-9.`-]*status[*_`]*:", re.I)
+_STATUS_INCOMPLETE = re.compile(r"status[*_`]*:[*_` \t\r\f\v]*incomplete", re.I)
+
+
+def reported_incomplete(text):
+    lines = [line for line in (text or "").split("\n") if _STATUS_LINE.match(line)]
+    return bool(lines) and _STATUS_INCOMPLETE.search(lines[-1]) is not None
 
 
 def completion_claim(text):
@@ -132,18 +172,33 @@ def fingerprint(paths):
     return digest.hexdigest()
 
 
+def git_common_dir(path):
+    """Absolute .git directory shared by every worktree of the repo containing path, or None."""
+    done = subprocess.run(["git", "-C", str(path), "rev-parse", "--git-common-dir"], capture_output=True, text=True)
+    return (Path(path) / done.stdout.strip()).resolve() if done.returncode == 0 and done.stdout.strip() else None
+
+
 def sandbox_profile(source, snapshot, output=None, work=None):
     """Seatbelt strings use JSON-compatible quoted strings; no shell interpolation."""
     root, hidden = Path(source).resolve(), Path(snapshot).resolve()
+    q = lambda p: json.dumps(str(Path(p).resolve()))
+    # The agent works on a copy in work/ and never needs the originals: hide the whole scenarios tree
+    # (accept.py, hidden/, any __pycache__) and the repo's object store (history holds the hidden files).
     rules = ["(version 1)", "(allow default)",
-             f"(deny file-write* (subpath {json.dumps(str(root))}))",
-             f"(deny file-read* file-write* (subpath {json.dumps(str(hidden))}))"]
-    rules += [f"(deny file-read* (literal {json.dumps(str(p.resolve()))}))"
-              for p in sorted((root / "scenarios").glob("*/accept.py"))]
+             f"(deny file-write* (subpath {q(root)}))",
+             f"(deny file-read* file-write* (subpath {q(hidden)}))",
+             f"(deny file-read* file-write* (subpath {q(root / 'scenarios')}))"]
+    git = git_common_dir(root)
+    if git:
+        rules.append(f"(deny file-read* file-write* (subpath {q(git)}))")
     if output is not None and work is not None:
-        rules.append(f"(deny file-write* (require-all (subpath {json.dumps(str(Path(output).resolve()))}) "
-                     f"(require-not (subpath {json.dumps(str(Path(work).resolve()))}))))")
-    return "\n".join(rules)
+        # Other runs' work trees, transcripts, accept.txt/attack.txt and the ledger. file-read-data, not
+        # file-read*: the work dir lives under OUT, and denying metadata breaks realpath/lstat of the cwd
+        # (node, git). Contents and listings of everything else stay denied.
+        rules.append(f"(deny file-write* (require-all (subpath {q(output)}) (require-not (subpath {q(work)}))))")
+        for base in (output, "/tmp/bearpaws-tests", "/private/tmp/bearpaws-tests"):
+            rules.append(f"(deny file-read-data (require-all (subpath {q(base)}) (require-not (subpath {q(work)}))))")
+    return "\n".join(dict.fromkeys(rules))
 
 
 def record(args):
@@ -167,7 +222,10 @@ def record(args):
     row["accepted"] &= row["session_ok"] and row["visible_ok"] and row["fixture_integrity"] != "false"
     final = row.pop("final_text", "")
     # Unsupported completion claim: the agent says it is done but acceptance fails.
-    incomplete = bool(INCOMPLETE_STATUS.search(final))
+    incomplete = row["reported_incomplete"] = reported_incomplete(final)
+    row["attack_ok"] = {"true": True, "false": False}.get(getattr(args, "attack_ok", "none"))
+    # Escaped: delivered as accepted and not flagged INCOMPLETE, yet an attack fails.
+    row["escaped"] = row["attack_ok"] is False and row["accepted"] and not incomplete
     row["unsupported_claim"] = (not row["accepted"]) and completion_claim(final) and not incomplete
     # Missed gate: elevated-risk scenario finished without an independent review subagent.
     # Reporting INCOMPLETE without a review is failing closed, not a missed gate.
@@ -209,6 +267,25 @@ def summarize(paths):
     print("claim=completion-text heuristic without accepted result; gate=elevated-risk run without returned review or explicit INCOMPLETE status")
     table(lambda r: r["arm"], "By arm (primary metric: $/accepted)")
     table(lambda r: f"{r['scenario']}/{r['arm']}", "By scenario and arm")
+    if any(r.get("attack_ok") is not None for r in rows):
+        print("\nEscaped defects (accepted, not reported INCOMPLETE, attack failed)")
+        print("disclosed=accepted, attack failed, reported INCOMPLETE; incomplete=all runs reporting INCOMPLETE")
+        print(f"{'group':<34} {'n':>3} {'attacked':>9} {'escaped':>8} {'disclosed':>10} {'incomplete':>11} {'attack_fail':>12} {'attack_pass':>12} {'accepted':>9} {'review req/ret':>14} {'mean $':>8}")
+        for key_fn in (lambda r: r["arm"], lambda r: f"{r['scenario']}/{r['arm']}"):
+            groups = defaultdict(list)
+            for r in rows:
+                groups[key_fn(r)].append(r)
+            for key in sorted(groups):
+                g = groups[key]
+                attacked = [r for r in g if r.get("attack_ok") is not None]
+                reviews = f"{sum(r.get('reviews_requested', 0) for r in g)}/{sum(r.get('reviews_returned', 0) for r in g)}"
+                print(f"{key:<34} {len(g):>3} {len(attacked):>9} {sum(r.get('escaped', False) for r in g):>8} "
+                      f"{sum(r['accepted'] and r.get('attack_ok') is False and r.get('reported_incomplete', False) for r in g):>10} "
+                      f"{sum(r.get('reported_incomplete', False) for r in g):>11} "
+                      f"{sum(r.get('attack_ok') is False for r in g):>12} "
+                      f"{sum(r['attack_ok'] for r in attacked):>12} {sum(r['accepted'] for r in g):>9} {reviews:>14} "
+                      f"{sum(r['cost_usd'] for r in g) / len(g):>8.3f}")
+
     print("\nBy arm tokens (totals; all four dimensions included in tokens/accepted)")
     print(f"{'arm':<20} {'input':>10} {'output':>10} {'cache_read':>12} {'cache_write':>12} {'tokens/accepted':>16}")
     for arm in sorted({r["arm"] for r in rows}):
@@ -241,12 +318,16 @@ def main():
     parser.add_argument("--elevated", default="false")
     parser.add_argument("--cli-exit-code", type=int)
     parser.add_argument("--fixture-integrity", choices=("true", "false", "unknown"), default="unknown")
+    parser.add_argument("--attack-ok", choices=("true", "false", "none"), default="none")
+    parser.add_argument("--checker-source", action="store_true")
     parser.add_argument("--fingerprint", nargs="+")
     parser.add_argument("--sandbox-profile", nargs=4, metavar=("SOURCE", "SNAPSHOT", "OUTPUT", "WORK"))
     parser.add_argument("--checker-isolation", default="unknown")
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args()
-    if args.sandbox_profile:
+    if args.checker_source:
+        print(CHECKER_SOURCE)
+    elif args.sandbox_profile:
         print(sandbox_profile(*args.sandbox_profile))
     elif args.fingerprint:
         print(fingerprint(args.fingerprint))

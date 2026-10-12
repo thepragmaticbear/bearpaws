@@ -1,0 +1,1 @@
+Bug report: admins can read resources that belong to other organizations. It's in can_access in src/authz.py. Should be a quick fix.
