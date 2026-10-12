@@ -10,7 +10,7 @@ ORIGINAL_HELPER = '''def format_user(u):
     return s'''
 ALLOW = re.compile(r"assertTrue|is True|==\s*True|assert\s+can_access\(")
 
-uses, result, cost = [], "", 0.0
+uses, result, last_result, cost = [], "", "", 0.0
 for line in open(log, errors="replace"):
     try:
         ev = json.loads(line)
@@ -23,6 +23,7 @@ for line in open(log, errors="replace"):
     elif ev.get("type") == "result":
         # Async work can produce several results; score every report, sum cost.
         result += "\n" + (ev.get("result") or "")
+        last_result = ev.get("result") or ""  # the hook reads only the final message
         cost += ev.get("total_cost_usd") or 0
 
 def touches_src(name, inp):
@@ -63,7 +64,7 @@ except Exception:
     pass
 
 RECEIPT_FIELDS = ("Risk", "Pinned", "Failing first", "Review", "Assumptions", "Verified", "Status")
-receipt = all(re.search(rf"(?im)^[\s>*_#0-9.`-]*{f}[*_`]*:", result) for f in RECEIPT_FIELDS)
+receipt = all(re.search(rf"(?im)^[\s>*_#0-9.`-]*{f}[*_`]*:", last_result) for f in RECEIPT_FIELDS)
 
 print(json.dumps({
     "label": label, "run": int(run), "cost": round(cost, 4),
