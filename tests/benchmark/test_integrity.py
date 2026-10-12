@@ -276,7 +276,10 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse([s for s in listed if s.startswith("risk-")])
 
     def test_risk_suite_selects_only_risk_scenarios(self):
-        self.assertEqual(self.bench_listing("--suite", "risk"), ["risk-fake"])
+        listed = self.bench_listing("--suite", "risk")
+        self.assertIn("risk-fake", listed)
+        self.assertTrue(all(s.startswith("risk-") for s in listed))
+        self.assertNotIn("small-bug", listed)
 
     def test_hidden_attack_failure_is_scored_as_escaped(self):
         def prepare(scenarios):
