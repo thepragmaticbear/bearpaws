@@ -71,7 +71,7 @@ case "$mode" in
     fi
     # Only the last Status line decides, and INCOMPLETE must be its value: a quoted line earlier or the
     # pasted template "Status: COMPLETE | INCOMPLETE" must not override it.
-    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_[:space:]]*INCOMPLETE" && exit 0
+    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && exit 0
     if [ "$risk" = elevated ]; then
       last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"

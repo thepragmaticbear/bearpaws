@@ -148,6 +148,10 @@ reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/**Status:** INCOMPLE
 expect "markdown-bold '**Status:** INCOMPLETE': allow" allow
 reset; edit src/authz.py; stop "${ELEVATED_INCOMPLETE//$'\n'/$'\r\n'}"$'\r'
 expect "CRLF message ending 'Status: INCOMPLETE': allow" allow
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: \`INCOMPLETE\`}"
+expect "backticked 'Status: \`INCOMPLETE\`': allow" allow
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: \`COMPLETE\`}"
+expect "backticked 'Status: \`COMPLETE\`': block" block "independent review"
 
 # Only the last Status line decides.
 QUOTED=$'The reviewer said:\n> Status: INCOMPLETE\n\n'
