@@ -37,6 +37,22 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
   | Agent completed | VCS diff shows changes | Agent reports "success" |
   | Requirements met | Line-by-line checklist | Tests passing alone |
 
+  ## Risk receipt
+
+  End every reply that changed files with a receipt. Each line is a claim; each claim needs the evidence in the table above.
+
+  ```text
+  Risk: elevated (authorization)                      ← or: Risk: routine
+  Pinned: test_owner_allowed, test_admin_same_org passed before edit
+  Failing first: test_admin_cross_org_denied failed, then passed
+  Review: bp:code-reviewer — Ready to merge: Yes
+  Assumptions: org_id is never null on users or resources
+  Verified: pytest — 14 passed, 0 failed
+  Status: COMPLETE                                    ← INCOMPLETE if any step is missing
+  ```
+
+  Routine work needs only `Risk:`, `Verified:`, and `Status:`. A missing step means `Status: INCOMPLETE`, never a softened line.
+
   ## Red Flags — STOP
 
   - Using "should", "probably", "seems to"

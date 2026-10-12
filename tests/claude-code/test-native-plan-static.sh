@@ -72,12 +72,12 @@ else
     fail "model names found in portable skills: $leaks"
 fi
 
-# 6. No phase-routing hook: SessionStart stays the only Claude hook event.
+# 6. No phase-routing hook: only the bootstrap and the risk gate are registered.
 events=$(python3 -c 'import json; print(" ".join(sorted(json.load(open("hooks/hooks.json"))["hooks"].keys())))')
-if [[ "$events" == "SessionStart" ]]; then
-    pass "hooks.json registers only SessionStart"
+if [[ "$events" == "PostToolUse SessionStart Stop" ]]; then
+    pass "hooks.json registers only SessionStart and the risk gate (PostToolUse, Stop)"
 else
-    fail "hooks.json registers extra events: $events"
+    fail "hooks.json registers unexpected events: $events"
 fi
 
 echo ""

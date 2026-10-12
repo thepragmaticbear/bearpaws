@@ -114,7 +114,7 @@ Superpowers-style rigor answers *how do we engineer this correctly?* BearPaws ad
 
 ### What this does not guarantee
 
-These rules are instructions to the agent, not enforcement by the harness. Results so far:
+In Claude Code, a Stop hook enforces the risk receipt and the elevated-risk review (needs jq; set BEARPAWS_ENFORCE=0 to disable). Elsewhere these rules are instructions to the agent, not enforcement by the harness. Results so far:
 
 - In the 2.3.1 A/B work, the elevated-risk rule raised reviewed security fixes from 0/6 to 5/5.
 - In the later [nine-scenario benchmark](docs/benchmarks/2026-09-30-three-way.md), reviews ran on four of six security tasks.
