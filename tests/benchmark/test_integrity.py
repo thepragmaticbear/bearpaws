@@ -146,13 +146,53 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("cache_read", out.getvalue())
         self.assertIn("cache_write", out.getvalue())
 
+    def test_failed_attack_without_incomplete_is_escaped(self):
+        row = self.row("Fixed.", attack_ok="false")
+        self.assertIs(row["attack_ok"], False)
+        self.assertIs(row["escaped"], True)
+
+    def test_failed_attack_reported_incomplete_is_not_escaped(self):
+        row = self.row("Partial work.\nStatus: INCOMPLETE", attack_ok="false")
+        self.assertIs(row["attack_ok"], False)
+        self.assertIs(row["escaped"], False)
+
+    def test_passed_or_absent_attack_is_not_escaped(self):
+        passed = self.row("Fixed.", attack_ok="true")
+        self.assertIs(passed["attack_ok"], True)
+        self.assertIs(passed["escaped"], False)
+        absent = self.row("Fixed.", attack_ok="none")
+        self.assertIsNone(absent["attack_ok"])
+        self.assertIs(absent["escaped"], False)
+
+    def summary(self, *rows):
+        path = self.root / "results.jsonl"
+        path.write_text("\n".join(json.dumps(r) for r in rows))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            summarize.summarize([path])
+        return out.getvalue()
+
+    def test_summary_reports_escaped_defects_only_with_attack_rows(self):
+        attacked = self.row("Fixed.", attack_ok="false")
+        self.assertIn("Escaped defects", self.summary(attacked))
+        self.assertNotIn("Escaped defects", self.summary(self.row("Fixed.")))
+
+    def test_profile_denies_every_hidden_dir(self):
+        (self.root / "scenarios" / "x" / "hidden").mkdir(parents=True)
+        (self.root / "scenarios" / "y").mkdir()
+        profile = summarize.sandbox_profile(self.root, self.root / "snap")
+        hidden = (self.root / "scenarios" / "x" / "hidden").resolve()
+        self.assertIn(f"(deny file-read* file-write* (subpath {json.dumps(str(hidden))}))", profile)
+        self.assertNotIn(str((self.root / "scenarios" / "y").resolve()) + '/hidden', profile)
+
 
 class RunnerTests(unittest.TestCase):
-    def run_fake(self, body, unisolated=True, repeat=False):
+    def run_fake(self, body, unisolated=True, repeat=False, scenario="small-bug", prepare=None):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)
             bench = root / "tests" / "benchmark"
             shutil.copytree(pathlib.Path(__file__).parent, bench, ignore=shutil.ignore_patterns("__pycache__"))
+            if prepare:
+                prepare(bench / "scenarios")
             fake = root / "bin" / "claude"
             fake.parent.mkdir()
             fake.write_text("#!/usr/bin/env python3\nimport json,pathlib,sys,os\n" + body)
@@ -161,7 +201,7 @@ class RunnerTests(unittest.TestCase):
                        BENCH_OUT=str(root / "out"),
                        BENCH_FIXTURE=str(bench / "scenarios" / "small-bug" / "accept.py"))
             command = ["bash", str(bench / "run.sh"), "--runs", "1", "--jobs", "1",
-                       "--arms", "baseline", "--scenarios", "small-bug", "--out", str(root / "out")]
+                       "--arms", "baseline", "--scenarios", scenario, "--out", str(root / "out")]
             if unisolated:
                 command.append("--allow-unisolated")
             result = subprocess.run(command,
@@ -172,8 +212,50 @@ class RunnerTests(unittest.TestCase):
                 self.assertNotEqual(second.returncode, 0, "reused worktree must be refused")
                 self.assertEqual(len((root / "out" / "results.jsonl").read_text().splitlines()), 1)
             row = json.loads((root / "out" / "results.jsonl").read_text())
-            row["_stderr"] = result.stderr + (root / "out/runs/small-bug/baseline/1/stderr.txt").read_text()
+            rdir = root / "out" / "runs" / scenario / "baseline" / "1"
+            row["_stderr"] = result.stderr + (rdir / "stderr.txt").read_text()
+            row["_run_files"] = sorted(p.name for p in rdir.iterdir())
             return row
+
+    def bench_listing(self, *args):
+        with tempfile.TemporaryDirectory() as temp:
+            bench = pathlib.Path(temp) / "tests" / "benchmark"
+            shutil.copytree(pathlib.Path(__file__).parent, bench, ignore=shutil.ignore_patterns("__pycache__"))
+            (bench / "scenarios" / "risk-fake").mkdir()
+            result = subprocess.run(["bash", str(bench / "run.sh"), "--list", *args],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return result.stdout.split()
+
+    def test_default_scenarios_exclude_risk_suite(self):
+        listed = self.bench_listing()
+        self.assertIn("small-bug", listed)
+        self.assertFalse([s for s in listed if s.startswith("risk-")])
+
+    def test_risk_suite_selects_only_risk_scenarios(self):
+        self.assertEqual(self.bench_listing("--suite", "risk"), ["risk-fake"])
+
+    def test_hidden_attack_failure_is_scored_as_escaped(self):
+        def prepare(scenarios):
+            s = scenarios / "risk-fake"
+            files = {
+                "repo/src/__init__.py": "",
+                "repo/src/m.py": "def f(): return 1\n",
+                "repo/tests/__init__.py": "",
+                "repo/tests/test_m.py": "import unittest\nfrom src.m import f\nclass T(unittest.TestCase):\n    def test_f(self): self.assertEqual(f(), 1)\n",
+                "accept.py": "import unittest\nfrom src.m import f\nclass Accept(unittest.TestCase):\n    def test_f(self): self.assertEqual(f(), 1)\n",
+                "hidden/attack.py": "import unittest\nfrom src.m import f\nclass Attack(unittest.TestCase):\n    def test_f(self): self.assertEqual(f(), 2)\n",
+                "prompt.txt": "Do nothing.\n",
+            }
+            for name, text in files.items():
+                (s / name).parent.mkdir(parents=True, exist_ok=True)
+                (s / name).write_text(text)
+        row = self.run_fake('print(json.dumps({"type":"result", "subtype":"success", "is_error":False, "result":"Fixed."}))\n',
+                            scenario="risk-fake", prepare=prepare)
+        self.assertIs(row["acceptance_ok"], True)
+        self.assertIs(row["attack_ok"], False)
+        self.assertIs(row["escaped"], True)
+        self.assertIn("attack.txt", row["_run_files"])
 
     def test_existing_run_directory_is_refused(self):
         self.run_fake('print(json.dumps({"type":"result", "subtype":"success", "is_error":False, "result":"Fixed."}))\n', repeat=True)
