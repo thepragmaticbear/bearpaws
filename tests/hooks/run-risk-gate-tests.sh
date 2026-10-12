@@ -21,8 +21,11 @@ gate() {
     bash "$GATE" "$mode" >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
   echo "$rc" >"$TMP_ROOT/rc"
 }
-reset() { rm -f "$TMP_ROOT/data/risk-gate/$SID.log"; }
+reset() { rm -f "$TMP_ROOT/data/risk-gate/$SID.log" "$TMP_ROOT/data/risk-gate/$SID".*.tree; }
 logfile() { echo "$TMP_ROOT/data/risk-gate/$SID.log"; }
+# The state file is per repo: <session>.<first 12 hex of sha1(toplevel)>.tree. treefile: the first one that exists.
+treefile() { local f; for f in "$TMP_ROOT/data/risk-gate/$SID".*.tree; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$TMP_ROOT/data/risk-gate/$SID.none.tree"; }
+treefor() { echo "$TMP_ROOT/data/risk-gate/$SID.$(printf '%s' "$(git -C "$1" rev-parse --show-toplevel)" | shasum | cut -c1-12).tree"; }
 edit() { # <path> [VAR=value ...]
   local p="$1"; shift
   gate record "$(jq -cn --arg s "$SID" --arg p "$p" \
@@ -283,6 +286,242 @@ if printf '{}' | env -u COPILOT_CLI -u CURSOR_PLUGIN_ROOT -u DEVIN_PROJECT_DIR -
 else
   fail "missing jq: expected exit 0, empty stdout, stderr note"
 fi
+
+# Bash edits: a per-repo git tree fingerprint, compared with the one stored in <session>.<repo>.tree.
+mkrepo() { # <name> [--empty]: temp git repo (one commit unless --empty); prints its path
+  local r="$TMP_ROOT/repo-$1"; mkdir -p "$r"
+  git -C "$r" init -q && git -C "$r" config user.email t@t && git -C "$r" config user.name t
+  [ "${2:-}" = --empty ] || { echo one >"$r/a.py"; git -C "$r" add a.py && git -C "$r" commit -qm init; }
+  echo "$r"
+}
+bashc() { # <cwd>
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" \
+    '{session_id:$s,cwd:$c,tool_name:"Bash",tool_input:{command:"x"}}')"
+}
+prec() { # <cwd>: PreToolUse Bash, handled by `baseline` mode
+  gate baseline "$(jq -cn --arg s "$SID" --arg c "$1" \
+    '{session_id:$s,cwd:$c,hook_event_name:"PreToolUse",tool_name:"Bash",tool_input:{command:"x"}}')"
+}
+nbash() { [ -f "$(logfile)" ] || { echo 0; return; }; grep -cxF 'edit (bash)' "$(logfile)" || true; }
+expect_bash_edits() { # <label> <count>
+  if [ "$(nbash)" = "$2" ]; then echo "OK: $1"; else fail "$1: expected $2 'edit (bash)' line(s), got $(nbash): $(cat "$(logfile)" 2>/dev/null)"; fi
+}
+
+R="$(mkrepo 1)"
+reset; bashc "$R"; expect "bash baseline: allow" allow; expect_bash_edits "first Bash call is a baseline, not an edit" 0
+[ -s "$(treefile)" ] && echo "OK: baseline stores the fingerprint in the .tree file" || fail "baseline wrote no .tree file"
+grep -q '^tree ' "$(logfile)" 2>/dev/null && fail "tree line leaked into the log" || echo "OK: log holds no tree lines"
+cat >"$R/new.py" <<'EOT'
+print("written by heredoc")
+EOT
+bashc "$R"; expect_bash_edits "Bash heredoc write is an edit" 1
+stop "Done."; expect "Bash edit without receipt: block" block "risk receipt"
+bashc "$R"; expect_bash_edits "unchanged tree adds no second edit" 1
+reset; bashc "$R"; stop "Done."; expect "tree lines alone are not edits: allow" allow
+
+R="$(mkrepo 2)"
+reset; bashc "$R"
+mkdir -p "$R/__pycache__" "$R/.pytest_cache" "$R/node_modules/p" "$R/.venv/lib" "$R/pkg/__pycache__"
+echo x >"$R/__pycache__/x.pyc"; echo x >"$R/.pytest_cache/v"; echo x >"$R/node_modules/p/i.js"
+echo x >"$R/.venv/lib/z"; echo x >"$R/pkg/__pycache__/y.cpython.pyc"; echo x >"$R/stray.pyc"
+bashc "$R"; expect_bash_edits "cache dirs and .pyc are not edits" 0
+echo real >"$R/real.py"; bashc "$R"; expect_bash_edits "a real new file next to caches is an edit" 1
+
+R="$(mkrepo 3)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; review; bashc "$R"
+stop "$ELEVATED"; expect "Edit, review, Bash with no change (pytest): allow" allow
+
+R="$(mkrepo 4)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; review; echo fixed >"$R/a.py"; bashc "$R"
+stop "$ELEVATED"; expect "Edit, review, Bash sed -i, COMPLETE: block" block "independent review"
+review; stop "$ELEVATED"; expect "re-review after the Bash fix: allow" allow
+
+R="$(mkrepo 4b)"
+reset; echo two >"$R/a.py"; editc "$R" a.py
+[ -s "$(treefile)" ] && echo "OK: Edit refreshes the .tree file" || fail "Edit did not write the .tree file"
+bashc "$R"; expect_bash_edits "Bash right after Edit: tree already fresh, no edit" 0
+
+R="$(mkrepo 4c)"
+reset; bashc "$R"; echo y >"$R/n.py"; bashc "$R"; stop "$ROUTINE"; expect "'edit (bash)' with a routine receipt: no nudge" allow
+
+PLAIN="$TMP_ROOT/plain"; mkdir -p "$PLAIN"
+reset; bashc "$PLAIN"; echo x >"$PLAIN/f"; bashc "$PLAIN"
+expect "non-git cwd: rc 0, no output" allow; expect_bash_edits "non-git cwd never records edit (bash)" 0
+[ -e "$(logfile)" ] || [ -e "$(treefile)" ] && fail "non-git cwd wrote state" || echo "OK: non-git cwd writes no state"
+
+R="$(mkrepo 6)"
+reset; bashc "$R"; rm -rf "$R"; bashc "$R"
+expect "cwd removed between calls: rc 0, no output" allow; expect_bash_edits "cwd removed: no edit" 0
+R="$(mkrepo 6b)"
+reset; bashc "$R"; echo garbage >"$R/.git/HEAD"; echo y >"$R/n.py"; bashc "$R"
+expect "corrupted .git: rc 0, no output" allow; expect_bash_edits "corrupted .git: no edit" 0
+
+R="$(mkrepo 7 --empty)"
+reset; bashc "$R"; expect_bash_edits "no-commit repo: baseline is not an edit" 0
+echo x >"$R/f.py"; bashc "$R"; expect_bash_edits "no-commit repo: new file is an edit" 1
+git -C "$R" add f.py; bashc "$R"; expect_bash_edits "no-commit repo: git add is not an edit" 1
+bashc "$R"; expect_bash_edits "no-commit repo: unchanged adds nothing" 1
+
+R="$(mkrepo 8)"
+printf 'aaaa' >"$R/u.txt"; reset; bashc "$R"
+printf 'bbbb' >"$R/u.txt"; touch -t 203001010000 "$R/u.txt"; bashc "$R"
+expect_bash_edits "untracked same-size change with a new mtime is an edit" 1
+# Known limit: untracked content is not hashed, only size and mtime, so a same-size change in the same second is missed.
+touch -t 203001010001 "$R/u.txt"; bashc "$R"; n=$(nbash)
+printf 'cccc' >"$R/u.txt"; touch -t 203001010001 "$R/u.txt"; bashc "$R"
+expect_bash_edits "known limit: same-size, same-mtime untracked change is missed" "$n"
+
+# Index- and HEAD-independent fingerprint: git add / git commit are not edits; content, size-preserving and delete edits are.
+R="$(mkrepo 10)"
+reset; bashc "$R"; echo n >"$R/new.py"; bashc "$R"; git -C "$R" add -A; bashc "$R"
+expect_bash_edits "Bash git add -A after an edit adds no edit" 1
+R="$(mkrepo 11)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; git -C "$R" add -A; bashc "$R"
+expect_bash_edits "Edit then Bash git add -A: no edit (bash)" 0
+R="$(mkrepo 12)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; review; git -C "$R" commit -qam x; bashc "$R"
+stop "$ELEVATED"; expect "Edit, review, Bash git commit -am, COMPLETE: allow" allow
+R="$(mkrepo 13)"
+reset; bashc "$R"; echo two >"$R/a.py"; bashc "$R"
+expect_bash_edits "same-size rewrite of a tracked file is detected via mtime" 1
+R="$(mkrepo 14)"
+reset; bashc "$R"; rm "$R/a.py"; bashc "$R"
+expect_bash_edits "deleting a tracked file is an edit" 1
+
+# The fingerprint survives an accepted stop (which removes the log), so the next turn's first Bash call is not just a baseline.
+R="$(mkrepo 15)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; stop "$ROUTINE"; expect "gap: routine receipt accepts" allow
+[ -e "$(logfile)" ] && fail "gap: accepted stop left the log" || echo "OK: gap: accepted stop removed the log"
+[ -s "$(treefile)" ] && echo "OK: accepted stop keeps the .tree file" || fail "accepted stop removed the .tree file"
+echo heredoc >"$R/b.py"; bashc "$R"; expect_bash_edits "gap: first Bash call of the next turn detects the edit" 1
+stop "Done."; expect "gap: Bash edit in a later turn needs a receipt" block "risk receipt"
+
+# The .tree file gets the same no-symlink treatment as the log: the planted link survives, still points at its
+# original target, and the target is untouched. (Without the guard, mv -f would replace the link with a file.)
+R="$(mkrepo 16)"
+mkdir -p "$TMP_ROOT/symtree/data/risk-gate"
+echo original >"$TMP_ROOT/symtree/target"
+SYMTREE="$TMP_ROOT/symtree/data/risk-gate/$(basename "$(treefor "$R")")"
+ln -s "$TMP_ROOT/symtree/target" "$SYMTREE"
+for m in baseline record; do
+  if [ $m = baseline ]; then gate baseline "$(jq -cn --arg s "$SID" --arg c "$R" '{session_id:$s,cwd:$c,tool_name:"Bash"}')" "CLAUDE_PLUGIN_DATA=$TMP_ROOT/symtree/data"
+  else gate record "$(jq -cn --arg s "$SID" --arg c "$R" '{session_id:$s,cwd:$c,tool_name:"Bash",tool_input:{command:"x"}}')" "CLAUDE_PLUGIN_DATA=$TMP_ROOT/symtree/data"; fi
+  if [ "$(cat "$TMP_ROOT/rc")" != 0 ]; then fail "symlinked .tree ($m): hook exited $(cat "$TMP_ROOT/rc")"
+  elif [ ! -L "$SYMTREE" ] || [ "$(readlink "$SYMTREE")" != "$TMP_ROOT/symtree/target" ]; then fail "symlinked .tree ($m): the planted link was replaced"
+  elif [ "$(cat "$TMP_ROOT/symtree/target")" != original ]; then fail "symlinked .tree ($m): hook wrote through the symlink"
+  else echo "OK: symlinked .tree is refused ($m)"; fi
+done
+
+# PreToolUse `baseline`: take the fingerprint before the first Bash call, so a first-ever heredoc write is seen.
+R="$(mkrepo 18)"
+reset; prec "$R"; expect "baseline mode prints nothing" allow
+[ -s "$(treefile)" ] && echo "OK: baseline writes the .tree file" || fail "baseline wrote no .tree file"
+[ -e "$(logfile)" ] && fail "baseline wrote the log" || echo "OK: baseline does not touch the log"
+echo heredoc >"$R/first.py"; bashc "$R"
+expect_bash_edits "first-ever Bash call that writes a file is an edit" 1
+stop "Done."; expect "first-call Bash heredoc without receipt: block" block "risk receipt"
+
+R="$(mkrepo 19)"
+reset; bashc "$R"; touch -t 200001010000 "$(treefile)"
+before="$(cat "$(treefile)")|$(ls -lT "$(treefile)" 2>/dev/null || ls -l --time-style=full-iso "$(treefile)")"
+echo changed >"$R/a.py"; prec "$R"
+after="$(cat "$(treefile)")|$(ls -lT "$(treefile)" 2>/dev/null || ls -l --time-style=full-iso "$(treefile)")"
+[ "$before" = "$after" ] && echo "OK: baseline leaves an existing .tree untouched" || fail "baseline rewrote an existing .tree"
+bashc "$R"; expect_bash_edits "baseline did not absorb the edit: next record sees it" 1
+
+PLAIN2="$TMP_ROOT/plain2"; mkdir -p "$PLAIN2"
+reset; prec "$PLAIN2"; expect "baseline, non-git cwd: rc 0, no output" allow
+[ -e "$(treefile)" ] && fail "baseline wrote .tree outside git" || echo "OK: baseline outside git writes nothing"
+reset; prec "$TMP_ROOT/does-not-exist"; expect "baseline, missing cwd: rc 0, no output" allow
+reset; gate baseline "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"Bash"}')"; expect "baseline, no cwd: rc 0, no output" allow
+R="$(mkrepo 20)"; reset; echo garbage >"$R/.git/HEAD"; prec "$R"; expect "baseline, corrupted .git: rc 0, no output" allow
+for bad in "../evil" "a/b" "" "$(printf 'x%.0s' {1..129})"; do
+  rc=0; printf '%s' "$(jq -cn --arg s "$bad" --arg c "$(mkrepo 21)" '{session_id:$s,cwd:$c,tool_name:"Bash"}')" \
+    | env -u COPILOT_CLI -u CURSOR_PLUGIN_ROOT -u DEVIN_PROJECT_DIR -u DEVIN_PLUGIN_ROOT -u BEARPAWS_ENFORCE \
+      CLAUDE_PLUGIN_ROOT="$REPO_ROOT" CLAUDE_PLUGIN_DATA="$TMP_ROOT/bad2/data" bash "$GATE" baseline >"$TMP_ROOT/out" 2>&1 || rc=$?
+  if [ "$rc" != 0 ] || [ -s "$TMP_ROOT/out" ]; then fail "baseline, bad session_id '$bad': rc=$rc out=$(cat "$TMP_ROOT/out")"; fi
+done
+[ -n "$(find "$TMP_ROOT/bad2" -type f 2>/dev/null)" ] && fail "baseline with a malformed session_id wrote a file" || echo "OK: baseline with a malformed session_id writes nothing"
+R="$(mkrepo 22)"; reset
+gate baseline "$(jq -cn --arg s "$SID" --arg c "$R" '{session_id:$s,cwd:$c,tool_name:"Bash"}')" BEARPAWS_ENFORCE=0
+[ -e "$(treefile)" ] && fail "baseline ignored BEARPAWS_ENFORCE=0" || echo "OK: BEARPAWS_ENFORCE=0 disables baseline"
+
+# C1: the fingerprint is toplevel-relative and keyed per repo, so cd and worktrees are not edits.
+R="$(mkrepo 30)"; mkdir -p "$R/sub/deep"
+reset; bashc "$R"; bashc "$R/sub"; bashc "$R/sub/deep"; bashc "$R"
+expect_bash_edits "cd into a subdir with no change is not an edit" 0
+R="$(mkrepo 31)"; mkdir -p "$R/sub"
+reset; bashc "$R"; echo n >"$R/top.py"; bashc "$R/sub"
+expect_bash_edits "an edit at the root seen from a subdir cwd is an edit" 1
+R="$(mkrepo 32)"; WT="$TMP_ROOT/wt-32"
+git -C "$R" worktree add -q "$WT" -b wt32 2>/dev/null
+reset; bashc "$R"; bashc "$WT"; bashc "$R"; bashc "$WT"; bashc "$R"
+expect_bash_edits "alternating main checkout and worktree with no change: no edit" 0
+[ "$(ls "$TMP_ROOT/data/risk-gate/$SID".*.tree | wc -l | tr -d ' ')" = 2 ] && echo "OK: one state file per repo" || fail "expected 2 .tree files"
+prec "$R"; prec "$WT"; echo w >"$WT/only-in-wt.py"; bashc "$WT"
+expect_bash_edits "worktree edit after its own baseline is detected" 1
+R="$(mkrepo 33)"; WT="$TMP_ROOT/wt-33"; git -C "$R" worktree add -q "$WT" -b wt33 2>/dev/null
+reset; bashc "$R"; echo w >"$WT/first.py"; bashc "$WT"
+expect_bash_edits "known limit: a worktree's first Bash call with no baseline only baselines" 0
+# Another repo's state does not leak: the edit at B is not an edit in A.
+R="$(mkrepo 34)"; R2="$(mkrepo 35)"
+reset; bashc "$R"; bashc "$R2"; echo z >"$R2/z.py"; bashc "$R"
+expect_bash_edits "an edit in repo B is not seen from repo A" 0
+bashc "$R2"; expect_bash_edits "the same edit is seen from repo B" 1
+
+# I1: file names that look like stat options must not blind the fingerprint.
+R="$(mkrepo 36)"
+for n in -f -n --help "with space"; do echo one >"$R/$n"; done
+reset; bashc "$R"; touch -t 203001010000 "$R/-f"; bashc "$R"
+expect_bash_edits "a file named -f does not blind detection" 1
+touch -t 203001010001 "$R/--help"; bashc "$R"; expect_bash_edits "a file named --help changes are detected" 2
+touch -t 203001010002 "$R/with space"; bashc "$R"; expect_bash_edits "a file name with a space is detected" 3
+touch -t 203001010003 "$R/-n"; bashc "$R"; expect_bash_edits "a file named -n is detected" 4
+R="$(mkrepo 37)"; echo n >"$R/-f"; reset; bashc "$R"; echo new >"$R/real.py"; bashc "$R"
+expect_bash_edits "a new file next to a file named -f is detected" 1
+
+# I2: unambiguous test artifacts are not edits; dist/, build/, coverage/ are.
+R="$(mkrepo 38)"
+reset; echo two >"$R/a.py"; editc "$R" a.py; review
+mkdir -p "$R/htmlcov" "$R/.hypothesis" "$R/.tox/x" "$R/.nox" "$R/pkg.egg-info"
+echo x >"$R/.coverage"; echo x >"$R/.coverage.host.123"; echo x >"$R/htmlcov/x.html"; echo x >"$R/.hypothesis/h"
+echo x >"$R/.tox/x/y"; echo x >"$R/.nox/n"; echo x >"$R/.eslintcache"; echo x >"$R/pkg.egg-info/PKG-INFO"
+bashc "$R"; stop "$ELEVATED"; expect "coverage, hypothesis, tox, nox, eslintcache, egg-info after a review: allow" allow
+for d in dist build coverage; do
+  R="$(mkrepo 39-$d)"; reset; echo two >"$R/a.py"; editc "$R" a.py; review; mkdir -p "$R/$d"; echo x >"$R/$d/o"; bashc "$R"
+  stop "$ELEVATED"; expect "$d/ output counts as an edit (no .gitignore)" block "independent review"
+done
+
+# M2: no temp files are left next to the state file.
+R="$(mkrepo 40)"; reset; bashc "$R"; echo y >"$R/n.py"; bashc "$R"
+[ -z "$(ls "$TMP_ROOT/data/risk-gate" | grep -E '\.tree\.[0-9]+$' || true)" ] && echo "OK: no temp files left by the atomic .tree write" || fail "temp file left: $(ls "$TMP_ROOT/data/risk-gate")"
+
+# M4: a git failure after rev-parse works is a failure, not an empty list.
+R="$(mkrepo 41)"; reset; bashc "$R"; echo garbage >"$R/.git/index"; echo y >"$R/n.py"; bashc "$R"
+expect "corrupt index: rc 0, no output" allow; expect_bash_edits "ls-files failure is not hashed as an empty tree" 0
+
+# Performance (reported, not asserted): 20 Bash record calls on a repo with 200 files.
+R="$(mkrepo 9)"
+for i in $(seq 1 200); do echo "$i" >"$R/f$i.txt"; done
+git -C "$R" add -A f1*.txt 2>/dev/null; git -C "$R" commit -qm many
+for i in $(seq 1 100); do echo "$i" >"$R/u$i.txt"; done
+reset; bashc "$R"
+t0=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+for i in $(seq 1 20); do bashc "$R"; done
+t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+echo "PERF: 20 Bash record calls, 200 files: mean $(( (t1 - t0) / 20 )) ms"
+R="$(mkrepo 17)"
+for i in $(seq 1 5000); do echo "$i" >"$R/f$i.txt"; done
+git -C "$R" add -A; git -C "$R" commit -qm many
+reset; bashc "$R"
+t0=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+for i in $(seq 1 20); do bashc "$R"; done
+t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+echo "PERF: 20 Bash record calls, 5000 files: mean $(( (t1 - t0) / 20 )) ms"
+t0=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+for i in $(seq 1 20); do prec "$R"; done
+t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+echo "PERF: 20 baseline calls with .tree present, 5000 files: mean $(( (t1 - t0) / 20 )) ms"
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"

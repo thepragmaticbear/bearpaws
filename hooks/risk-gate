@@ -2,7 +2,7 @@
 # Risk gate for Claude Code. Blocks ending a turn with pending edits and no
 # risk receipt, and elevated-risk work marked COMPLETE without an independent
 # review dispatched after the last edit.
-# Modes: record (PostToolUse), stop (Stop). The log holds edits not yet accepted by a receipt:
+# Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop). Bash edits are detected by a git tree fingerprint kept per repo in <session_id>.<repo hash>.tree, which accepted stops do not clear. The log holds edits not yet accepted by a receipt:
 # a stop that allows clears it, except elevated INCOMPLETE work with no review, which stays pending (also across turns and background-agent report-backs).
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
@@ -35,12 +35,62 @@ SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
+# Tree fingerprint of the git work tree rooted at $1: SHA-1 of path, size and sub-second mtime of every tracked or
+# untracked, non-ignored, non-cache file, as listed from the toplevel so the hook's cwd (which follows cd) does not matter.
+# It reads neither the index nor HEAD, so git add and git commit leave it unchanged. The list is sorted: git lists
+# untracked files after tracked ones, so staging would reorder it. A deleted tracked file drops out of the list and
+# changes it. Fails (returns 1) on any git error. $2 is the sha tool.
+# Size is redundant with mtime in practice (any write moves mtime), so dropping it would be an equivalent mutant.
+# ponytail: content is not hashed, so a same-size edit inside one mtime tick is missed; hash content if that bites.
+# Not detected: submodule contents, file names containing a newline, edits outside the repo of the hook's cwd.
+fingerprint() { # <toplevel> <sha tool>
+  local top="$1" files
+  files="$(cd -- "$top" 2>/dev/null && git ls-files -co --exclude-standard -z 2>/dev/null | tr '\0' '\n')" || return 1
+  # Excluded: caches and unambiguous test artifacts. Not dist/, build/ or coverage/: those can be real work.
+  printf '%s\n' "$files" \
+    | { grep -vE '^$|(^|/)(__pycache__|\.pytest_cache|node_modules|\.mypy_cache|\.ruff_cache|\.venv|htmlcov|\.hypothesis|\.tox|\.nox|\.eslintcache|\.coverage(\.[^/]*)?|[^/]*\.egg-info)(/|$)|\.pyc$' || true; } \
+    | LC_ALL=C sort | tr '\n' '\0' \
+    | (cd -- "$top" 2>/dev/null && {
+        # stat: GNU -c with %.9Y (checked first: BSD rejects -c), else BSD %Fm (fractional seconds), else whole seconds.
+        # The trailing -- keeps a file named -f or --help from being read as an option.
+        if stat -c %s / >/dev/null 2>&1; then xargs -0 stat -c '%n %s %.9Y' --
+        elif stat -f %Fm / >/dev/null 2>&1; then xargs -0 stat -f '%N %z %Fm' --
+        else xargs -0 stat -f '%N %z %m' --; fi; } 2>/dev/null || true) | $2 | cut -d' ' -f1
+}
+# Per-repo state: the fingerprint lives in $dir/$sid.<12 hex of sha1(toplevel)>.tree (kept across accepted stops, unlike
+# the log), so alternating between a checkout and a worktree, or cd, never mixes trees. A Bash call that changed the
+# fingerprint is an edit; with no stored fingerprint for that repo it only sets the baseline. Always returns 0 (fail open).
+track_tree() { # <cwd> <tool>
+  local top sha fp last tree
+  [ -n "$1" ] || return 0
+  if command -v shasum >/dev/null 2>&1; then sha=shasum; elif command -v sha1sum >/dev/null 2>&1; then sha=sha1sum; else return 0; fi
+  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ] || return 0
+  tree="$dir/$sid.$(printf '%s' "$top" | $sha | cut -c1-12).tree"
+  [ ! -L "$tree" ] || return 0
+  [ "$2" = baseline ] && [ -e "$tree" ] && return 0
+  fp="$(fingerprint "$top" $sha)" && [ -n "$fp" ] || return 0
+  last="$(cat "$tree" 2>/dev/null)"
+  if [ "$2" = Bash ]; then
+    [ "$last" = "$fp" ] && return 0
+    [ -n "$last" ] && echo 'edit (bash)' >>"$log"
+  fi
+  # Atomic: write beside it, then rename. A failed write leaves the old state and fails open.
+  if printf '%s\n' "$fp" >"$tree.$$" 2>/dev/null; then mv -f "$tree.$$" "$tree" 2>/dev/null || rm -f "$tree.$$"; else rm -f "$tree.$$"; fi
+  return 0
+}
+
 block() { jq -cn --arg r "$1" '{decision: "block", reason: $r}'; exit 0; }
 field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in
+  baseline)
+    # PreToolUse on Bash: take the first fingerprint before the first Bash call, so that call's own edit is seen.
+    # Fast path: once the repo's state file exists this costs one git call (toplevel) and no fingerprint. Prints nothing, always exits 0.
+    track_tree "$(jq -r '.cwd // empty' <<<"$input")" baseline >/dev/null 2>&1
+    ;;
   record)
-    case "$(jq -r '.tool_name // empty' <<<"$input")" in
+    tool="$(jq -r '.tool_name // empty' <<<"$input")"
+    case "$tool" in
       Edit|Write|MultiEdit|NotebookEdit)
         path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
@@ -51,6 +101,10 @@ case "$mode" in
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         [ -n "$path" ] && printf 'edit %s\n' "$path" >>"$log"
+        track_tree "$cwd" "$tool"
+        ;;
+      Bash)
+        track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         ;;
       Agent|Task)
         # Reviewer subagent_type (word-boundary "review"), or a description that starts with "review",

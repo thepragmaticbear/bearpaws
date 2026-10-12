@@ -74,8 +74,8 @@ fi
 
 # 6. No phase-routing hook: only the bootstrap and the risk gate are registered.
 events=$(python3 -c 'import json; print(" ".join(sorted(json.load(open("hooks/hooks.json"))["hooks"].keys())))')
-if [[ "$events" == "PostToolUse SessionStart Stop" ]]; then
-    pass "hooks.json registers only SessionStart and the risk gate (PostToolUse, Stop)"
+if [[ "$events" == "PostToolUse PreToolUse SessionStart Stop" ]]; then
+    pass "hooks.json registers only SessionStart and the risk gate (PreToolUse, PostToolUse, Stop)"
 else
     fail "hooks.json registers unexpected events: $events"
 fi
