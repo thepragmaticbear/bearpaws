@@ -237,7 +237,7 @@ install_antigravity() {
     if mv "$staging" "$plugin_root"; then
         [[ -n "$backup" ]] && rm -rf "$backup"
         trap - EXIT
-        log_success "Installed BearPaws for Antigravity: $plugin_root"
+        log_success "Installed Bearpaws for Antigravity: $plugin_root"
     else
         log_error "Failed to move staged plugin to $plugin_root"
         [[ -n "$backup" ]] && mv "$backup" "$plugin_root"
@@ -274,7 +274,7 @@ main() {
                 echo "Usage: $0 --antigravity --global | --agents --global | --grok --global"
                 echo ""
                 echo "Options:"
-                echo "  --antigravity Install BearPaws plugin for Google Antigravity"
+                echo "  --antigravity Install Bearpaws plugin for Google Antigravity"
                 echo "  --agents      Link skills into ~/.agents/skills (Codex, Devin, OpenCode, Cursor, Copilot, ...)"
                 echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
                 echo "  --global      Required for every target"

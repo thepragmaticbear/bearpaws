@@ -1,9 +1,9 @@
 # Claude Code Capability Mapping
 
-BearPaws skills define intent. Use the Claude Code native capability when it
+Bearpaws skills define intent. Use the Claude Code native capability when it
 implements that intent more strongly than prompt instructions do.
 
-| BearPaws intent | Claude Code capability |
+| Bearpaws intent | Claude Code capability |
 |---|---|
 | Protected implementation planning | Native Plan Mode (`/plan`, permission mode `plan`, `EnterPlanMode` / `ExitPlanMode`) |
 | Skill execution | `Skill` |
@@ -11,7 +11,7 @@ implements that intent more strongly than prompt instructions do.
 | Project exploration | `Read`, `Grep`, `Glob` |
 | Implementation | `Write`, `Edit` |
 | Command execution | `Bash` |
-| Verification | Fresh commands plus BearPaws evidence rules |
+| Verification | Fresh commands plus Bearpaws evidence rules |
 
 ## Native planning
 
@@ -22,7 +22,7 @@ it is unavailable or declined, use bp:writing-plans normally.
 While in Plan Mode:
 
 - Use bp:writing-plans normally: explore, map files, define tasks, self-review.
-- Write the plan to the plan file Claude Code designates, using the BearPaws
+- Write the plan to the plan file Claude Code designates, using the Bearpaws
   plan format. Do not leave Plan Mode to save it under `docs/bearpaws/plans/`.
 - If bp:brainstorming applies, keep the design in the native plan instead of
   writing a design doc.
@@ -51,6 +51,6 @@ Plan approval does not replace TDD, review, or verification gates.
 
 ## Model selection
 
-Model selection belongs to Claude Code and the user; BearPaws never requires
+Model selection belongs to Claude Code and the user; Bearpaws never requires
 or switches a model. `/model opusplan` (one model in Plan Mode, another for
 execution, same session) fits this lifecycle and is optional.

@@ -50,7 +50,7 @@ cat << 'EOF' > "$WORK/.antigravity/plugin.json"
 }
 EOF
 cat << 'EOF' > "$WORK/.antigravity/rules/bearpaws.md"
-# BearPaws
+# Bearpaws
 @../skills/using-bearpaws/SKILL.md
 EOF
 cat << 'EOF' > "$WORK/agents/code-reviewer.md"
@@ -220,8 +220,8 @@ grep -qF "Repointing gamma from $NEW_CLONE/skills" <<<"$out_third"
 test "$(readlink "$MOVE_SKILLS/gamma")" = "$THIRD_CLONE/skills/gamma/"
 test "$(cat "$MOVE_SKILLS/.bearpaws-roots")" = "$THIRD_CLONE/skills"
 
-# The README uninstall snippet removes every recorded Bearpaws link and the record, nothing else
-uninstall_snippet="$(sed -n '/^roots=~\/.agents\/skills\/.bearpaws-roots$/,/^rm -f "\$roots"$/p' "$REPO_ROOT/README.md")"
+# The docs/install.md uninstall snippet removes every recorded Bearpaws link and the record, nothing else
+uninstall_snippet="$(sed -n '/^roots=~\/.agents\/skills\/.bearpaws-roots$/,/^rm -f "\$roots"$/p' "$REPO_ROOT/docs/install.md")"
 test -n "$uninstall_snippet"
 HOME="$MOVE_HOME" bash -c "$uninstall_snippet"
 test "$(ls -A "$MOVE_SKILLS")" = "delta"

@@ -1,9 +1,9 @@
 # Antigravity Capability Mapping
 
-BearPaws skills define intent. Use the equivalent native Antigravity capability
+Bearpaws skills define intent. Use the equivalent native Antigravity capability
 when a skill names a platform-oriented action.
 
-| BearPaws reference | Antigravity behavior |
+| Bearpaws reference | Antigravity behavior |
 |---|---|
 | Read | Native file reading (`view_file`) |
 | Write | Native file creation (`write_to_file`) |
@@ -18,14 +18,14 @@ when a skill names a platform-oriented action.
 
 Do not use legacy Gemini CLI `activate_skill`.
 
-When a BearPaws skill applies, load/use the native Antigravity skill before
+When a Bearpaws skill applies, load/use the native Antigravity skill before
 performing the governed work.
 
-When BearPaws requests a fresh implementer, reviewer, research agent, or
+When Bearpaws requests a fresh implementer, reviewer, research agent, or
 parallel worker, use an isolated Antigravity subagent.
 
 Use the packaged `code-reviewer` agent when `requesting-code-review` calls for it.
 
-Native speed or parallelism does not override BearPaws workflow gates.
+Native speed or parallelism does not override Bearpaws workflow gates.
 
 **Momentum does not waive gates.**

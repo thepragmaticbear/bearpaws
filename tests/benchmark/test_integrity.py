@@ -207,6 +207,20 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("attack_fail", out)
         self.assertNotIn("Escaped defects", self.summary(self.row("Fixed.")))
 
+    def test_summary_reports_skill_counts_by_arm(self):
+        onboard, brain = "bp:onboarding-to-a-project", "bp:brainstorming"
+        rows = [self.row("Fixed.", arm="bp") for _ in range(2)] + [self.row("Fixed.", arm="plain")]
+        rows[0]["skills"] = [onboard, brain, brain]
+        rows[1]["skills"] = [onboard]
+        rows[2]["skills"] = [brain]
+        out = self.summary(*rows)
+        self.assertIn("Skills by arm (runs that invoked each skill / n)", out)
+        self.assertIn(f"  bp: {brain} 1/2, {onboard} 2/2", out)
+        self.assertIn(f"  plain: {brain} 1/1", out)
+
+    def test_summary_omits_skill_section_without_skills(self):
+        self.assertNotIn("Skills by arm", self.summary(self.row("Fixed.")))
+
     def test_reported_incomplete_is_stored_on_every_row(self):
         self.assertIs(self.row("Fixed.")["reported_incomplete"], False)
         row = self.row("Partial.\nStatus: INCOMPLETE", accepted=True, attack_ok="false")

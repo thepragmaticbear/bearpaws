@@ -60,7 +60,7 @@ How it works:
 - `hooks/run-hook.cmd` provides a cross-platform wrapper.
 - `hooks/session-start` reads `skills/using-bearpaws/SKILL.md`, wraps it in hard warning context, and emits Claude Code's `hookSpecificOutput` shape.
 - Claude Code consumes native `SKILL.md` skill directories.
-- `skills/using-bearpaws/references/claude-code.md` maps BearPaws intents to Claude Code capabilities, including native Plan Mode: `bp:writing-plans` plans read-only in Plan Mode, and after approval the plan is saved to `docs/bearpaws/plans/` before execution. Model choice (for example `/model opusplan`) stays with Claude Code and the user.
+- `skills/using-bearpaws/references/claude-code.md` maps Bearpaws intents to Claude Code capabilities, including native Plan Mode: `bp:writing-plans` plans read-only in Plan Mode, and after approval the plan is saved to `docs/bearpaws/plans/` before execution. Model choice (for example `/model opusplan`) stays with Claude Code and the user.
 
 Current test coverage:
 
@@ -138,7 +138,7 @@ Validation gates (promotion requirements):
 
 Risk:
 
-- Low. Plugin packaging isolates BearPaws from core system settings and other plugins.
+- Low. Plugin packaging isolates Bearpaws from core system settings and other plugins.
 
 ## OpenCode
 

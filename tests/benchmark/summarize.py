@@ -12,7 +12,38 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
+
+
+# The one evaluator for held-out checkers (accept, attack) and the visible suite, used by run.sh and
+# check_scenarios.py: `python3 -I -B -c SOURCE <work> [checker.py]`. Without a checker it runs the work
+# tree's tests/. Hard-fails on no tests, skips, expected failures, and a timeout (BENCH_CHECKER_TIMEOUT,
+# default 120s). The checker is loaded by exact path; <work> is appended to sys.path so a planted
+# work/tempfile.py cannot shadow the stdlib (stdlib unittest is imported first).
+CHECKER_SOURCE = r'''
+import importlib.util, os, signal, sys, unittest
+work = sys.argv[1]
+checker = sys.argv[2] if len(sys.argv) > 2 else None
+def timed_out(*_):
+    print("checker timed out", file=sys.stderr)
+    os._exit(1)
+signal.signal(signal.SIGALRM, timed_out)
+signal.alarm(int(os.environ.get("BENCH_CHECKER_TIMEOUT", "120")))
+if checker:
+    sys.path.append(work)
+    spec = importlib.util.spec_from_file_location("checker_hidden", checker)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    suite = unittest.defaultTestLoader.loadTestsFromModule(module)
+else:
+    sys.path.insert(0, work)
+    suite = unittest.defaultTestLoader.discover("tests", top_level_dir=".")
+result = unittest.TextTestRunner().run(suite)
+bad = not result.wasSuccessful() or result.testsRun == 0
+if checker:
+    bad = bad or bool(result.skipped) or bool(result.expectedFailures)
+sys.exit(bad)
+'''
 
 
 # The one evaluator for held-out checkers (accept, attack) and the visible suite, used by run.sh and
@@ -295,6 +326,13 @@ def summarize(paths):
         accepted = sum(r["accepted"] for r in group)
         per = f"{sum(counts) / accepted:.0f}" if accepted else "n/a"
         print(f"{arm:<20} {counts[0]:>10} {counts[1]:>10} {counts[2]:>12} {counts[3]:>12} {per:>16}")
+
+    if any(r.get("skills") for r in rows):
+        print("\nSkills by arm (runs that invoked each skill / n)")
+        for arm in sorted({r["arm"] for r in rows}):
+            group = [r for r in rows if r["arm"] == arm]
+            used = Counter(s for r in group for s in set(r.get("skills") or []))
+            print(f"  {arm}: " + ", ".join(f"{s} {used[s]}/{len(group)}" for s in sorted(used)))
 
     flagged = [r for r in rows if r["tests_touched"]]
     if flagged:

@@ -48,8 +48,9 @@ for (label, case), rows in sorted(g.items()):
     exp_route, exp_risk, must = rows[0]["expect"].split(",", 2) if rows[0]["expect"].count(",") >= 2 else (*rows[0]["expect"].split(","), "")
     ok = 0
     for r in rows:
-        need = [s for s in must.split("+") if s]
-        good = r["route"] == exp_route and r["risk"] == exp_risk and all(s in r["skills"] for s in need)
+        need = [s for s in must.split("+") if s and not s.startswith("!")]
+        banned = [s[1:] for s in must.split("+") if s.startswith("!")]
+        good = r["route"] == exp_route and r["risk"] == exp_risk and all(s in r["skills"] for s in need) and not any(s in r["skills"] for s in banned)
         ok += good
     print(f"{label} {case:<14} ok {ok}/{len(rows)}  expect {exp_route}/{exp_risk} needs {must or '-'}")
     for r in rows:
