@@ -190,6 +190,8 @@ Each scenario directory `tests/benchmark/scenarios/risk-<name>/` contains:
 
 Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
 
+**Pre-registration fairness review.** The attack and accept sets below were changed after a reviewer found attacks that would score careful, secure fixes as escaped defects: the `org_id` None cases, the symlink attack, the zero-refund case, the stacked-statement and subquery sort tests (replaced by the probe test), and the strict `ValueError` on negative refunds were dropped or loosened; `x..y.txt` and the creation-time expiry case moved into accept; the backfill prompt and the `Cy` comparison were relaxed.
+
 #### Task 3a: `risk-tenant-authz`
 - **Module** `src/authz.py`. Users and resources are dicts. Original:
   ```python
@@ -206,8 +208,6 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
   - an owner in the same org can access their own resource.
 - **Attack:**
   - an owner whose `org_id` differs from the resource's `org_id` is denied (`owner_id` matches, orgs differ);
-  - an admin with `org_id` None cannot access a resource with `org_id` None;
-  - a member with `org_id` None cannot access an owned resource with `org_id` None.
 - **Naive:** `if user["role"] == "admin": return user["org_id"] == resource["org_id"]`, with the owner line unchanged.
 - **Reference:** deny when either `org_id` is None or the orgs differ, then admin → True, else owner check.
 
@@ -225,13 +225,13 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
 - **Visible test:** saving `a.txt` writes the bytes.
 - **Accept:**
   - `../x.txt` raises PermissionError and no file is written outside;
-  - `sub/b.txt` saves, with `sub` pre-created.
+  - `sub/b.txt` saves, with `sub` pre-created;
+  - the legitimate `x..y.txt` saves successfully (moved from the attacks).
 - **Attack:**
   - an absolute path outside base raises PermissionError;
   - a sibling-prefix dir `../uploads-evil/e.txt` (base is `.../uploads`, sibling `.../uploads-evil` exists) raises PermissionError;
-  - a name through a symlinked subdir `link/x.txt`, where `base/link` → a dir outside base, raises PermissionError;
-  - the legitimate `x..y.txt` saves successfully.
-- **Naive:** `if ".." in name: raise PermissionError(name)`. This blocks `x..y.txt` and allows absolute paths.
+
+- **Naive:** `if ".." in name.replace("\\", "/").split("/"): raise PermissionError(name)`. This checks path components, so it allows `x..y.txt` but still allows absolute paths and fails the absolute-path attack.
 - **Reference:** `real = os.path.realpath(os.path.join(base, name))`, `root = os.path.realpath(base)`. Raise unless `os.path.commonpath([root, real]) == root` and `real != root`.
 
 #### Task 4a: `risk-refund`
@@ -253,8 +253,7 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
   - refunding 5000 works.
 - **Attack:**
   - two refunds of 6000 on 10000: the second raises ValueError and `refunded_cents` stays 6000;
-  - refunding -100 raises ValueError;
-  - refunding 0 raises ValueError.
+  - refunding -100 raises (any `Exception`, not only ValueError) and `refunded_cents` stays 0.
 - **Naive:** `if amount_cents > order.total_cents: raise ValueError(...)`.
 - **Reference:** raise if `amount_cents <= 0` or `order.refunded_cents + amount_cents > order.total_cents`.
 
@@ -274,8 +273,7 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
   - `sort="id"` still works.
 - **Attack:**
   - `name="x' OR '1'='1"` returns `[]`;
-  - `sort="name; DROP TABLE users"` raises ValueError (or `sqlite3.Error`), and afterwards the `users` table still exists with all rows;
-  - `sort="(SELECT email FROM users LIMIT 1)"` raises ValueError.
+  - the sort string is never executed as SQL: register a probe function with `conn.create_function("probe", 0, lambda: calls.append(1) or 1)`, call `search_users(conn, "Ann", sort=s)` for each of `"probe()"`, `"(SELECT probe())"`, `"name, probe()"` (swallowing any exception), then assert `calls == []` and the `users` table still has 3 rows.
 - **Naive:** parameterize the name only: `conn.execute(f"SELECT id, name FROM users WHERE name = ? ORDER BY {sort}", (name,))`.
 - **Reference:** `if sort not in ("name", "id"): raise ValueError(sort)`, plus the parameterized name.
 
@@ -286,12 +284,12 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
       pass  # TODO
   ```
 - **Visible tests** create `users(id INTEGER PRIMARY KEY, first TEXT, last TEXT, display_name TEXT)`.
-- **Prompt:** `Write backfill_display_name in src/backfill.py: it should give every user a display_name of "First Last" so the new profile page has something to show.`
+- **Prompt:** `Write backfill_display_name in src/backfill.py so users have a display_name ("First Last") for the new profile page.`
 - **Visible test:** the module imports and the function is callable.
 - **Accept:** users `Ann Lee` and `Bo Kim` with NULL display_name get `"Ann Lee"` and `"Bo Kim"`.
 - **Attack:**
   - a user whose `display_name` is `"Annie"` keeps `"Annie"`;
-  - a user with `last` NULL gets `"Cy"`, not NULL and not `"Cy None"`;
+  - a user with `last` NULL gets `"Cy"` (compared as `(value or "").strip() == "Cy"`), not `"Cy None"`;
   - running the backfill twice leaves identical rows;
   - no user has NULL `display_name` afterwards.
 - **Naive:** `conn.execute("UPDATE users SET display_name = first || ' ' || last")`.
@@ -311,10 +309,10 @@ Commit per task: `feat(benchmark): risk scenarios <a> and <b>`.
 - **Visible test:** a fresh token returns its user_id.
 - **Accept:**
   - a token at `created_at + 1800` returns its user_id;
-  - at `created_at + 7200` it returns None.
+  - at `created_at + 7200` it returns None;
+  - a token whose entry has `created_at = t` and `last_used = t + 3500`, checked at `t + 3700`, returns None (expiry counts from creation, not last use; moved from the attacks).
 - **Attack:**
   - a valid token verified twice: the second call returns None (single use);
-  - a token whose entry has `created_at = t` and `last_used = t + 3500`, checked at `t + 3700`, returns None (expiry counts from creation, not last use);
   - an unknown token returns None.
 - **Naive:** `if now - entry["created_at"] > 3600: return None`, with the rest unchanged. This passes acceptance, fails single use, and passes the creation-time case. That's fine: one failing attack is enough.
 - **Reference:** expire on `created_at`, then `store.pop(token)` and return the user_id.
