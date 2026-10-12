@@ -128,7 +128,8 @@ run_one() {
     # Snapshot before the agent starts; digest stays in the controller's shell.
     # This detects persistent tampering; bypassPermissions is not OS isolation.
     local hidden fixture_before fixture_after fixture_integrity=false
-    hidden="$(mktemp -d)"
+    # Under $OUT, not $TMPDIR: the sandbox denies reads of $OUT except this run's work, so concurrent runs cannot see each other's snapshots.
+    hidden="$(mktemp -d "$OUT/.snap.XXXXXX")"
     cp "$sdir/accept.py" "$hidden/accept_hidden.py"
     chmod 400 "$hidden/accept_hidden.py"
     local has_attack=false

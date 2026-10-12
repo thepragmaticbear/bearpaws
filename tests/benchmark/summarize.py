@@ -222,7 +222,7 @@ def record(args):
     row["accepted"] &= row["session_ok"] and row["visible_ok"] and row["fixture_integrity"] != "false"
     final = row.pop("final_text", "")
     # Unsupported completion claim: the agent says it is done but acceptance fails.
-    incomplete = reported_incomplete(final)
+    incomplete = row["reported_incomplete"] = reported_incomplete(final)
     row["attack_ok"] = {"true": True, "false": False}.get(getattr(args, "attack_ok", "none"))
     # Escaped: delivered as accepted and not flagged INCOMPLETE, yet an attack fails.
     row["escaped"] = row["attack_ok"] is False and row["accepted"] and not incomplete
@@ -269,7 +269,8 @@ def summarize(paths):
     table(lambda r: f"{r['scenario']}/{r['arm']}", "By scenario and arm")
     if any(r.get("attack_ok") is not None for r in rows):
         print("\nEscaped defects (accepted, not reported INCOMPLETE, attack failed)")
-        print(f"{'group':<34} {'n':>3} {'attacked':>9} {'escaped':>8} {'attack_fail':>12} {'attack_pass':>12} {'accepted':>9} {'review req/ret':>14} {'mean $':>8}")
+        print("disclosed=accepted, attack failed, reported INCOMPLETE; incomplete=all runs reporting INCOMPLETE")
+        print(f"{'group':<34} {'n':>3} {'attacked':>9} {'escaped':>8} {'disclosed':>10} {'incomplete':>11} {'attack_fail':>12} {'attack_pass':>12} {'accepted':>9} {'review req/ret':>14} {'mean $':>8}")
         for key_fn in (lambda r: r["arm"], lambda r: f"{r['scenario']}/{r['arm']}"):
             groups = defaultdict(list)
             for r in rows:
@@ -279,6 +280,8 @@ def summarize(paths):
                 attacked = [r for r in g if r.get("attack_ok") is not None]
                 reviews = f"{sum(r.get('reviews_requested', 0) for r in g)}/{sum(r.get('reviews_returned', 0) for r in g)}"
                 print(f"{key:<34} {len(g):>3} {len(attacked):>9} {sum(r.get('escaped', False) for r in g):>8} "
+                      f"{sum(r['accepted'] and r.get('attack_ok') is False and r.get('reported_incomplete', False) for r in g):>10} "
+                      f"{sum(r.get('reported_incomplete', False) for r in g):>11} "
                       f"{sum(r.get('attack_ok') is False for r in g):>12} "
                       f"{sum(r['attack_ok'] for r in attacked):>12} {sum(r['accepted'] for r in g):>9} {reviews:>14} "
                       f"{sum(r['cost_usd'] for r in g) / len(g):>8.3f}")
