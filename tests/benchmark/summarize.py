@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 from collections import defaultdict
 
@@ -171,20 +172,33 @@ def fingerprint(paths):
     return digest.hexdigest()
 
 
+def git_common_dir(path):
+    """Absolute .git directory shared by every worktree of the repo containing path, or None."""
+    done = subprocess.run(["git", "-C", str(path), "rev-parse", "--git-common-dir"], capture_output=True, text=True)
+    return (Path(path) / done.stdout.strip()).resolve() if done.returncode == 0 and done.stdout.strip() else None
+
+
 def sandbox_profile(source, snapshot, output=None, work=None):
     """Seatbelt strings use JSON-compatible quoted strings; no shell interpolation."""
     root, hidden = Path(source).resolve(), Path(snapshot).resolve()
+    q = lambda p: json.dumps(str(Path(p).resolve()))
+    # The agent works on a copy in work/ and never needs the originals: hide the whole scenarios tree
+    # (accept.py, hidden/, any __pycache__) and the repo's object store (history holds the hidden files).
     rules = ["(version 1)", "(allow default)",
-             f"(deny file-write* (subpath {json.dumps(str(root))}))",
-             f"(deny file-read* file-write* (subpath {json.dumps(str(hidden))}))"]
-    rules += [f"(deny file-read* (literal {json.dumps(str(p.resolve()))}))"
-              for p in sorted((root / "scenarios").glob("*/accept.py"))]
-    rules += [f"(deny file-read* file-write* (subpath {json.dumps(str(p.resolve()))}))"
-              for p in sorted((root / "scenarios").glob("*/hidden")) if p.is_dir()]
+             f"(deny file-write* (subpath {q(root)}))",
+             f"(deny file-read* file-write* (subpath {q(hidden)}))",
+             f"(deny file-read* file-write* (subpath {q(root / 'scenarios')}))"]
+    git = git_common_dir(root)
+    if git:
+        rules.append(f"(deny file-read* file-write* (subpath {q(git)}))")
     if output is not None and work is not None:
-        rules.append(f"(deny file-write* (require-all (subpath {json.dumps(str(Path(output).resolve()))}) "
-                     f"(require-not (subpath {json.dumps(str(Path(work).resolve()))}))))")
-    return "\n".join(rules)
+        # Other runs' work trees, transcripts, accept.txt/attack.txt and the ledger. file-read-data, not
+        # file-read*: the work dir lives under OUT, and denying metadata breaks realpath/lstat of the cwd
+        # (node, git). Contents and listings of everything else stay denied.
+        rules.append(f"(deny file-write* (require-all (subpath {q(output)}) (require-not (subpath {q(work)}))))")
+        for base in (output, "/tmp/bearpaws-tests", "/private/tmp/bearpaws-tests"):
+            rules.append(f"(deny file-read-data (require-all (subpath {q(base)}) (require-not (subpath {q(work)}))))")
+    return "\n".join(dict.fromkeys(rules))
 
 
 def record(args):

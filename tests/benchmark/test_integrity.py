@@ -207,13 +207,38 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("attack_fail", out)
         self.assertNotIn("Escaped defects", self.summary(self.row("Fixed.")))
 
-    def test_profile_denies_every_hidden_dir(self):
+    def test_profile_denies_the_whole_scenarios_subtree(self):
         (self.root / "scenarios" / "x" / "hidden").mkdir(parents=True)
         (self.root / "scenarios" / "y").mkdir()
         profile = summarize.sandbox_profile(self.root, self.root / "snap")
-        hidden = (self.root / "scenarios" / "x" / "hidden").resolve()
-        self.assertIn(f"(deny file-read* file-write* (subpath {json.dumps(str(hidden))}))", profile)
-        self.assertNotIn(str((self.root / "scenarios" / "y").resolve()) + '/hidden', profile)
+        subtree = (self.root / "scenarios").resolve()
+        self.assertIn(f"(deny file-read* file-write* (subpath {json.dumps(str(subtree))}))", profile)
+        self.assertNotIn("(literal", profile)
+        self.assertNotIn("/hidden", profile)
+
+    def test_profile_hides_other_runs_and_earlier_result_dirs(self):
+        out, work = self.root / "out", self.root / "out" / "runs" / "s" / "a" / "1" / "work"
+        profile = summarize.sandbox_profile(self.root, self.root / "snap", out, work)
+        o, w = (json.dumps(str(p.resolve())) for p in (out, work))
+        self.assertIn(f"(deny file-read-data (require-all (subpath {o}) (require-not (subpath {w}))))", profile)
+        self.assertIn(f"(deny file-write* (require-all (subpath {o}) (require-not (subpath {w}))))", profile)
+        for base in {pathlib.Path("/tmp/bearpaws-tests").resolve(), pathlib.Path("/private/tmp/bearpaws-tests")}:
+            self.assertIn(f"(deny file-read-data (require-all (subpath {json.dumps(str(base))}) (require-not (subpath {w}))))", profile)
+
+    def test_profile_denies_the_repos_git_object_store(self):
+        repo = self.root / "repo"
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+        wt = self.root / "wt"
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(wt)], check=True)
+        (wt / "sub").mkdir()
+        for source in (repo, wt, wt / "sub"):
+            profile = summarize.sandbox_profile(source, self.root / "snap")
+            git = json.dumps(str((repo / ".git").resolve()))
+            self.assertIn(f"(deny file-read* file-write* (subpath {git}))", profile)
+
+    def test_profile_without_a_git_repo_has_no_git_rule(self):
+        self.assertNotIn(".git", summarize.sandbox_profile(self.root, self.root / "snap"))
 
 
 class ScenarioValidatorTests(unittest.TestCase):
@@ -427,7 +452,7 @@ class RunnerTests(unittest.TestCase):
         root = pathlib.Path(__file__).parent
         profile = summarize.sandbox_profile(str(root), '/tmp/snapshot "quoted"')
         self.assertIn('(deny file-write* (subpath ', profile)
-        self.assertIn(json.dumps(str((root / "scenarios/small-bug/accept.py").resolve())), profile)
+        self.assertIn(f"(deny file-read* file-write* (subpath {json.dumps(str((root / 'scenarios').resolve()))}))", profile)
         self.assertIn('(deny file-read* file-write* (subpath ', profile)
 
     @unittest.skipUnless(os.environ.get("BENCH_TEST_SANDBOX") == "1", "opt-in native macOS isolation probe")
@@ -455,6 +480,36 @@ for action,path in (("read",source/"scenarios/s/accept.py"),("write",source/"new
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue((work / "allowed").exists())
 
+    @unittest.skipUnless(os.environ.get("BENCH_TEST_SANDBOX") == "1", "opt-in native macOS isolation probe")
+    def test_native_sandbox_hides_scenarios_git_objects_and_other_runs(self):
+        with tempfile.TemporaryDirectory(prefix="benchmark-hide-") as temp:
+            root = pathlib.Path(temp).resolve()
+            source, out = root / "source", root / "out"
+            work, sibling = out / "runs/s/a/1/work", out / "runs/s/a/2"
+            for d in (source / "scenarios/s/hidden", work, sibling, root / "hidden"):
+                d.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(source)], check=True)
+            subprocess.run(["git", "-C", str(source), "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+            secrets = [source / "scenarios/s/hidden/attack.py", source / "scenarios/s/accept.py",
+                       source / "scenarios/s/__pycache__x", sibling / "attack.txt", out / "results.jsonl",
+                       next((source / ".git").glob("HEAD"))]
+            for f in secrets[:5]:
+                f.write_text("secret")
+            probe = (
+                "import pathlib,subprocess,sys\n"
+                "for p in map(pathlib.Path, sys.argv[2:]):\n"
+                "  try: p.read_text()\n"
+                "  except (PermissionError, FileNotFoundError) as e:\n"
+                "    if isinstance(e, FileNotFoundError) and p.name != '__pycache__x': raise\n"
+                "  else: raise AssertionError('read allowed: %s' % p)\n"
+                "work = pathlib.Path(sys.argv[1]); (work/'mine').write_text('ok'); assert (work/'mine').read_text()=='ok'\n"
+                "subprocess.run(['git','init','-q'], cwd=work, check=True)\n"
+                "subprocess.run(['git','add','-A'], cwd=work, check=True)\n")
+            result = subprocess.run(["/usr/bin/sandbox-exec", "-p", summarize.sandbox_profile(source, root / "hidden", out, work),
+                sys.executable, "-c", probe, str(work), *map(str, secrets)], cwd=work, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((work / ".git").is_dir())
+
     @unittest.skipUnless(os.environ.get("BENCH_TEST_SANDBOX") == "1", "opt-in native macOS runner smoke")
     def test_native_fake_cli_can_complete_valid_task(self):
         row = self.run_fake('pathlib.Path("src/slug.py").write_text("import re\\ndef slugify(text): return re.sub(r\\\"[^a-z0-9]+\\\", \\\"-\\\", text.lower()).strip(\\\"-\\\")\\n")\n'
@@ -465,7 +520,11 @@ for action,path in (("read",source/"scenarios/s/accept.py"),("write",source/"new
 
     @unittest.skipUnless(os.environ.get("BENCH_TEST_SANDBOX") == "1", "opt-in native recorder protection probe")
     def test_native_agent_cannot_rewrite_transcript_or_results(self):
-        body = '''for path in (pathlib.Path.cwd().parent/"stream.jsonl", pathlib.Path(os.environ["BENCH_OUT"])/"results.jsonl"):
+        body = '''for path in (pathlib.Path.cwd().parent/"stream.jsonl", pathlib.Path.cwd().parent/"stderr.txt"):
+ try: path.read_text()
+ except PermissionError: pass
+ else: raise AssertionError("agent can read recorder output: "+str(path))
+for path in (pathlib.Path.cwd().parent/"stream.jsonl", pathlib.Path(os.environ["BENCH_OUT"])/"results.jsonl"):
  try: path.write_text("forged metadata")
  except PermissionError: pass
  else: raise AssertionError("agent can overwrite recorder: "+str(path))
