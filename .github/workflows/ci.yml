@@ -67,6 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: python3 tests/benchmark/test_integrity.py
+      - run: python3 tests/benchmark/check_scenarios.py
       - run: python3 tests/review-eval/test_render.py
       - run: bash tests/claude-code/test-native-plan-static.sh
 
