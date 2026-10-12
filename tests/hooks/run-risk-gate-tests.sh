@@ -23,7 +23,7 @@ gate() {
 }
 reset() { rm -f "$TMP_ROOT/data/risk-gate/$SID.log" "$TMP_ROOT/data/risk-gate/$SID".*.tree; }
 logfile() { echo "$TMP_ROOT/data/risk-gate/$SID.log"; }
-# The state file is per repo: <session>.<first 12 hex of sha1(toplevel)>.tree. treefile: the first one that exists.
+# State is per repo: <session>.<repo hash>.tree.
 treefile() { local f; for f in "$TMP_ROOT/data/risk-gate/$SID".*.tree; do [ -e "$f" ] && { echo "$f"; return; }; done; echo "$TMP_ROOT/data/risk-gate/$SID.none.tree"; }
 treefor() { echo "$TMP_ROOT/data/risk-gate/$SID.$(printf '%s' "$(git -C "$1" rev-parse --show-toplevel)" | shasum | cut -c1-12).tree"; }
 edit() { # <path> [VAR=value ...]
@@ -87,7 +87,7 @@ else
   echo "OK: CR in path is stripped from the log"
 fi
 
-# Only a reviewer subagent_type or a description that starts with "review" counts. Never the prompt.
+# Only a reviewer subagent_type or a description starting with "review" counts. Never the prompt.
 reset; edit src/authz.py; dispatch Agent general-purpose "Implement Task 2" "Do the task. Self-review before reporting."; stop "$ELEVATED"
 expect "implementer dispatch is not a review" block "independent review"
 reset; edit src/authz.py; dispatch Task bp:code-reviewer "Review authz fix"; stop "$ELEVATED"
@@ -222,7 +222,7 @@ case "$(ls -ld "$TMP_ROOT/data/risk-gate")" in
   *) fail "log dir is not mode 700: $(ls -ld "$TMP_ROOT/data/risk-gate")" ;;
 esac
 
-# Edits stay pending until a receipt accepts them, across turns and background-agent report-backs.
+# Edits stay pending across turns until a receipt accepts them.
 reset; edit src/app.py; stop "dispatched"; expect "background gap: unrelated reply with pending edit needs a receipt" block "risk receipt"
 stop "$ROUTINE"; expect "background gap: routine receipt accepts" allow
 if [ -e "$(logfile)" ]; then fail "accepted stop left the log"; else echo "OK: accepted stop removes the log"; fi
@@ -287,7 +287,7 @@ else
   fail "missing jq: expected exit 0, empty stdout, stderr note"
 fi
 
-# Bash edits: a per-repo git tree fingerprint, compared with the one stored in <session>.<repo>.tree.
+# Bash edits: per-repo tree fingerprint.
 mkrepo() { # <name> [--empty]: temp git repo (one commit unless --empty); prints its path
   local r="$TMP_ROOT/repo-$1"; mkdir -p "$r"
   git -C "$r" init -q && git -C "$r" config user.email t@t && git -C "$r" config user.name t
@@ -366,12 +366,12 @@ R="$(mkrepo 8)"
 printf 'aaaa' >"$R/u.txt"; reset; bashc "$R"
 printf 'bbbb' >"$R/u.txt"; touch -t 203001010000 "$R/u.txt"; bashc "$R"
 expect_bash_edits "untracked same-size change with a new mtime is an edit" 1
-# Known limit: untracked content is not hashed, only size and mtime, so a same-size change in the same second is missed.
+# Known limit: untracked content isn't hashed, so a same-size change in the same second is missed.
 touch -t 203001010001 "$R/u.txt"; bashc "$R"; n=$(nbash)
 printf 'cccc' >"$R/u.txt"; touch -t 203001010001 "$R/u.txt"; bashc "$R"
 expect_bash_edits "known limit: same-size, same-mtime untracked change is missed" "$n"
 
-# Index- and HEAD-independent fingerprint: git add / git commit are not edits; content, size-preserving and delete edits are.
+# git add and git commit are not edits; content, same-size and delete edits are.
 R="$(mkrepo 10)"
 reset; bashc "$R"; echo n >"$R/new.py"; bashc "$R"; git -C "$R" add -A; bashc "$R"
 expect_bash_edits "Bash git add -A after an edit adds no edit" 1
@@ -388,7 +388,7 @@ R="$(mkrepo 14)"
 reset; bashc "$R"; rm "$R/a.py"; bashc "$R"
 expect_bash_edits "deleting a tracked file is an edit" 1
 
-# The fingerprint survives an accepted stop (which removes the log), so the next turn's first Bash call is not just a baseline.
+# The fingerprint survives an accepted stop, so the next turn's first Bash call is not just a baseline.
 R="$(mkrepo 15)"
 reset; echo two >"$R/a.py"; editc "$R" a.py; stop "$ROUTINE"; expect "gap: routine receipt accepts" allow
 [ -e "$(logfile)" ] && fail "gap: accepted stop left the log" || echo "OK: gap: accepted stop removed the log"
@@ -396,8 +396,7 @@ reset; echo two >"$R/a.py"; editc "$R" a.py; stop "$ROUTINE"; expect "gap: routi
 echo heredoc >"$R/b.py"; bashc "$R"; expect_bash_edits "gap: first Bash call of the next turn detects the edit" 1
 stop "Done."; expect "gap: Bash edit in a later turn needs a receipt" block "risk receipt"
 
-# The .tree file gets the same no-symlink treatment as the log: the planted link survives, still points at its
-# original target, and the target is untouched. (Without the guard, mv -f would replace the link with a file.)
+# A planted .tree symlink is refused: it survives and its target is untouched.
 R="$(mkrepo 16)"
 mkdir -p "$TMP_ROOT/symtree/data/risk-gate"
 echo original >"$TMP_ROOT/symtree/target"
@@ -412,7 +411,7 @@ for m in baseline record; do
   else echo "OK: symlinked .tree is refused ($m)"; fi
 done
 
-# PreToolUse `baseline`: take the fingerprint before the first Bash call, so a first-ever heredoc write is seen.
+# PreToolUse baseline: a first-ever heredoc write is seen.
 R="$(mkrepo 18)"
 reset; prec "$R"; expect "baseline mode prints nothing" allow
 [ -s "$(treefile)" ] && echo "OK: baseline writes the .tree file" || fail "baseline wrote no .tree file"
@@ -446,7 +445,7 @@ R="$(mkrepo 22)"; reset
 gate baseline "$(jq -cn --arg s "$SID" --arg c "$R" '{session_id:$s,cwd:$c,tool_name:"Bash"}')" BEARPAWS_ENFORCE=0
 [ -e "$(treefile)" ] && fail "baseline ignored BEARPAWS_ENFORCE=0" || echo "OK: BEARPAWS_ENFORCE=0 disables baseline"
 
-# C1: the fingerprint is toplevel-relative and keyed per repo, so cd and worktrees are not edits.
+# Fingerprint is toplevel-relative and per repo, so cd and worktrees are not edits.
 R="$(mkrepo 30)"; mkdir -p "$R/sub/deep"
 reset; bashc "$R"; bashc "$R/sub"; bashc "$R/sub/deep"; bashc "$R"
 expect_bash_edits "cd into a subdir with no change is not an edit" 0
@@ -523,7 +522,7 @@ for i in $(seq 1 20); do prec "$R"; done
 t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
 echo "PERF: 20 baseline calls with .tree present, 5000 files: mean $(( (t1 - t0) / 20 )) ms"
 
-# SendMessage re-review: counts by `summary` only, with the same regex as Agent/Task descriptions.
+# SendMessage re-review counts by summary only.
 sendmsg() { # <summary|-> <message>
   gate record "$(jq -cn --arg s "$SID" --arg su "$1" --arg m "$2" \
     '{session_id:$s,tool_name:"SendMessage",tool_input:({to:"reviewer",message:$m} + (if $su == "-" then {} else {summary:$su} end))}')"
@@ -547,7 +546,7 @@ expect "SendMessage object summary is not a review" block "independent review"
 reset; edit src/authz.py; sendmsg_raw '{"to":"reviewer","summary":["Review it"],"message":"x"}'; stop "$ELEVATED"
 expect "SendMessage array summary is not a review" block "independent review"
 
-# Test-only edits after a review do not restart the review requirement; the review must follow the last non-test edit.
+# Test-only edits after a review don't restart the review requirement.
 reset; edit src/authz.py; review; edit tests/test_authz.py; stop "$ELEVATED"
 expect "test-only edit after review: allow" allow
 reset; edit src/authz.py; review; edit src/authz.py; stop "$ELEVATED"

@@ -73,8 +73,7 @@ elif [[ "$(uname -s)" != Darwin || ! -x /usr/bin/sandbox-exec ]]; then
     exit 1
 fi
 
-# One claude -p session under a wall-clock supervisor (exit 124 after >= SESSION_TIMEOUT s = timed out; whole process tree killed);
-# appends to <rdir>/stream.jsonl. Uses plugin_args from the caller.
+# One claude -p session under the timeout supervisor; appends to <rdir>/stream.jsonl.
 session() {
     local work="$1" prompt="$2" rdir="$3"; shift 3
     (set -o pipefail
@@ -92,9 +91,7 @@ session() {
         2> >(cat >> "$rdir/stderr.txt") | cat >> "$rdir/stream.jsonl")
 }
 
-# run_checker <snapshot> <work> <log>: run a held-out unittest file against <work>; exit status is the verdict.
-# The evaluator source is shared with check_scenarios.py (summarize.py --checker-source). It loads the exact
-# snapshot path, so work/<name>.py cannot shadow it.
+# run_checker <snapshot> <work> <log>: run a held-out unittest file against <work>. Shared with check_scenarios.py.
 run_checker() {
     (cd "$2" && python3 -I -B -c "$CHECKER_SRC" "$2" "$1" > "$3" 2>&1)
 }
@@ -134,7 +131,7 @@ run_one() {
     # Snapshot before the agent starts; digest stays in the controller's shell.
     # This detects persistent tampering; bypassPermissions is not OS isolation.
     local hidden fixture_before fixture_after fixture_integrity=false
-    # Under $OUT, not $TMPDIR: the sandbox denies reads of $OUT except this run's work, so concurrent runs cannot see each other's snapshots.
+    # Under $OUT so the sandbox hides it from concurrent runs.
     hidden="$(mktemp -d "$OUT/.snap.XXXXXX")"
     cp "$sdir/accept.py" "$hidden/accept_hidden.py"
     chmod 400 "$hidden/accept_hidden.py"

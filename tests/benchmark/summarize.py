@@ -132,14 +132,10 @@ def signal_verified(tracked, sig, fallback=()):
 
 
 def kill_verified(tracked):
-    """Freeze the tracked tree (SIGSTOP, up to 3 rounds, so nothing can spawn), then SIGKILL it.
+    """SIGSTOP the tracked tree (up to 3 rounds), then SIGKILL it.
 
-    Every pid we stopped was verified when stopped; if ps fails on the final read we SIGKILL
-    exactly that set rather than leave it stopped forever.
-
-    ponytail: only processes seen alive during a poll are tracked. One that spawns and detaches
-    (or double-forks and is reparented) between two 0.5 s polls escapes; narrow the poll or use
-    cgroups/job objects if that matters.
+    If ps fails on the final read, kill the pids already stopped. A process that detaches
+    between two 0.5 s polls is never tracked and escapes.
     """
     stopped = set()
     for _ in range(3):
@@ -321,8 +317,7 @@ def accept_fraction(path):
 
 
 DONE_CLAIM = re.compile(r"\b(done|fixed|complete[sd]?|finished|all tests pass|now (raises|returns|works))\b", re.I)
-# Same rule as hooks/risk-gate: only the LAST "Status:" line decides, and INCOMPLETE must be its value.
-# LEAD/TRAIL mirror the hook (list markers, quotes, bold, backticks); no \b after INCOMPLETE, as in the hook.
+# Same rule as hooks/risk-gate: only the last "Status:" line decides, and INCOMPLETE must be its value.
 _STATUS_LINE = re.compile(r"^[ \t\r\f\v>*_#0-9.`-]*status[*_`]*:", re.I)
 _STATUS_INCOMPLETE = re.compile(r"status[*_`]*:[*_` \t\r\f\v]*incomplete", re.I)
 
@@ -361,8 +356,7 @@ def sandbox_profile(source, snapshot, output=None, work=None):
     """Seatbelt strings use JSON-compatible quoted strings; no shell interpolation."""
     root, hidden = Path(source).resolve(), Path(snapshot).resolve()
     q = lambda p: json.dumps(str(Path(p).resolve()))
-    # The agent works on a copy in work/ and never needs the originals: hide the whole scenarios tree
-    # (accept.py, hidden/, any __pycache__) and the repo's object store (history holds the hidden files).
+    # Hide the scenarios tree and the git object store; the agent only needs its copy in work/.
     rules = ["(version 1)", "(allow default)",
              f"(deny file-write* (subpath {q(root)}))",
              f"(deny file-read* file-write* (subpath {q(hidden)}))",
@@ -371,9 +365,7 @@ def sandbox_profile(source, snapshot, output=None, work=None):
     if git:
         rules.append(f"(deny file-read* file-write* (subpath {q(git)}))")
     if output is not None and work is not None:
-        # Other runs' work trees, transcripts, accept.txt/attack.txt and the ledger. file-read-data, not
-        # file-read*: the work dir lives under OUT, and denying metadata breaks realpath/lstat of the cwd
-        # (node, git). Contents and listings of everything else stay denied.
+        # Hide other runs. file-read-data, not file-read*: denying metadata breaks realpath of the work dir.
         rules.append(f"(deny file-write* (require-all (subpath {q(output)}) (require-not (subpath {q(work)}))))")
         for base in (output, "/tmp/bearpaws-tests", "/private/tmp/bearpaws-tests"):
             rules.append(f"(deny file-read-data (require-all (subpath {q(base)}) (require-not (subpath {q(work)}))))")

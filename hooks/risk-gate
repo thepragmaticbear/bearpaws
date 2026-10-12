@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Risk gate for Claude Code. Blocks ending a turn with pending edits and no
-# risk receipt, and elevated-risk work marked COMPLETE without an independent
-# review dispatched after the last edit.
-# Edits are logged as "edit <path>" or "edit-test <path>"; Bash edits are "edit (bash)", never test-only.
-# Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop). Bash edits are detected by a git tree fingerprint kept per repo in <session_id>.<repo hash>.tree, which accepted stops do not clear. The log holds edits not yet accepted by a receipt:
-# a stop that allows clears it, except elevated INCOMPLETE work with no review, which stays pending (also across turns and background-agent report-backs).
+# Risk gate for Claude Code. Sends the agent back when pending edits have no risk
+# receipt, or when elevated work is COMPLETE without a review after the last edit.
+# Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop).
+# The log holds edits not yet accepted by a receipt; an allowing stop clears it,
+# except elevated INCOMPLETE work with no review, which stays pending.
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
 
@@ -31,24 +30,18 @@ log="$dir/$sid.log"
 umask 077
 mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log" ] || exit 0
 
-# ponytail: path-name heuristic, one nudge per pending batch; replace with a project-declared list if false positives annoy.
+# Path-name heuristic: one nudge per pending batch.
 SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
-# Review description: starts with "review", optionally preceded only by words from a closed list, and not followed by a fix word.
-# Shared by Agent/Task descriptions and SendMessage summaries.
+# Review description: starts with "review" (closed list of prefixes), not followed by a fix word.
 REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[\s-]+)*review(ing)?\b(?!\W*(fix|feedback|comment|finding|follow))'
-# Test files: a tests/test/__tests__ directory, or a conventional test file name. Name-only heuristic.
+# Test files: a tests/, test/ or __tests__/ directory, or a conventional test file name.
 TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.(jsx?|tsx?|mjs|cjs)|[^/]*_spec\.rb|[^/]*Test\.java)$'
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
-# Tree fingerprint of the git work tree rooted at $1: SHA-1 of path, size and sub-second mtime of every tracked or
-# untracked, non-ignored, non-cache file, as listed from the toplevel so the hook's cwd (which follows cd) does not matter.
-# It reads neither the index nor HEAD, so git add and git commit leave it unchanged. The list is sorted: git lists
-# untracked files after tracked ones, so staging would reorder it. A deleted tracked file drops out of the list and
-# changes it. Fails (returns 1) on any git error. $2 is the sha tool.
-# Size is redundant with mtime in practice (any write moves mtime), so dropping it would be an equivalent mutant.
-# ponytail: content is not hashed, so a same-size edit inside one mtime tick is missed; hash content if that bites.
-# Not detected: submodule contents, file names containing a newline, edits outside the repo of the hook's cwd.
+# Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
+# toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
+# staging reorders git's list. Content isn't hashed: a same-size edit within one mtime tick is missed.
 fingerprint() { # <toplevel> <sha tool>
   local top="$1" files
   files="$(cd -- "$top" 2>/dev/null && git ls-files -co --exclude-standard -z 2>/dev/null | tr '\0' '\n')" || return 1
@@ -57,15 +50,13 @@ fingerprint() { # <toplevel> <sha tool>
     | { grep -vE '^$|(^|/)(__pycache__|\.pytest_cache|node_modules|\.mypy_cache|\.ruff_cache|\.venv|htmlcov|\.hypothesis|\.tox|\.nox|\.eslintcache|\.coverage(\.[^/]*)?|[^/]*\.egg-info)(/|$)|\.pyc$' || true; } \
     | LC_ALL=C sort | tr '\n' '\0' \
     | (cd -- "$top" 2>/dev/null && {
-        # stat: GNU -c with %.9Y (checked first: BSD rejects -c), else BSD %Fm (fractional seconds), else whole seconds.
-        # The trailing -- keeps a file named -f or --help from being read as an option.
+        # GNU stat, else BSD with fractional seconds, else whole seconds. -- stops names like -f being options.
         if stat -c %s / >/dev/null 2>&1; then xargs -0 stat -c '%n %s %.9Y' --
         elif stat -f %Fm / >/dev/null 2>&1; then xargs -0 stat -f '%N %z %Fm' --
         else xargs -0 stat -f '%N %z %m' --; fi; } 2>/dev/null || true) | $2 | cut -d' ' -f1
 }
-# Per-repo state: the fingerprint lives in $dir/$sid.<12 hex of sha1(toplevel)>.tree (kept across accepted stops, unlike
-# the log), so alternating between a checkout and a worktree, or cd, never mixes trees. A Bash call that changed the
-# fingerprint is an edit; with no stored fingerprint for that repo it only sets the baseline. Always returns 0 (fail open).
+# One fingerprint file per repo, kept across accepted stops. A Bash call that changes it is an edit;
+# the first one for a repo only sets the baseline. Always returns 0.
 track_tree() { # <cwd> <tool>
   local top sha fp last tree
   [ -n "$1" ] || return 0
@@ -80,7 +71,7 @@ track_tree() { # <cwd> <tool>
     [ "$last" = "$fp" ] && return 0
     [ -n "$last" ] && echo 'edit (bash)' >>"$log"
   fi
-  # Atomic: write beside it, then rename. A failed write leaves the old state and fails open.
+  # Atomic write: temp file, then rename.
   if printf '%s\n' "$fp" >"$tree.$$" 2>/dev/null; then mv -f "$tree.$$" "$tree" 2>/dev/null || rm -f "$tree.$$"; else rm -f "$tree.$$"; fi
   return 0
 }
@@ -90,8 +81,7 @@ field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in
   baseline)
-    # PreToolUse on Bash: take the first fingerprint before the first Bash call, so that call's own edit is seen.
-    # Fast path: once the repo's state file exists this costs one git call (toplevel) and no fingerprint. Prints nothing, always exits 0.
+    # Fingerprint before the first Bash call so its own edit is seen. Must print nothing.
     track_tree "$(jq -r '.cwd // empty' <<<"$input")" baseline >/dev/null 2>&1
     ;;
   record)
@@ -107,7 +97,7 @@ case "$mode" in
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
-          # edit-test: a test-file edit, which does not restart the review requirement. Bash edits are never test-only.
+          # Test-file edits don't restart the review requirement.
           if [[ "$path" != /* && "$path" != *../* && "$path" =~ $TESTFILE ]]; then printf 'edit-test %s\n' "$path" >>"$log"; else printf 'edit %s\n' "$path" >>"$log"; fi
         fi
         track_tree "$cwd" "$tool"
@@ -116,8 +106,7 @@ case "$mode" in
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         ;;
       Agent|Task|SendMessage)
-        # Reviewer subagent_type (word-boundary "review"), or a description (SendMessage: its summary, not when addressed to main, never its
-        # message) matching REVIEW_DESC. Never the prompt: an implementer's says "Self-review".
+        # Reviewer subagent_type, or a matching description (SendMessage: summary, not to main). Never the prompt.
         if jq -e --arg re "$REVIEW_DESC" '.tool_input | ((.subagent_type // "" | tostring | test("\\breview"; "i"))
                   or ((if $tool == "SendMessage" then (if .to == "main" then null else .summary | strings end) else .description end) // "" | tostring | test($re; "i")))' --arg tool "$tool" <<<"$input" >/dev/null 2>&1; then
           echo review >>"$log"
@@ -132,8 +121,7 @@ case "$mode" in
     elif field Risk routine; then risk=routine
     else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
     fi
-    # Only the last Status line decides, and INCOMPLETE must be its value: a quoted line earlier or the
-    # pasted template "Status: COMPLETE | INCOMPLETE" must not override it.
+    # Only the last Status line counts, and INCOMPLETE must be its value.
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
     if [ "$risk" = elevated ]; then
       # The review must follow the last non-test edit; with only test edits, the last edit of any kind.
@@ -141,7 +129,7 @@ case "$mode" in
       [ -n "$last_edit" ] || last_edit="$(grep -nE '^edit-test ' "$log" | tail -1 | cut -d: -f1)"
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
       [ "${last_review:-0}" -gt "$last_edit" ] && { rm -f "$log"; exit 0; }
-      # Elevated INCOMPLETE without a review is allowed but stays pending: a later COMPLETE still needs one.
+      # Elevated INCOMPLETE without a review stays pending.
       [ "$incomplete" = 1 ] && exit 0
       block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
     fi
