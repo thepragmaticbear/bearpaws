@@ -1,5 +1,6 @@
 {
   "name": "bp",
+  "displayName": "Bearpaws",
   "description": "An independent low-token Claude Code skills library for TDD, debugging, planning, code review, and parallel execution.",
   "version": "2.6.1",
   "author": {
