@@ -65,7 +65,7 @@ Small samples, Python stdlib scenarios, one model. Read the write-ups' limits be
 **Claude Code:**
 
 ```bash
-claude plugin marketplace add brandonfla/bearpaws
+claude plugin marketplace add thepragmaticbear/bearpaws
 claude plugin install bp@bearpaws
 ```
 
@@ -74,7 +74,7 @@ For a local checkout, run `claude --plugin-dir /path/to/bearpaws`. For non-trivi
 **Google Antigravity IDE:** clone, install, then restart Antigravity.
 
 ```bash
-git clone https://github.com/brandonfla/bearpaws.git && cd bearpaws
+git clone https://github.com/thepragmaticbear/bearpaws.git && cd bearpaws
 ./install.sh --antigravity --global
 ```
 

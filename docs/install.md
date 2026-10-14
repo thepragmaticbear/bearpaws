@@ -7,7 +7,7 @@ Claude Code and Google Antigravity IDE are the primary supported targets. Every 
 From GitHub:
 
 ```bash
-claude plugin marketplace add brandonfla/bearpaws
+claude plugin marketplace add thepragmaticbear/bearpaws
 claude plugin install bp@bearpaws
 ```
 
@@ -37,7 +37,7 @@ Plan approval counts as the go-ahead; Bearpaws does not ask a second time. See [
 Clone Bearpaws:
 
 ```bash
-git clone https://github.com/brandonfla/bearpaws.git
+git clone https://github.com/thepragmaticbear/bearpaws.git
 cd bearpaws
 ```
 
