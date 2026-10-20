@@ -175,6 +175,7 @@ run_one() {
         --checker-isolation "$CHECKER_ISOLATION" --attack-ok "$attack_ok" \
         --elevated "$([ -f "$sdir/elevated" ] && echo true || echo false)" \
         --seconds $((end - start)) --tests-touched "$tests_touched" \
+        --work "$work" --scenario-dir "$sdir" \
         >> "$OUT/results.jsonl"
     echo "$scenario/$arm/$run accepted=$accept_ok"
 }
