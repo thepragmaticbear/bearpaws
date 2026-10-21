@@ -260,6 +260,7 @@ class ScoringTests(unittest.TestCase):
         (work / "src/__pycache__/a.pyc").write_bytes(b"\x00")
         (work / ".git").mkdir()
         (work / ".git/HEAD").write_text("ref\n")
+        (work / ".gitignore").write_text("__pycache__/\n")
         self.assertEqual(summarize.tree_diff(sdir / "repo", work),
                          {"src_added": 5, "src_removed": 1, "src_files_added": 1})
 

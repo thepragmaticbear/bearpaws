@@ -96,7 +96,8 @@ def source_files(root):
     files = {}
     for path in root.rglob("*"):
         rel = path.relative_to(root)
-        if path.is_file() and not set(rel.parts[:-1]) & SRC_SKIP_DIRS and rel.suffix not in SRC_SKIP_SUFFIXES:
+        if (path.is_file() and not rel.name.startswith(".") and not set(rel.parts[:-1]) & SRC_SKIP_DIRS
+                and rel.suffix not in SRC_SKIP_SUFFIXES):
             files[str(rel)] = path
     return files
 
