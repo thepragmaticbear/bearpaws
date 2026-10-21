@@ -1,0 +1,1 @@
+DONE. Implemented parse_duration in src/duration.py with one anchored regex: h, m, s each optional, in that order, at most once. Empty input, unknown units, repeated and out-of-order units raise ValueError. 7 tests in tests/test_duration.py pass. Committed.

@@ -17,6 +17,17 @@ DEFECTS = {
     "unknown_units_ignored": r"unknown unit|invalid unit|ignor|silently|garbage|\"1x\"|'1x'|1x|abc",
 }
 GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"]
+# Over-building, read from the Critical and Important sections only (Minor is advisory).
+# flags: the reviewer names unrequested generality as a defect (the overbuilt fixture should score this).
+# demands: the reviewer asks for generality the task did not request (the minimal fixture should not).
+OVERBUILD_FLAGGED = r"YAGNI|over-?(engineer|built|abstract)|unnecessary|unrequested|not (requested|asked)|speculative|premature|simpler|scope creep|dead (code|option)|unused (hook|option|parameter|config)|more than the task"
+OVERBUILD_DEMANDED = r"extensib|scalab|pluggab|configurab|registry|strategy pattern|dataclass|turn (it|this) into a class|extract (a |into a )?(class|module)|future[- ]proof|for future|dependency injection|make (it|this) (more )?generic"
+
+
+def blocking_issues(text):
+    """Text of the Critical and Important sections, up to Minor (or the next gate)."""
+    m = re.search(r"(critical|important)[^\n]*\n(.*?)(?=\n#+\s*\**\s*minor|\n#+\s*\**\s*\[?gate|\n#+\s*\**\s*strengths|\Z)", text, re.I | re.S)
+    return m.group(0) if m else ""
 
 
 def score(path, label, run):
@@ -37,11 +48,15 @@ def score(path, label, run):
             cost = e.get("total_cost_usd") or 0.0
     tried = [l for l in text.splitlines() if re.search(r"Tried:", l)]
     labelled = [l for l in tried if re.search(r"\[(executed|ran|reasoned|traced)\]|\((executed|ran|reasoned|traced)\)|executed:|reasoned:", l, re.I)]
+    blocking = blocking_issues(text)
     row = {
         "label": label,
         "run": run,
         "cost": round(cost, 4),
         "defects": {k: bool(re.search(v, text, re.I)) for k, v in DEFECTS.items()},
+        "blocking_items": len(re.findall(r"^\s*(?:[-*]|\d+\.)\s+\S", blocking, re.M)),
+        "flags_overbuild": bool(re.search(OVERBUILD_FLAGGED, blocking, re.I)),
+        "demands_overbuild": bool(re.search(OVERBUILD_DEMANDED, blocking, re.I)),
         "gates": sum(bool(re.search(g, text, re.I)) for g in GATES),
         "tried_lines": len(tried),
         "tried_labelled": len(labelled),
@@ -67,6 +82,9 @@ def summary(path):
         print(f"  [executed] lines             {[r.get('tried_executed', 0) for r in g]}")
         print(f"  code executions              {[r['code_executions'] for r in g]}")
         print(f"  rejects                      {sum(r['verdict_reject'] for r in g)}/{n}")
+        print(f"  blocking items (Crit+Imp)    {[r.get('blocking_items', 0) for r in g]}")
+        print(f"  flags over-building          {sum(r.get('flags_overbuild', False) for r in g)}/{n}")
+        print(f"  demands over-building        {sum(r.get('demands_overbuild', False) for r in g)}/{n}")
 
 
 if __name__ == "__main__":
