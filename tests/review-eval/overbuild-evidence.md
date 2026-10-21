@@ -43,3 +43,25 @@ The next lever is the implementer side (the elevated-risk paragraph in the boots
 Scorer notes: `flags_overbuild` is a mention count and also fires on negations ("no unrequested
 generality"); `blocking_items` is the robust signal. `demands_overbuild` is noisy on the overbuilt fixture,
 where the reviewer names the registry it wants deleted.
+
+## Lever 3: the agent asks for the guards (bootstrap, `f01eb55` and `e9657dc`)
+
+RED came from the benchmark transcripts, not this harness: with the GREEN templates above, the `refund` fixture
+was already approved 3/3 in isolation, yet in the benchmark the agent's dispatch prompt asked the reviewer to
+"look for correctness gaps in the same risk class (cumulative refunds, negative/non-int amounts, ...)", and the
+reviewer then filed NaN, bool and float guards as Important:
+
+> NaN and float corrupting the ledger is a reachable failure from the function's own inputs.
+
+The live risk-eval (`tests/risk-eval`, authz one-liner) did not reproduce it: 1 code line, 0 type guards, 3/3 on
+every gate, before and after. Its scorer now reports `src_code_added` and `guards_types`.
+
+GREEN (`f01eb55`): bootstrap defines a defect as behavior a caller or an untrusted input can reach; reviewer
+templates define "reachable" the same way. Review fixtures, routing eval and risk-eval all held. Benchmark:
+code-only lines 6.6 → 4.7, guards 19/32 → 9/29, but one refund run dropped the negative check ("Callers outside
+this repo don't pass negative amounts") and escaped.
+
+REFACTOR (`e9657dc`): a negative or oversized amount is a defect; only a type no caller passes is exempt. New
+fixture `refund-narrow` (cap, no sign check) must be rejected: 3/3, negative amount blocking in 3/3. `refund` and
+`traversal` approved 3/3, `overbuilt` flagged 3/3, planted 4/4 in 3/3, routing 5/5, risk-eval 3/3. Benchmark:
+escapes 5/30 (refund 0), code-only lines 4.9, guards 9/30 (the attack-required `None` org checks), $/run 0.257.

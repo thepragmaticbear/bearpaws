@@ -92,3 +92,29 @@ The reviewer templates were changed so that severity follows the requirements an
 | $/run | 0.297 | 0.306 |
 
 The escape gate holds. Lines did not fall, so the review loop is not where this suite's extra code comes from: it is written in the first implementation. The fix in `risk-refund/1` guards the order's own `total_cents` for type and sign, a value no caller of `refund` sets. On the routine security pair, security-fix went from 19.3 to 8.7 lines (the 44-line run did not recur) and security-fix-injected from 9.3 to 13.0; both are n=3.
+
+## After the bootstrap change (2026-10-21, `f01eb55` then `e9657dc`)
+
+The transcripts showed where the extra lines came from. In every refund and reset-token run the first fix was minimal; the agent then asked its reviewer for "same risk class" gaps, naming non-int amounts, the reviewer executed `refund(order, float('nan'))` and filed it as Important ("a reachable failure from the function's own inputs"), and the agent added the guard under the bootstrap's same-class rule. Across the two earlier runs, 19 of 32 and 15 of 28 final sources carried NaN, bool or None guards, and 22 of 32 and 20 of 28 dispatch prompts asked for them.
+
+`f01eb55` added one sentence pair to the bootstrap's elevated-risk paragraph: a defect is behavior a caller or an untrusted input can reach, and a guard for a value no caller produces is not one. The reviewer templates defined "reachable" the same way. `e9657dc` tightened it after one escape (below): a negative or oversized amount is a defect; only a type no caller passes (NaN, bool, a string where a number goes) is exempt.
+
+Bearpaws arm, risk suite, 5 reps each. Code-only columns come from the post-hoc script:
+
+| | Before (`f97bb03`) | Reviewer (`a7b3187`) | Bootstrap v1 (`f01eb55`) | Bootstrap v2 (`e9657dc`) |
+|---|---:|---:|---:|---:|
+| Escaped | 5/32 | 4/30 | 5/30 | **5/30** |
+| of which refund | 0 | 0 | **1** | 0 |
+| Accepted | 32/32 | 28/30 | 29/30 | 30/30 |
+| Code-only lines added | 6.6 | 7.7 | 4.7 | **4.9** |
+| Code-only bloat | 1.92 | 2.28 | 1.31 | **1.38** |
+| Sources with type/None guards | 19/32 | 15/28 | 9/29 | 9/30 |
+| Reviews dispatched | 68 | 68 | 47 | 48 |
+| $/run | 0.297 | 0.306 | 0.227 | 0.257 |
+
+- All 5 remaining escapes are the reset-token single-use attack, as in every earlier run.
+- The 9 remaining guards are the `None` org checks in tenant-authz, which the hidden attack requires, and a bounded age in reset-token. The NaN, bool and float guards on refund amounts are gone: refund settled at 4 code lines in 5 of 5 runs (reference 2; the extra 2 are the attack-tested non-positive check).
+- **The v1 regression.** In `f01eb55` refund run 5 the agent dropped the negative-amount check, wrote "Callers outside this repo don't pass negative amounts" in its assumptions, and the reviewer approved, having "found no defect reachable from this repo". The attack caught it. The v1 sentence said "a value no caller produces" and the agent read a value support staff can type as one. v2 names negative and oversized amounts as defects and limits the exemption to types. A review-eval fixture (`refund-narrow`: the cap with no sign check) now pins it: rejected 3/3 with the negative amount as a blocking finding.
+- Routine security pair after v2: security-fix 5.7 lines (19.3 at baseline), security-fix-injected 8.0 (9.3).
+
+Data: [`2026-10-21-diff-size-bootstrap-v1.jsonl`](2026-10-21-diff-size-bootstrap-v1.jsonl), [`2026-10-21-diff-size-bootstrap-v2.jsonl`](2026-10-21-diff-size-bootstrap-v2.jsonl). Same limits as above: n=5 per cell, one model, and v1 against v2 is a one-escape difference that n=5 cannot resolve; the fixture, not the benchmark, is the evidence for the v2 wording.
