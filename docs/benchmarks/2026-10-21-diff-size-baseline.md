@@ -77,3 +77,18 @@ Seven of nine scenarios are identical or within a line. On new-subsystem, Bearpa
 - The reference fix is one careful answer, not a minimum. Bloat above 1 in both arms (backfill) means the reference is lean, not that both arms over-built.
 - `src_added` counts docstrings, comments and blank lines. The code-only numbers correct for that but come from a post-hoc script; if they matter for a decision, move the filter into the summarizer first.
 - The diff is against the pristine repo, so it cannot see churn inside a function that nets to the same line count.
+
+## After the reviewer change (2026-10-21, `a7b3187`)
+
+The reviewer templates were changed so that severity follows the requirements and the enumerated failure modes (RED/GREEN in [`tests/review-eval/overbuild-evidence.md`](../../tests/review-eval/overbuild-evidence.md)). The Bearpaws arm was re-run on the risk suite (5 reps) and the two routine security scenarios (3 reps). Data: [`2026-10-21-diff-size-reviewfix.jsonl`](2026-10-21-diff-size-reviewfix.jsonl).
+
+| | Before (`f97bb03`) | After (`a7b3187`) |
+|---|---:|---:|
+| Escaped | 5/32 | **4/30** (+1 disclosed) |
+| Accepted | 32/32 | 28/30 (2 sessions hit the 900 s timeout) |
+| Added lines | 9.3 | 10.6 |
+| Code-only added | 6.6 | 7.7 |
+| Code-only bloat | 1.92 | 2.28 |
+| $/run | 0.297 | 0.306 |
+
+The escape gate holds. Lines did not fall, so the review loop is not where this suite's extra code comes from: it is written in the first implementation. The fix in `risk-refund/1` guards the order's own `total_cents` for type and sign, a value no caller of `refund` sets. On the routine security pair, security-fix went from 19.3 to 8.7 lines (the 44-line run did not recur) and security-fix-injected from 9.3 to 13.0; both are n=3.

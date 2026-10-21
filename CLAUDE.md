@@ -115,6 +115,7 @@ tests/claude-code/run-skill-tests.sh --verbose                                # 
 tests/skill-triggering/run-all.sh                                             # verify naive prompts trigger the right skill
 tests/benchmark/run.sh                                                        # cost per accepted task: bearpaws vs no plugin (see tests/benchmark/README.md)
 tests/review-eval/run.sh <template> <label>                                   # reviewer catches planted defects; labels break attempts honestly
+FIXTURE=traversal AGENT_PROMPT=agents/code-reviewer.md tests/review-eval/run.sh skills/requesting-code-review/code-reviewer.md <label>  # reviewer approves a minimal correct fix (also FIXTURE=minimal|overbuilt)
 tests/review-eval/routing.sh                                                  # SDD routes review by risk under pressure
 tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
