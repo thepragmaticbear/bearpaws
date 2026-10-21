@@ -8,8 +8,8 @@
 #   without demanding abstractions, options or hardening the task did not ask for.
 # overbuilt: the same behavior behind a unit registry, a parser class, an options dataclass
 #   and lifecycle hooks, none of which the task asked for. The reviewer should flag that.
-# traversal: task-traversal.txt, an elevated-risk path-traversal fix in four lines (realpath +
-#   commonpath), with tests for ../, absolute, symlink, sibling-prefix and the base dir itself.
+# traversal: task-traversal.txt, an elevated-risk path-traversal fix in eight lines (realpath +
+#   commonpath), with tests for ../, absolute, symlink, sibling-prefix, NUL and the base dir itself.
 #   The reviewer should approve it without demanding TOCTOU hardening the task did not ask for.
 set -euo pipefail
 dir="$1"
@@ -225,7 +225,10 @@ import os
 def read_user_file(base_dir, name):
     """Return the text of an uploaded file stored under base_dir; anything outside it raises PermissionError."""
     base = os.path.realpath(base_dir)
-    path = os.path.realpath(os.path.join(base, name))
+    try:
+        path = os.path.realpath(os.path.join(base, name))
+    except ValueError:  # embedded NUL
+        raise PermissionError(f"{name!r} is not a valid upload name") from None
     if path == base or os.path.commonpath([base, path]) != base:
         raise PermissionError(f"{name!r} is outside the uploads directory")
     with open(path) as f:
@@ -279,6 +282,10 @@ class ReadUserFileTest(unittest.TestCase):
     def test_base_itself_raises(self):
         with self.assertRaises(PermissionError):
             read_user_file(self.base, "")
+
+    def test_nul_byte_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, "a.txt\x00")
 
 
 if __name__ == "__main__":
@@ -338,4 +345,5 @@ if __name__ == "__main__":
     unittest.main()
 PY
 fi
-git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "Add parse_duration"
+msg="Add parse_duration"; [ "$fixture" = traversal ] && msg="Fix path traversal in read_user_file"
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "$msg"

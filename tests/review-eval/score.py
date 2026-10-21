@@ -33,6 +33,14 @@ def blocking_issues(text):
     return m.group(0) if m else ""
 
 
+def verdict_reject(text):
+    """Anything but a 'Ready to merge? Yes' line rejects; without that line, fall back to a tail grep."""
+    m = re.search(r"ready to merge\?[*_`:\s]*([^\n]*)", text, re.I)
+    if m:
+        return not re.match(r"\W*yes\b", m.group(1), re.I)
+    return bool(re.search(r"(not ready|with fixes|❌|issues found)", text[-1500:], re.I))
+
+
 def score(path, label, run):
     text, cost, bash_runs = "", 0.0, 0
     for line in open(path):
@@ -65,7 +73,7 @@ def score(path, label, run):
         "tried_labelled": len(labelled),
         "tried_executed": len([l for l in tried if re.search(r"\[executed\]", l, re.I)]),
         "code_executions": bash_runs,
-        "verdict_reject": bool(re.search(r"(not ready|no\b|with fixes|❌|issues found)", text[-1500:], re.I)),
+        "verdict_reject": verdict_reject(text),
     }
     return row
 
