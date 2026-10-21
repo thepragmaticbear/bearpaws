@@ -27,13 +27,13 @@ Your review MUST follow this structure. Sections marked [GATE] are adversarial c
    - Look for security vulnerabilities or performance issues
 
 4. **Architecture and Design Review**:
-   - Ensure SOLID principles and established architectural patterns
-   - Check separation of concerns and coupling
-   - Verify integration with existing systems
-   - Assess scalability and extensibility
+   - Check the design fits the stated requirements: established patterns, separation of concerns, coupling, integration with existing systems
+   - Generality the requirements do not need is a defect, not a strength: an interface with one implementation, options nobody sets, hooks nobody calls, a registry for a fixed set, a config value that never changes. Report it as Important; the fix is to delete it
+   - Do not ask for scalability, extensibility, or hardening the requirements do not state
 
 5. **Issue Identification**:
    - Categorize: Critical (must fix), Important (should fix), Suggestion (nice to have)
+   - Severity follows the requirements and the failure modes you enumerated, not the strength of a possible defense. Critical or Important: a requirement unmet or misread, a failure mode reachable from the code's actual inputs and trust boundary, a broken project convention, unrequested generality. Suggestion: hardening against an actor the task's threat model does not include (a writer inside the trusted directory, another OS, a type no caller passes), tests for behavior the requirements do not name, style, documentation. If you would write "acceptable to defer" or "if the threat model allows", it is a Suggestion
    - Each issue: specific location, what's wrong, actionable fix
    - Plan deviations: explain whether problematic or beneficial
 

@@ -68,10 +68,10 @@ Use explicit "none known" or "not supplied" instead of silently omitting a field
 - Edge cases handled?
 
 **Architecture:**
-- Sound design decisions?
-- Scalability considerations?
+- Sound design for the stated requirements?
+- Generality the requirements do not need (one-implementation interfaces, unset options, uncalled hooks, registries for fixed sets)? Flag it; the fix is deletion.
 - Performance implications?
-- Security concerns?
+- Security concerns within the task's trust boundary?
 
 **Testing:**
 - Tests actually test logic (not mocks)?
@@ -83,7 +83,7 @@ Use explicit "none known" or "not supplied" instead of silently omitting a field
 - Project conventions followed?
 - All plan requirements met?
 - Implementation matches spec?
-- No scope creep?
+- No scope creep: no extra features, options, abstractions, or hardening the task did not ask for?
 - Breaking changes documented?
 
 **Production Readiness:**
@@ -106,12 +106,14 @@ Enumerate **at least 3 concrete, testable failure modes** — specific ways this
 [Bugs, security issues, data loss risks, broken functionality]
 
 #### Important (Should Fix)
-[Architecture problems, missing features, poor error handling, test gaps]
+[Requirements unmet or misread, failure modes reachable from the code's actual inputs and trust boundary, broken project conventions, unrequested generality, missing tests for behavior the requirements name]
 
 #### Minor (Nice to Have)
-[Code style, optimization opportunities, documentation improvements]
+[Hardening against an actor the task's threat model does not include, tests for behavior the requirements do not name, code style, optimization opportunities, documentation]
 
 **For each issue:** file:line reference, what's wrong, why it matters, how to fix.
+
+**Severity follows the requirements and your enumerated failure modes, not the strength of a possible defense.** A finding you would phrase as "acceptable to defer", "if the threat model allows", or "for a stronger guarantee" is Minor. Minor findings never block the merge.
 
 ### [GATE] What would have to be true for this to be wrong?
 

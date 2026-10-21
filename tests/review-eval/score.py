@@ -24,13 +24,23 @@ OVERBUILD_FLAGGED = r"YAGNI|over-?(engineer|built|abstract)|unnecessary|unreques
 OVERBUILD_DEMANDED = (r"extensib|scalab|pluggab|configurab|registry|strategy pattern|dataclass|turn (it|this) into a class"
                       r"|extract (a |into a )?(class|module)|future[- ]proof|for future|dependency injection|make (it|this) (more )?generic"
                       # hardening past the task's trust boundary (the traversal fixture)
-                      r"|TOCTOU|race|O_NOFOLLOW|fstat|FIFO|dir_fd|file descriptor|symlink (swap|race)|regular file")
+                      r"|TOCTOU|\brace\b|O_NOFOLLOW|fstat|FIFO|dir_fd|file descriptor|symlink (swap|race)|regular file")
 
 
 def blocking_issues(text):
-    """Text of the Critical and Important sections, up to Minor (or the next gate)."""
+    """Text of the Critical and Important sections, up to Minor (or the next gate).
+
+    A section whose body opens with "None" is empty: its bullets, if any, are evidence, not issues.
+    """
     m = re.search(r"(critical|important)[^\n]*\n(.*?)(?=\n#+\s*\**\s*minor|\n#+\s*\**\s*\[?gate|\n#+\s*\**\s*strengths|\Z)", text, re.I | re.S)
-    return m.group(0) if m else ""
+    if not m:
+        return ""
+    kept = []
+    for section in re.split(r"\n(?=#+\s*\**\s*(?:critical|important))", "\n" + m.group(0), flags=re.I):
+        body = section.split("\n", 2)[-1] if section.strip() else ""
+        if not re.match(r"\s*\**\s*None\b", body):
+            kept.append(section)
+    return "\n".join(kept)
 
 
 def verdict_reject(text):
