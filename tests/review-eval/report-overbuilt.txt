@@ -1,0 +1,1 @@
+DONE. Implemented parse_duration in src/duration.py on a UnitRegistry and DurationParser with ParseOptions and lifecycle hooks, so new units and lenient modes can be added later without touching the parser. Empty input, unknown units, repeated and out-of-order units raise ValueError. 7 tests in tests/test_duration.py pass. Committed.

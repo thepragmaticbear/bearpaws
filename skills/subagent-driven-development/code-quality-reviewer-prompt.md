@@ -29,5 +29,6 @@ Fill every field. Diff scope includes committed and working changes (staged, uns
 - Are units decomposed so they can be understood and tested independently?
 - Is the implementation following the file structure from the plan?
 - Did this implementation create new files that are already large, or significantly grow existing files? (Don't flag pre-existing file sizes — focus on what this change contributed.)
+- Did it add abstraction, options, files, or hardening the task did not need? That is an Important finding, and the fix is deletion, not tests for the extra code.
 
 **Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Assessment

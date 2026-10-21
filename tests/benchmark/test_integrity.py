@@ -237,6 +237,98 @@ class ScoringTests(unittest.TestCase):
             summarize.summarize([path])
         return out.getvalue()
 
+    def scenario(self, name, repo_files, reference_files=None):
+        sdir = self.root / "scenarios" / name
+        for base, files in (("repo", repo_files), ("hidden/reference", reference_files or {})):
+            for rel, text in files.items():
+                path = sdir / base / rel
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+        return sdir
+
+    def test_tree_diff_counts_source_lines_and_new_files_only(self):
+        sdir = self.scenario("s", {"src/a.py": "x = 1\ny = 2\n", "tests/test_a.py": "pass\n", "README.md": "hi\n"})
+        work = self.root / "work"
+        shutil.copytree(sdir / "repo", work)
+        (work / "src/a.py").write_text("x = 1\ny = 3\nz = 4\n")
+        (work / "src/b.py").write_text("a\nb\nc\n")
+        (work / "tests/test_b.py").write_text("1\n2\n3\n4\n")
+        (work / "README.md").write_text("hi\nmore\n")
+        (work / "docs").mkdir()
+        (work / "docs/plan.md").write_text("p\n")
+        (work / "src/__pycache__").mkdir()
+        (work / "src/__pycache__/a.pyc").write_bytes(b"\x00")
+        (work / ".git").mkdir()
+        (work / ".git/HEAD").write_text("ref\n")
+        (work / ".gitignore").write_text("__pycache__/\n")
+        self.assertEqual(summarize.tree_diff(sdir / "repo", work),
+                         {"src_added": 5, "src_removed": 1, "src_files_added": 1})
+
+    def test_tree_diff_skips_every_dot_directory(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n"})
+        work = self.root / "work"
+        shutil.copytree(sdir / "repo", work)
+        for rel in (".venv/lib/site.py", ".mypy_cache/x.py", ".tox/env.py", "src/.hidden/y.py"):
+            (work / rel).parent.mkdir(parents=True, exist_ok=True)
+            (work / rel).write_text("a\nb\n")
+        self.assertEqual(summarize.tree_diff(sdir / "repo", work),
+                         {"src_added": 0, "src_removed": 0, "src_files_added": 0})
+
+    def test_tree_diff_counts_deleted_source_files_as_removed(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n2\n", "src/gone.py": "1\n2\n3\n"})
+        work = self.root / "work"
+        shutil.copytree(sdir / "repo", work)
+        (work / "src/gone.py").unlink()
+        self.assertEqual(summarize.tree_diff(sdir / "repo", work)["src_removed"], 3)
+
+    def test_reference_size_overlays_hidden_reference_on_repo(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n2\n", "src/other.py": "keep\n"},
+                             {"src/a.py": "1\n2\n3\n4\n", "src/new.py": "n\n"})
+        self.assertEqual(summarize.reference_size(sdir), 3)
+        self.assertIsNone(summarize.reference_size(self.scenario("t", {"src/a.py": "1\n"})))
+
+    def test_record_measures_diff_against_the_scenario_repo(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n"}, {"src/a.py": "1\n2\n3\n"})
+        work = self.root / "work"
+        shutil.copytree(sdir / "repo", work)
+        (work / "src/a.py").write_text("1\n2\n3\n4\n5\n6\n7\n")
+        row = self.row("Fixed.", work=str(work), scenario_dir=str(sdir))
+        self.assertEqual((row["src_added"], row["src_removed"], row["src_files_added"], row["ref_src_added"]),
+                         (6, 0, 0, 2))
+        self.assertIsNone(self.row("Fixed.")["src_added"])
+
+    def test_record_leaves_diff_unmeasured_for_an_emptied_work_tree(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n"})
+        work = self.root / "work"
+        (work / ".git").mkdir(parents=True)
+        self.assertIsNone(self.row("Fixed.", work=str(work), scenario_dir=str(sdir))["src_added"])
+
+    def test_summary_reports_diff_size_and_bloat_when_measured(self):
+        row = self.row("Fixed.", accepted=True)
+        row.update(src_added=6, src_removed=0, src_files_added=0, ref_src_added=2)
+        out = self.summary(row)
+        self.assertIn("Diff size", out)
+        self.assertIn("3.00", out)
+        self.assertNotIn("Diff size", self.summary(self.row("Fixed.")))
+
+    def test_summary_diff_size_skips_failed_sessions(self):
+        ok = dict(self.row("Fixed.", accepted=True), src_added=4, src_removed=0, src_files_added=0, ref_src_added=2)
+        failed = dict(self.row("Fixed.", cli_exit_code=1), src_added=0, src_removed=0, src_files_added=0, ref_src_added=2)
+        self.assertIn("2.00", self.summary(ok, failed))
+        self.assertNotIn("Diff size", self.summary(failed))
+
+    def test_rescore_adds_diff_fields_from_preserved_work_dirs(self):
+        sdir = self.scenario("security-fix", {"src/a.py": "1\n"})
+        work = self.root / "runs/security-fix/test/1/work"
+        shutil.copytree(sdir / "repo", work)
+        (work / "src/a.py").write_text("1\n2\n")
+        results = self.root / "results.jsonl"
+        results.write_text(json.dumps(self.row("Fixed.")) + "\n" + json.dumps(dict(self.row("Fixed."), run=2)) + "\n")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            summarize.rescore(results, self.root / "runs", self.root / "scenarios")
+        rows = [json.loads(l) for l in out.getvalue().splitlines()]
+        self.assertEqual([r["src_added"] for r in rows], [1, None])
+
     def test_summary_reports_escaped_defects_only_with_attack_rows(self):
         attacked = self.row("Fixed.", accepted=True, attack_ok="false")
         out = self.summary(attacked)

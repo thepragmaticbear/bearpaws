@@ -56,6 +56,7 @@ The [escaped-defect benchmark](docs/benchmarks/2026-10-12-escaped-defects.md) wa
 - Bearpaws eliminated the negative-refund defect (0/5 against 5/5 in each other arm). That comparison is post hoc and uncorrected, and rests on one attack. It was no better on reset tokens and slightly worse, within noise, on SQL sort injection and tenant authorization.
 - In 7 of 9 Bearpaws escapes, its own reviewer flagged the defect and the agent still shipped `Status: COMPLETE`. That motivated the review-findings rule: a same-risk defect the review finds in the code you changed is part of the fix.
 - **After that rule** (a same-arm before/after on the same frozen scenarios, not pre-registered): Bearpaws escapes fell from 9/30 to 3/30 (p = 0.10). SQL sort and tenant authorization went to 0, mostly through broader first fixes rather than fixes after review. All 3 remaining escapes are the reset-token single-use attack, which the agents' reviewers flagged and the agents left as outside the request. Cost rose about 33% per task. [Results](docs/bearpaws/plans/2026-10-12-review-findings.md#results-2026-10-12).
+- **Over-building:** a [diff-size measurement](docs/benchmarks/2026-10-21-diff-size-baseline.md) on the same six tasks found Bearpaws writing about 1.9× the code lines of a careful reference fix (no plugin 0.8×, with 15 of 32 escapes). The extra lines were NaN, bool and type guards that reviewers filed as Important and agents fixed under the same-class rule. After the reviewer templates and the bootstrap's definition of a defect were changed, the ratio fell to 1.4× with escapes unchanged at 5 of 30 and cost down about 13%. One intermediate wording let a negative-refund check be dropped; the final wording and a review fixture pin that case.
 - **Cost:** on these risky tasks, Bearpaws cost about 2.4× Superpowers per task (and 4.7× no plugin); that includes a review on every run. On routine tasks it is about level with Superpowers: $0.098 against $0.096 per task in the [2026-09-30 run](docs/benchmarks/2026-09-30-three-way.md).
 
 Small samples, Python stdlib scenarios, one model. Read the write-ups' limits before quoting these numbers.
@@ -98,7 +99,7 @@ flowchart TD
     Verify --> Gate{{Claude Code Stop hook<br/>checks receipt and review}}
 ```
 
-A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 4.9 KB, 4,876 bytes) and is the only thing loaded every session; every other skill loads on demand.
+A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 4.9 KB, 4,989 bytes) and is the only thing loaded every session; every other skill loads on demand.
 
 ## Skills
 

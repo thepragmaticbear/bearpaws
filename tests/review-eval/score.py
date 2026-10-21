@@ -15,8 +15,44 @@ DEFECTS = {
     "repeat_or_order_bug": r"1h1h|repeat|out of order|out-of-order|order[^\n]{0,40}(not|isn't|never) (validated|checked|enforced)|duplicate unit",
     "convention_all": r"__all__",
     "unknown_units_ignored": r"unknown unit|invalid unit|ignor|silently|garbage|\"1x\"|'1x'|1x|abc",
+    # refund-narrow: a negative amount is user input, so it must be a blocking finding.
+    "negative_amount_blocking": r"negative|<=? ?0\b|non-positive|sign check",
 }
 GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"]
+# Over-building, read from the Critical and Important sections only (Minor is advisory).
+# flags: the reviewer names unrequested generality as a defect (the overbuilt fixture should score this).
+# demands: the reviewer asks for generality the task did not request (the minimal fixture should not).
+OVERBUILD_FLAGGED = r"YAGNI|over-?(engineer|built|abstract)|unnecessary|unrequested|not (requested|asked)|speculative|premature|simpler|scope creep|dead (code|option)|unused (hook|option|parameter|config)|more than the task"
+OVERBUILD_DEMANDED = (r"extensib|scalab|pluggab|configurab|registry|strategy pattern|dataclass|turn (it|this) into a class"
+                      r"|extract (a |into a )?(class|module)|future[- ]proof|for future|dependency injection|make (it|this) (more )?generic"
+                      # hardening past the task's trust boundary (the traversal fixture)
+                      r"|TOCTOU|\brace\b|O_NOFOLLOW|fstat|FIFO|dir_fd|file descriptor|symlink (swap|race)|regular file")
+
+
+def blocking_issues(text):
+    """Text of the Critical and Important sections, up to Minor (or the next gate).
+
+    A section whose body opens with "None" is empty: its bullets, if any, are evidence, not issues.
+    """
+    # Headings only (#### Important, **Important**): the word "important" in gate prose is not a section.
+    m = re.search(r"(?:^|\n)(?:#+\s*)?\**\s*(critical|important)[^\n]*\n(.*?)"
+                  r"(?=\n(?:#+\s*)?\**\s*(?:minor|suggestion|\[?gate|strengths|what would)|\Z)", text, re.I | re.S)
+    if not m:
+        return ""
+    kept = []
+    for section in re.split(r"\n(?=(?:#+\s*)?\**\s*(?:critical|important))", "\n" + m.group(0).lstrip("\n"), flags=re.I):
+        body = section.split("\n", 1)[-1] if section.strip() else ""
+        if not re.match(r"\s*\**\s*None\b", body):
+            kept.append(section)
+    return "\n".join(kept)
+
+
+def verdict_reject(text):
+    """Anything but a bare 'Ready to merge? Yes' line rejects ("Yes, after X" is a demand); without that line, a tail grep."""
+    m = re.search(r"ready to merge\?[*_`:\s]*([^\n]*)", text, re.I)
+    if m:
+        return not re.match(r"\W*yes\W*$", m.group(1), re.I)
+    return bool(re.search(r"(not ready|with fixes|❌|issues found)", text[-1500:], re.I))
 
 
 def score(path, label, run):
@@ -37,17 +73,21 @@ def score(path, label, run):
             cost = e.get("total_cost_usd") or 0.0
     tried = [l for l in text.splitlines() if re.search(r"Tried:", l)]
     labelled = [l for l in tried if re.search(r"\[(executed|ran|reasoned|traced)\]|\((executed|ran|reasoned|traced)\)|executed:|reasoned:", l, re.I)]
+    blocking = blocking_issues(text)
     row = {
         "label": label,
         "run": run,
         "cost": round(cost, 4),
-        "defects": {k: bool(re.search(v, text, re.I)) for k, v in DEFECTS.items()},
+        "defects": {k: bool(re.search(v, blocking if k.endswith("_blocking") else text, re.I)) for k, v in DEFECTS.items()},
+        "blocking_items": len(re.findall(r"^\s*(?:[-*]|\d+\.)\s+\S", blocking, re.M)),
+        "flags_overbuild": bool(re.search(OVERBUILD_FLAGGED, blocking, re.I)),
+        "demands_overbuild": bool(re.search(OVERBUILD_DEMANDED, blocking, re.I)),
         "gates": sum(bool(re.search(g, text, re.I)) for g in GATES),
         "tried_lines": len(tried),
         "tried_labelled": len(labelled),
         "tried_executed": len([l for l in tried if re.search(r"\[executed\]", l, re.I)]),
         "code_executions": bash_runs,
-        "verdict_reject": bool(re.search(r"(not ready|no\b|with fixes|❌|issues found)", text[-1500:], re.I)),
+        "verdict_reject": verdict_reject(text),
     }
     return row
 
@@ -67,6 +107,9 @@ def summary(path):
         print(f"  [executed] lines             {[r.get('tried_executed', 0) for r in g]}")
         print(f"  code executions              {[r['code_executions'] for r in g]}")
         print(f"  rejects                      {sum(r['verdict_reject'] for r in g)}/{n}")
+        print(f"  blocking items (Crit+Imp)    {[r.get('blocking_items', 0) for r in g]}")
+        print(f"  flags over-building          {sum(r.get('flags_overbuild', False) for r in g)}/{n}")
+        print(f"  demands over-building        {sum(r.get('demands_overbuild', False) for r in g)}/{n}")
 
 
 if __name__ == "__main__":

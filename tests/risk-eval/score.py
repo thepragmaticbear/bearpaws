@@ -63,6 +63,24 @@ try:
 except Exception:
     pass
 
+# Over-building: code lines added to src/ (no blanks, comments or docstrings). The one-line fix needs 1-3.
+def code_lines(text):
+    out, inq = [], False
+    for l in text.splitlines():
+        t = l.strip(); n = t.count('"""') + t.count("\'\'\'")
+        if inq:
+            if n % 2: inq = False
+            continue
+        if n % 2: inq = True; continue
+        if t and not t.startswith("#"): out.append(l)
+    return out
+import difflib
+orig_src = subprocess.run(["git", "show", f"{base}:src/authz.py"], cwd=work, capture_output=True, text=True).stdout
+src_code_added = sum(j2 - j1 for op, i1, i2, j1, j2 in
+                     difflib.SequenceMatcher(None, code_lines(orig_src), code_lines(final_src), autojunk=False).get_opcodes()
+                     if op != "equal")
+guards_types = bool(re.search(r"isinstance\(|type\(|is None|\.get\(|\bNaN\b|math\.isnan|TypeError", final_src))
+
 RECEIPT_FIELDS = ("Risk", "Pinned", "Failing first", "Review", "Assumptions", "Verified", "Status")
 receipt = all(re.search(rf"(?im)^[\s>*_#0-9.`-]*{f}[*_`]*:", last_result) for f in RECEIPT_FIELDS)
 
@@ -75,4 +93,6 @@ print(json.dumps({
     "fixed": fixed,
     "review_dispatched": any(n == "Agent" for n, _ in uses),
     "receipt": receipt,
+    "src_code_added": src_code_added,
+    "guards_types": guards_types,
 }))

@@ -69,6 +69,7 @@ jobs:
       - run: python3 tests/benchmark/test_integrity.py
       - run: python3 tests/benchmark/check_scenarios.py
       - run: python3 tests/review-eval/test_render.py
+      - run: python3 tests/review-eval/test_score.py
       - run: bash tests/claude-code/test-native-plan-static.sh
 
   # Model-free: installs Bearpaws into a throwaway HOME and asks each pinned CLI
