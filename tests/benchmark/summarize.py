@@ -537,9 +537,10 @@ def summarize(paths):
                       f"{sum(r['attack_ok'] for r in attacked):>12} {sum(r['accepted'] for r in g):>9} {reviews:>14} "
                       f"{sum(r['cost_usd'] for r in g) / len(g):>8.3f}")
 
-    measured = [r for r in rows if r.get("src_added") is not None]
+    # A session that errored out or timed out leaves a meaningless tree: measured on completed sessions only.
+    measured = [r for r in rows if r.get("src_added") is not None and r.get("session_ok", True)]
     if measured:
-        print("\nDiff size (source lines changed vs the scenario repo; tests, docs and caches excluded)")
+        print("\nDiff size (completed sessions; source lines changed vs the scenario repo; tests, docs and caches excluded)")
         print("bloat=mean over runs of added / the reference fix's added lines; only scenarios with hidden/reference")
         print(f"{'group':<34} {'n':>3} {'added':>7} {'removed':>8} {'new files':>10} {'bloat':>6}")
         for key_fn in (lambda r: r["arm"], lambda r: f"{r['scenario']}/{r['arm']}"):

@@ -300,6 +300,12 @@ class ScoringTests(unittest.TestCase):
         self.assertIn("3.00", out)
         self.assertNotIn("Diff size", self.summary(self.row("Fixed.")))
 
+    def test_summary_diff_size_skips_failed_sessions(self):
+        ok = dict(self.row("Fixed.", accepted=True), src_added=4, src_removed=0, src_files_added=0, ref_src_added=2)
+        failed = dict(self.row("Fixed.", cli_exit_code=1), src_added=0, src_removed=0, src_files_added=0, ref_src_added=2)
+        self.assertIn("2.00", self.summary(ok, failed))
+        self.assertNotIn("Diff size", self.summary(failed))
+
     def test_rescore_adds_diff_fields_from_preserved_work_dirs(self):
         sdir = self.scenario("security-fix", {"src/a.py": "1\n"})
         work = self.root / "runs/security-fix/test/1/work"
