@@ -107,6 +107,7 @@ tests/token-measurement/measure.sh                                            # 
 python3 tests/codex/test_conformance.py                                       # Codex conformance unit tests (no CLI)
 python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
+python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
@@ -115,6 +116,7 @@ tests/claude-code/run-skill-tests.sh --verbose                                # 
 tests/skill-triggering/run-all.sh                                             # verify naive prompts trigger the right skill
 tests/benchmark/run.sh                                                        # cost per accepted task: bearpaws vs no plugin (see tests/benchmark/README.md)
 tests/review-eval/run.sh <template> <label>                                   # reviewer catches planted defects; labels break attempts honestly
+FIXTURE=traversal AGENT_PROMPT=agents/code-reviewer.md tests/review-eval/run.sh skills/requesting-code-review/code-reviewer.md <label>  # reviewer approves a minimal correct fix (also FIXTURE=minimal|overbuilt)
 tests/review-eval/routing.sh                                                  # SDD routes review by risk under pressure
 tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>              # bootstrap classifies scope and risk
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught

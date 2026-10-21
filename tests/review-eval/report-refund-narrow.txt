@@ -1,0 +1,1 @@
+DONE. refund now rejects an amount that would take the order's cumulative refunds above its total with ValueError and before the order is changed. 4 tests in tests/test_billing.py pass, including the original partial-refund test. Committed.
