@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a reviewer prompt template for the review fixture.
 
-Usage: [FIXTURE=planted|minimal|overbuilt] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
+Usage: [FIXTURE=planted|minimal|overbuilt|traversal] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
 Supports requesting-code-review/code-reviewer.md style {PLACEHOLDERS} and the
 subagent-driven-development prompt files (the fenced prompt block, [FULL TEXT ...]
 and [From implementer's report] markers).
@@ -15,7 +15,8 @@ import textwrap
 here = os.path.dirname(os.path.abspath(__file__))
 template_path, repo = sys.argv[1], sys.argv[2]
 fixture = os.environ.get("FIXTURE", "planted")
-task = open(os.path.join(here, "task.txt")).read().strip()
+task_file = os.path.join(here, f"task-{fixture}.txt")
+task = open(task_file if os.path.exists(task_file) else os.path.join(here, "task.txt")).read().strip()
 report_file = os.path.join(here, f"report-{fixture}.txt")
 report = open(report_file if os.path.exists(report_file) else os.path.join(here, "report.txt")).read().strip()
 head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
@@ -62,7 +63,7 @@ values = {
     "HEAD_SHA": head,
     "CHANGED_FILE_DIFF": diff or "No changes in fixture scope src/ and tests/.",
     "VERIFICATION_EVIDENCE": evidence,
-    "KNOWN_DECISIONS": "Fixture decision: stdlib parser; no new dependency.",
+    "KNOWN_DECISIONS": "Fixture decision: stdlib only; no new dependency.",
     "UNRESOLVED_CONCERNS": ("Invalid input and repeated units lack visible test coverage; investigate."
                             if fixture == "planted" else "none known"),
 }

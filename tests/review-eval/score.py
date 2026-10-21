@@ -21,7 +21,10 @@ GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"
 # flags: the reviewer names unrequested generality as a defect (the overbuilt fixture should score this).
 # demands: the reviewer asks for generality the task did not request (the minimal fixture should not).
 OVERBUILD_FLAGGED = r"YAGNI|over-?(engineer|built|abstract)|unnecessary|unrequested|not (requested|asked)|speculative|premature|simpler|scope creep|dead (code|option)|unused (hook|option|parameter|config)|more than the task"
-OVERBUILD_DEMANDED = r"extensib|scalab|pluggab|configurab|registry|strategy pattern|dataclass|turn (it|this) into a class|extract (a |into a )?(class|module)|future[- ]proof|for future|dependency injection|make (it|this) (more )?generic"
+OVERBUILD_DEMANDED = (r"extensib|scalab|pluggab|configurab|registry|strategy pattern|dataclass|turn (it|this) into a class"
+                      r"|extract (a |into a )?(class|module)|future[- ]proof|for future|dependency injection|make (it|this) (more )?generic"
+                      # hardening past the task's trust boundary (the traversal fixture)
+                      r"|TOCTOU|race|O_NOFOLLOW|fstat|FIFO|dir_fd|file descriptor|symlink (swap|race)|regular file")
 
 
 def blocking_issues(text):

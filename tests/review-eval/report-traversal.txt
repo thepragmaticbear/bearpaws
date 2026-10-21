@@ -1,0 +1,1 @@
+DONE. read_user_file now resolves base_dir and the joined name with realpath and raises PermissionError unless the result is strictly inside base_dir. That covers "..", absolute names, symlinks that point outside, sibling-prefix directories like uploads-evil, and the base directory itself. 6 tests in tests/test_files.py pass, including the original happy path. Committed.

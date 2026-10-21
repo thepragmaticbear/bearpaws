@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Build a review fixture: a base commit and a head commit implementing task.txt.
-# Usage: [FIXTURE=planted|minimal|overbuilt] tests/review-eval/setup.sh <dir>
+# Usage: [FIXTURE=planted|minimal|overbuilt|traversal] tests/review-eval/setup.sh <dir>
 # planted (default): (1) missing requirement: empty input must raise ValueError, returns 0;
 #   (2) unrequested scope: a "d" (days) unit; (3) bug: "1h1h" is accepted and double-counts;
 #   (4) quality: duplicated per-unit parsing branches.
-# minimal: a correct 8-line implementation with full tests. The reviewer should approve it
+# minimal: a correct 7-line implementation with full tests. The reviewer should approve it
 #   without demanding abstractions, options or hardening the task did not ask for.
 # overbuilt: the same behavior behind a unit registry, a parser class, an options dataclass
 #   and lifecycle hooks, none of which the task asked for. The reviewer should flag that.
+# traversal: task-traversal.txt, an elevated-risk path-traversal fix in four lines (realpath +
+#   commonpath), with tests for ../, absolute, symlink, sibling-prefix and the base dir itself.
+#   The reviewer should approve it without demanding TOCTOU hardening the task did not ask for.
 set -euo pipefail
 dir="$1"
 fixture="${FIXTURE:-planted}"
@@ -15,10 +18,42 @@ mkdir -p "$dir/src" "$dir/tests"
 cd "$dir"
 git init -q
 touch src/__init__.py tests/__init__.py
+if [ "$fixture" = traversal ]; then
+cat > src/files.py <<'PY'
+import os
+
+
+def read_user_file(base_dir, name):
+    """Return the text of an uploaded file stored under base_dir."""
+    path = os.path.join(base_dir, name)
+    with open(path) as f:
+        return f.read()
+PY
+cat > tests/test_files.py <<'PY'
+import os
+import tempfile
+import unittest
+
+from src.files import read_user_file
+
+
+class ReadUserFileTest(unittest.TestCase):
+    def test_reads_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "a.txt"), "w") as f:
+                f.write("hi")
+            self.assertEqual(read_user_file(d, "a.txt"), "hi")
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+else
 cat > src/duration.py <<'PY'
 PY
 cat > tests/test_duration.py <<'PY'
 PY
+fi
 if [ "${CONVENTION:-0}" = 1 ]; then
   # CONVENTION=1: a project-only rule (register public functions in __all__) that the head commit misses.
   printf '# Contributing\n\n- Every public function in src/ must be added to `__all__` in `src/__init__.py`. The plugin loader only exposes names listed there; anything else is invisible in production.\n' > CONTRIBUTING.md
@@ -69,13 +104,13 @@ minimal)
 cat > src/duration.py <<'PY'
 import re
 
-_PATTERN = re.compile(r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$")
+_PATTERN = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 
 
 def parse_duration(text):
     """Parse "1h30m"-style strings (h, m, s in that order, each at most once) into seconds."""
-    match = _PATTERN.match(text or "")
-    if not text or not match:
+    match = text and _PATTERN.fullmatch(text)
+    if not match:
         raise ValueError(f"invalid duration: {text!r}")
     hours, minutes, seconds = (int(part or 0) for part in match.groups())
     return hours * 3600 + minutes * 60 + seconds
@@ -182,10 +217,78 @@ def parse_duration(text: str) -> int:
     return _default_parser.parse(text)
 PY
 ;;
+traversal)
+cat > src/files.py <<'PY'
+import os
+
+
+def read_user_file(base_dir, name):
+    """Return the text of an uploaded file stored under base_dir; anything outside it raises PermissionError."""
+    base = os.path.realpath(base_dir)
+    path = os.path.realpath(os.path.join(base, name))
+    if path == base or os.path.commonpath([base, path]) != base:
+        raise PermissionError(f"{name!r} is outside the uploads directory")
+    with open(path) as f:
+        return f.read()
+PY
+cat > tests/test_files.py <<'PY'
+import os
+import tempfile
+import unittest
+
+from src.files import read_user_file
+
+
+class ReadUserFileTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = self.tmp.name
+        self.base = os.path.join(root, "uploads")
+        os.makedirs(os.path.join(self.base, "sub"))
+        for rel, text in (("secret.txt", "secret"), ("uploads/a.txt", "a"), ("uploads/sub/b.txt", "b"),
+                          ("uploads/x..y.txt", "dots"), ("uploads-evil/e.txt", "evil")):
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            with open(os.path.join(root, rel), "w") as f:
+                f.write(text)
+        os.symlink(os.path.join(root, "secret.txt"), os.path.join(self.base, "link.txt"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_reads_files_inside(self):
+        self.assertEqual(read_user_file(self.base, "a.txt"), "a")
+        self.assertEqual(read_user_file(self.base, "sub/b.txt"), "b")
+        self.assertEqual(read_user_file(self.base, "x..y.txt"), "dots")
+
+    def test_dotdot_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, "../secret.txt")
+
+    def test_absolute_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, os.path.join(self.tmp.name, "secret.txt"))
+
+    def test_symlink_outside_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, "link.txt")
+
+    def test_sibling_prefix_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, "../uploads-evil/e.txt")
+
+    def test_base_itself_raises(self):
+        with self.assertRaises(PermissionError):
+            read_user_file(self.base, "")
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+;;
 *) echo "unknown FIXTURE: $fixture" >&2; exit 2 ;;
 esac
 
-if [ "$fixture" != planted ]; then
+if [ "$fixture" != planted ] && [ "$fixture" != traversal ]; then
 cat > tests/test_duration.py <<'PY'
 import unittest
 
@@ -217,6 +320,18 @@ class ParseDurationTest(unittest.TestCase):
     def test_repeated_unit_raises(self):
         with self.assertRaises(ValueError):
             parse_duration("1h1h")
+
+    def test_all_units(self):
+        self.assertEqual(parse_duration("1h30m45s"), 5445)
+
+    def test_trailing_number_raises(self):
+        with self.assertRaises(ValueError):
+            parse_duration("1h30")
+
+    def test_whitespace_raises(self):
+        for text in ("1h\n", " 1h", "\n"):
+            with self.assertRaises(ValueError):
+                parse_duration(text)
 
 
 if __name__ == "__main__":
