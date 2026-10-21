@@ -34,11 +34,13 @@ def blocking_issues(text):
 
     A section whose body opens with "None" is empty: its bullets, if any, are evidence, not issues.
     """
-    m = re.search(r"(critical|important)[^\n]*\n(.*?)(?=\n#+\s*\**\s*minor|\n#+\s*\**\s*\[?gate|\n#+\s*\**\s*strengths|\Z)", text, re.I | re.S)
+    # Headings only (#### Important, **Important**): the word "important" in gate prose is not a section.
+    m = re.search(r"(?:^|\n)(?:#+\s*)?\**\s*(critical|important)[^\n]*\n(.*?)"
+                  r"(?=\n(?:#+\s*)?\**\s*(?:minor|suggestion|\[?gate|strengths|what would)|\Z)", text, re.I | re.S)
     if not m:
         return ""
     kept = []
-    for section in re.split(r"\n(?=#+\s*\**\s*(?:critical|important))", "\n" + m.group(0), flags=re.I):
+    for section in re.split(r"\n(?=(?:#+\s*)?\**\s*(?:critical|important))", "\n" + m.group(0).lstrip("\n"), flags=re.I):
         body = section.split("\n", 1)[-1] if section.strip() else ""
         if not re.match(r"\s*\**\s*None\b", body):
             kept.append(section)
@@ -46,10 +48,10 @@ def blocking_issues(text):
 
 
 def verdict_reject(text):
-    """Anything but a 'Ready to merge? Yes' line rejects; without that line, fall back to a tail grep."""
+    """Anything but a bare 'Ready to merge? Yes' line rejects ("Yes, after X" is a demand); without that line, a tail grep."""
     m = re.search(r"ready to merge\?[*_`:\s]*([^\n]*)", text, re.I)
     if m:
-        return not re.match(r"\W*yes\b", m.group(1), re.I)
+        return not re.match(r"\W*yes\W*$", m.group(1), re.I)
     return bool(re.search(r"(not ready|with fixes|❌|issues found)", text[-1500:], re.I))
 
 

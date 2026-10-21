@@ -107,6 +107,7 @@ tests/token-measurement/measure.sh                                            # 
 python3 tests/codex/test_conformance.py                                       # Codex conformance unit tests (no CLI)
 python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
+python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test

@@ -86,7 +86,7 @@ sys.exit(bad)
 # Diff size: source lines the agent changed against the pristine scenario repo, so over-building shows
 # up next to acceptance. Tests, docs, caches and VCS metadata are excluded. Where a scenario ships
 # hidden/reference/ (a careful fix), its added lines are the denominator for the bloat ratio.
-SRC_SKIP_DIRS = {"tests", "test", "__tests__", "docs", "__pycache__", ".git", ".pytest_cache", ".claude", "node_modules"}
+SRC_SKIP_DIRS = {"tests", "test", "__tests__", "docs", "__pycache__", "node_modules"}  # plus every dot-directory (.git, .venv, caches)
 SRC_SKIP_SUFFIXES = (".md", ".pyc", ".jsonl", ".txt")
 
 
@@ -96,8 +96,8 @@ def source_files(root):
     files = {}
     for path in root.rglob("*"):
         rel = path.relative_to(root)
-        if (path.is_file() and not rel.name.startswith(".") and not set(rel.parts[:-1]) & SRC_SKIP_DIRS
-                and rel.suffix not in SRC_SKIP_SUFFIXES):
+        if (path.is_file() and not any(p.startswith(".") for p in rel.parts)
+                and not set(rel.parts[:-1]) & SRC_SKIP_DIRS and rel.suffix not in SRC_SKIP_SUFFIXES):
             files[str(rel)] = path
     return files
 

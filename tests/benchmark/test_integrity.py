@@ -264,6 +264,16 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(summarize.tree_diff(sdir / "repo", work),
                          {"src_added": 5, "src_removed": 1, "src_files_added": 1})
 
+    def test_tree_diff_skips_every_dot_directory(self):
+        sdir = self.scenario("s", {"src/a.py": "1\n"})
+        work = self.root / "work"
+        shutil.copytree(sdir / "repo", work)
+        for rel in (".venv/lib/site.py", ".mypy_cache/x.py", ".tox/env.py", "src/.hidden/y.py"):
+            (work / rel).parent.mkdir(parents=True, exist_ok=True)
+            (work / rel).write_text("a\nb\n")
+        self.assertEqual(summarize.tree_diff(sdir / "repo", work),
+                         {"src_added": 0, "src_removed": 0, "src_files_added": 0})
+
     def test_tree_diff_counts_deleted_source_files_as_removed(self):
         sdir = self.scenario("s", {"src/a.py": "1\n2\n", "src/gone.py": "1\n2\n3\n"})
         work = self.root / "work"
