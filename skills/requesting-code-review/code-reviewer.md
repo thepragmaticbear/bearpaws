@@ -98,7 +98,7 @@ Sections marked **[GATE]** are adversarial checkpoints — they cannot be skippe
 
 ### [GATE] Failure Mode Enumeration
 
-Enumerate **at least 3 concrete, testable failure modes** — specific ways this code could break in production. Each must be a scenario, not a vague worry: "concurrent writes to X without locking corrupt Y when Z" not "might have concurrency issues."
+Enumerate **at least 3 concrete, testable failure modes** — specific ways this code could break in production, from inputs its callers or an untrusted path can produce. Each must be a scenario, not a vague worry: "concurrent writes to X without locking corrupt Y when Z" not "might have concurrency issues."
 
 ### Issues
 
@@ -113,7 +113,7 @@ Enumerate **at least 3 concrete, testable failure modes** — specific ways this
 
 **For each issue:** file:line reference, what's wrong, why it matters, how to fix.
 
-**Severity follows the requirements and your enumerated failure modes, not the strength of a possible defense.** A finding you would phrase as "acceptable to defer", "if the threat model allows", or "for a stronger guarantee" is Minor. Minor findings never block the merge.
+**Severity follows the requirements and your enumerated failure modes, not the strength of a possible defense.** A failure mode is reachable when a caller in this repository or an untrusted-input path can produce the value; calling the function yourself with a type no caller passes does not make it reachable. A finding you would phrase as "acceptable to defer", "if the threat model allows", or "for a stronger guarantee" is Minor. Minor findings never block the merge.
 
 ### [GATE] What would have to be true for this to be wrong?
 

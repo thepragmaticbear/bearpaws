@@ -37,7 +37,7 @@ def blocking_issues(text):
         return ""
     kept = []
     for section in re.split(r"\n(?=#+\s*\**\s*(?:critical|important))", "\n" + m.group(0), flags=re.I):
-        body = section.split("\n", 2)[-1] if section.strip() else ""
+        body = section.split("\n", 1)[-1] if section.strip() else ""
         if not re.match(r"\s*\**\s*None\b", body):
             kept.append(section)
     return "\n".join(kept)
