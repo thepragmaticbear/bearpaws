@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a review fixture: a base commit and a head commit implementing task.txt.
-# Usage: [FIXTURE=planted|minimal|overbuilt|traversal] tests/review-eval/setup.sh <dir>
+# Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund] tests/review-eval/setup.sh <dir>
 # planted (default): (1) missing requirement: empty input must raise ValueError, returns 0;
 #   (2) unrequested scope: a "d" (days) unit; (3) bug: "1h1h" is accepted and double-counts;
 #   (4) quality: duplicated per-unit parsing branches.
@@ -11,6 +11,9 @@
 # traversal: task-traversal.txt, an elevated-risk path-traversal fix in eight lines (realpath +
 #   commonpath), with tests for ../, absolute, symlink, sibling-prefix, NUL and the base dir itself.
 #   The reviewer should approve it without demanding TOCTOU hardening the task did not ask for.
+# refund: task-refund.txt, an elevated-risk money fix: cumulative cap and non-positive amounts, in
+#   four lines. The reviewer should approve it without demanding guards against NaN, bool, float or
+#   None amounts, which no caller in the repository passes.
 set -euo pipefail
 dir="$1"
 fixture="${FIXTURE:-planted}"
@@ -18,7 +21,35 @@ mkdir -p "$dir/src" "$dir/tests"
 cd "$dir"
 git init -q
 touch src/__init__.py tests/__init__.py
-if [ "$fixture" = traversal ]; then
+if [ "$fixture" = refund ]; then
+cat > src/billing.py <<'PY'
+class Order:
+    def __init__(self, total_cents):
+        self.total_cents = total_cents
+        self.refunded_cents = 0
+
+
+def refund(order, amount_cents):
+    order.refunded_cents += amount_cents
+    return order.refunded_cents
+PY
+cat > tests/test_billing.py <<'PY'
+import unittest
+
+from src.billing import Order, refund
+
+
+class RefundTest(unittest.TestCase):
+    def test_partial_refund(self):
+        order = Order(1000)
+        refund(order, 500)
+        self.assertEqual(order.refunded_cents, 500)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+elif [ "$fixture" = traversal ]; then
 cat > src/files.py <<'PY'
 import os
 
@@ -217,6 +248,69 @@ def parse_duration(text: str) -> int:
     return _default_parser.parse(text)
 PY
 ;;
+refund)
+cat > src/billing.py <<'PY'
+class Order:
+    def __init__(self, total_cents):
+        self.total_cents = total_cents
+        self.refunded_cents = 0
+
+
+def refund(order, amount_cents):
+    """Record a refund in cents; a non-positive amount or one that exceeds the order total raises ValueError."""
+    if amount_cents <= 0:
+        raise ValueError("refund amount must be positive")
+    if order.refunded_cents + amount_cents > order.total_cents:
+        raise ValueError("refund exceeds order total")
+    order.refunded_cents += amount_cents
+    return order.refunded_cents
+PY
+cat > tests/test_billing.py <<'PY'
+import unittest
+
+from src.billing import Order, refund
+
+
+class RefundTest(unittest.TestCase):
+    def test_partial_refund(self):
+        order = Order(1000)
+        refund(order, 500)
+        self.assertEqual(order.refunded_cents, 500)
+
+    def test_over_total_raises(self):
+        with self.assertRaises(ValueError):
+            refund(Order(10000), 15000)
+
+    def test_cumulative_over_total_raises(self):
+        order = Order(10000)
+        refund(order, 6000)
+        with self.assertRaises(ValueError):
+            refund(order, 4001)
+
+    def test_exact_remaining_allowed(self):
+        order = Order(10000)
+        refund(order, 6000)
+        self.assertEqual(refund(order, 4000), 10000)
+
+    def test_negative_raises(self):
+        with self.assertRaises(ValueError):
+            refund(Order(10000), -1)
+
+    def test_zero_raises(self):
+        with self.assertRaises(ValueError):
+            refund(Order(10000), 0)
+
+    def test_rejected_refund_leaves_order_unchanged(self):
+        order = Order(10000)
+        with self.assertRaises(ValueError):
+            refund(order, 10001)
+        self.assertEqual(order.refunded_cents, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+;;
 traversal)
 cat > src/files.py <<'PY'
 import os
@@ -295,7 +389,7 @@ PY
 *) echo "unknown FIXTURE: $fixture" >&2; exit 2 ;;
 esac
 
-if [ "$fixture" != planted ] && [ "$fixture" != traversal ]; then
+if [ "$fixture" = minimal ] || [ "$fixture" = overbuilt ]; then
 cat > tests/test_duration.py <<'PY'
 import unittest
 
@@ -345,5 +439,7 @@ if __name__ == "__main__":
     unittest.main()
 PY
 fi
-msg="Add parse_duration"; [ "$fixture" = traversal ] && msg="Fix path traversal in read_user_file"
+msg="Add parse_duration"
+[ "$fixture" = traversal ] && msg="Fix path traversal in read_user_file"
+[ "$fixture" = refund ] && msg="Reject refunds above the order total"
 git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "$msg"

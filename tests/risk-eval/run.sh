@@ -41,5 +41,6 @@ keys = ["pins_existing", "narrow_diff", "states_assumptions", "fixed", "review_d
 for label, rows in sorted(g.items()):
     print(label + ": " + "  ".join(f"{k} {sum(r[k] for r in rows)}/{len(rows)}" for k in keys)
           + f"  tests-before-edit {[r['tests_before_edit'] for r in rows]}"
+          + f"  src-code-added {[r.get('src_code_added') for r in rows]}  type-guards {sum(r.get('guards_types', False) for r in rows)}/{len(rows)}"
           + f"  mean ${sum(r['cost'] for r in rows)/len(rows):.3f}")
 PY

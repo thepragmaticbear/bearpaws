@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run one reviewer template against the planted-defect fixture N times.
-# Usage: [FIXTURE=planted|minimal|overbuilt|traversal] [AGENT_PROMPT=agents/code-reviewer.md] tests/review-eval/run.sh <template.md> <label> [runs] [out-dir]
+# Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund] [AGENT_PROMPT=agents/code-reviewer.md] tests/review-eval/run.sh <template.md> <label> [runs] [out-dir]
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 template="$1"; label="$2"; runs="${3:-3}"
