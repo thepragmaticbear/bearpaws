@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a reviewer prompt template for the review fixture.
 
-Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
+Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund|refund-narrow] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
 Supports requesting-code-review/code-reviewer.md style {PLACEHOLDERS} and the
 subagent-driven-development prompt files (the fenced prompt block, [FULL TEXT ...]
 and [From implementer's report] markers).

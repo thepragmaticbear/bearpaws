@@ -113,7 +113,7 @@ Enumerate **at least 3 concrete, testable failure modes** — specific ways this
 
 **For each issue:** file:line reference, what's wrong, why it matters, how to fix.
 
-**Severity follows the requirements and your enumerated failure modes, not the strength of a possible defense.** A failure mode is reachable when a caller in this repository or an untrusted-input path can produce the value; calling the function yourself with a type no caller passes does not make it reachable. A finding you would phrase as "acceptable to defer", "if the threat model allows", or "for a stronger guarantee" is Minor. Minor findings never block the merge.
+**Severity follows the requirements and your enumerated failure modes, not the strength of a possible defense.** A failure mode is reachable when a caller in this repository or a user's input can produce the value. An argument a user, operator or request sets is user input whatever its type, so a negative or oversized amount is reachable; calling the function yourself with a type no caller passes (NaN, bool, a string where a number goes) is not. A finding you would phrase as "acceptable to defer", "if the threat model allows", or "for a stronger guarantee" is Minor. Minor findings never block the merge.
 
 ### [GATE] What would have to be true for this to be wrong?
 

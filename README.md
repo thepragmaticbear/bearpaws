@@ -98,7 +98,7 @@ flowchart TD
     Verify --> Gate{{Claude Code Stop hook<br/>checks receipt and review}}
 ```
 
-A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 4.9 KB, 4,974 bytes) and is the only thing loaded every session; every other skill loads on demand.
+A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 4.9 KB, 4,989 bytes) and is the only thing loaded every session; every other skill loads on demand.
 
 ## Skills
 

@@ -15,6 +15,8 @@ DEFECTS = {
     "repeat_or_order_bug": r"1h1h|repeat|out of order|out-of-order|order[^\n]{0,40}(not|isn't|never) (validated|checked|enforced)|duplicate unit",
     "convention_all": r"__all__",
     "unknown_units_ignored": r"unknown unit|invalid unit|ignor|silently|garbage|\"1x\"|'1x'|1x|abc",
+    # refund-narrow: a negative amount is user input, so it must be a blocking finding.
+    "negative_amount_blocking": r"negative|<=? ?0\b|non-positive|sign check",
 }
 GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"]
 # Over-building, read from the Critical and Important sections only (Minor is advisory).
@@ -74,7 +76,7 @@ def score(path, label, run):
         "label": label,
         "run": run,
         "cost": round(cost, 4),
-        "defects": {k: bool(re.search(v, text, re.I)) for k, v in DEFECTS.items()},
+        "defects": {k: bool(re.search(v, blocking if k.endswith("_blocking") else text, re.I)) for k, v in DEFECTS.items()},
         "blocking_items": len(re.findall(r"^\s*(?:[-*]|\d+\.)\s+\S", blocking, re.M)),
         "flags_overbuild": bool(re.search(OVERBUILD_FLAGGED, blocking, re.I)),
         "demands_overbuild": bool(re.search(OVERBUILD_DEMANDED, blocking, re.I)),
