@@ -17,7 +17,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
-- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers); [tests/hooks/](tests/hooks/) pins each payload shape. `risk-gate` (PreToolUse/PostToolUse/Stop) enforces the risk receipt and the elevated-risk review in Claude Code only; [tests/hooks/run-risk-gate-tests.sh](tests/hooks/run-risk-gate-tests.sh) pins each rule. `hooks-cursor.json` is the Cursor hook config. Hook compatibility does not imply support-tier promotion.
+- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers); [tests/hooks/](tests/hooks/) pins each payload shape. `risk-gate` (PreToolUse/PostToolUse/Stop) enforces the risk receipt and the elevated-risk review in Claude Code only; [tests/hooks/run-risk-gate-tests.sh](tests/hooks/run-risk-gate-tests.sh) pins each rule. `git-commit-msg` is a git `commit-msg` hook (`install.sh --git`) that requires the same receipt in commit messages for any harness or person; it shares the receipt format with `risk-gate` through `lib-receipt`, and [tests/hooks/run-git-gate-tests.sh](tests/hooks/run-git-gate-tests.sh) pins each rule. `hooks-cursor.json` is the Cursor hook config. Hook compatibility does not imply support-tier promotion.
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace. Copilot CLI installs from the same marketplace; Devin falls back to this manifest.
 - [.cursor-plugin/](.cursor-plugin/) — Cursor plugin manifest (skills + `hooks/hooks-cursor.json`).
 - [.antigravity/](.antigravity/) — Google Antigravity IDE plugin manifest (`plugin.json`) and rules (`bearpaws.md`).
@@ -27,7 +27,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [tests/antigravity/](tests/antigravity/) — static adapter tests for Antigravity plugin integrity.
 - [tests/install/](tests/install/) — installer tests for Antigravity, Agent Skills (`--agents`), and Grok (`--grok`).
 - [tests/bump-version/](tests/bump-version/) — version-bump tooling tests (version validation, declared fields only).
-- [tests/hooks/](tests/hooks/) — SessionStart payload shape per harness, escaping, and loud failure; risk-gate decisions per rule.
+- [tests/hooks/](tests/hooks/) — SessionStart payload shape per harness, escaping, and loud failure; risk-gate and git-gate decisions per rule.
 - [tests/harness-wiring/](tests/harness-wiring/) — model-free checks that Codex, OpenCode, Copilot CLI, and Grok Build load the installed skills and bootstrap.
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
@@ -97,9 +97,10 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ```bash
 tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
-tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, and --grok installer
+tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, and --git installer
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
 tests/hooks/run-risk-gate-tests.sh                                            # risk-gate decisions per rule (no CLI; needs jq)
+tests/hooks/run-git-gate-tests.sh                                             # git commit-msg gate decisions per rule (no CLI, no jq)
 tests/bump-version/run-tests.sh                                               # bump-version.sh rejects malformed versions, writes only declared fields, audit excludes
 tests/harness-wiring/run.sh                                                   # model-free discovery/bootstrap checks for installed codex, opencode, copilot, grok
 tests/antigravity/run-adapter-tests.sh                                        # verify Antigravity adapter static assertions
@@ -127,7 +128,7 @@ tests/codex/run-conformance.sh                                                # 
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, token measurement, hooks (SessionStart and risk-gate), install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.
 

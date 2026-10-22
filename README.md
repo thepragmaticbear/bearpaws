@@ -48,6 +48,10 @@ In Claude Code, a `Stop` hook enforces the floor:
 
 Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later; without either it does nothing. Elsewhere, these rules are instructions only. The hook checks that a receipt and a review exist, not that every line in the receipt is true.
 
+### Git gate
+
+The same receipt can be required in commit messages, as trailers or in the body, for any agent or person that commits through git. Run `./install.sh --git` inside a repository to add a `commit-msg` hook: a commit with staged changes and no `Risk:` line is refused, an elevated commit needs a `Review:` line or `Status: INCOMPLETE`, and a routine commit touching sensitive-looking paths gets a warning. `git commit --no-verify` or `BEARPAWS_ENFORCE=0` bypasses it; a cherry-pick or revert of a pre-gate commit that stops on a conflict needs one of these to finish, and a clean cherry-pick or revert never runs `commit-msg`, so the gate does not see it. Git sees a claimed review, not a dispatched one: only the Claude Code hook can check that a review actually ran.
+
 ## Evidence
 
 The [escaped-defect benchmark](docs/benchmarks/2026-10-12-escaped-defects.md) was pre-registered: six elevated-risk tasks with hidden attack tests, 5 runs per task per arm, Sonnet in Claude Code.

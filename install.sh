@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bearpaws installation script
 # Installs Bearpaws for Antigravity, and experimental ~/.agents/skills wiring for other Agent Skills agents
-# (plus a Grok Build bootstrap rule)
+# (plus a Grok Build bootstrap rule, and a git commit-msg risk gate for the current repository)
 
 set -euo pipefail
 
@@ -186,6 +186,45 @@ install_grok() {
     log_success "Installed Grok bootstrap rule: $rule"
 }
 
+# Install the git risk gate: a commit-msg hook in the current repository that execs this
+# checkout's hooks/git-commit-msg, so updating the checkout updates the gate.
+GIT_HOOK_MARKER="# bearpaws-owned: written by install.sh --git. Delete this file to remove the gate."
+install_git() {
+    log_info "Setting up the git commit-msg risk gate..."
+    local hooks_dir
+    # --git-path follows core.hooksPath and shares hooks across worktrees, as git itself does
+    # Git before 2.31 echoes the unknown --path-format flag back and exits 0, so require one absolute path
+    if ! hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks 2>/dev/null)" \
+       || [[ "$hooks_dir" != /* || "$hooks_dir" == *$'\n'* ]]; then
+        log_error "Not inside a git repository (or git is older than 2.31); run ./install.sh --git from the repository to gate"
+        return 1
+    fi
+    local hook="$hooks_dir/commit-msg"
+    local gate="$BEARPAWS_ROOT/hooks/git-commit-msg"
+    if [[ ! -f "$gate" ]]; then
+        log_error "Gate script missing: hooks/git-commit-msg"
+        return 1
+    fi
+    if [[ -e "$hook" || -L "$hook" ]] && ! grep -qxF "$GIT_HOOK_MARKER" "$hook" 2>/dev/null; then
+        log_error "$hook exists and was not created by Bearpaws; leaving it untouched"
+        log_info "To chain the gate, add this line to that hook: bash $(printf %q "$gate") \"\$1\" || exit 1"
+        return 1
+    fi
+    mkdir -p "$hooks_dir"
+    local staged
+    staged="$(mktemp "$hooks_dir/.commit-msg.XXXXXX")"
+    local q
+    q="$(printf %q "$gate")"
+    if ! { printf '#!/usr/bin/env bash\n%s\n[ -f %s ] || { echo "bearpaws: git gate missing at "%s"; rerun install.sh --git, or commit with --no-verify" >&2; exit 1; }\nexec bash %s "$@"\n' \
+               "$GIT_HOOK_MARKER" "$q" "$q" "$q" > "$staged" \
+             && chmod +x "$staged" && mv -f "$staged" "$hook"; }; then
+        rm -f "$staged"
+        log_error "Failed to write $hook"
+        return 1
+    fi
+    log_success "Installed git commit-msg risk gate: $hook"
+}
+
 # Install for Google Antigravity
 install_antigravity() {
     log_info "Setting up Google Antigravity plugin..."
@@ -264,6 +303,10 @@ main() {
                 platforms+=("grok")
                 shift
                 ;;
+            --git)
+                platforms+=("git")
+                shift
+                ;;
             --global)
                 export INSTALL_GLOBAL="true"
                 shift
@@ -271,13 +314,14 @@ main() {
             --help|-h)
                 echo "Bearpaws installation script"
                 echo ""
-                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global"
+                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global | --git"
                 echo ""
                 echo "Options:"
                 echo "  --antigravity Install Bearpaws plugin for Google Antigravity"
                 echo "  --agents      Link skills into ~/.agents/skills (Codex, Devin, OpenCode, Cursor, Copilot, ...)"
                 echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
-                echo "  --global      Required for every target"
+                echo "  --git         Risk-receipt commit-msg hook in the current git repository (bypass: git commit --no-verify)"
+                echo "  --global      Required for --antigravity, --agents and --grok"
                 echo "  --help        Show this help message"
                 exit 0
                 ;;
@@ -301,7 +345,7 @@ main() {
     
     for platform in "${platforms[@]}"; do
         case $platform in
-            antigravity|agents|grok)
+            antigravity|agents|grok|git)
                 # bash ignores set -e inside anything run as an if/&&/|| condition,
                 # so run each installer as a plain subshell with errexit on: the
                 # first failing step stops that installer and fails the install.
@@ -342,6 +386,9 @@ main() {
         if [[ " ${platforms[*]} " =~ " grok " ]]; then
             echo "  • Grok Build (experimental): skills linked into ~/.agents/skills/; bootstrap rule in ${GROK_HOME:-~/.grok}/rules/bearpaws.md"
             echo "  • Run 'grok inspect' to confirm the rule and skills load"
+        fi
+        if [[ " ${platforms[*]} " =~ " git " ]]; then
+            echo "  • Git: commits with staged changes now need a risk receipt in the message (bypass: git commit --no-verify)"
         fi
     else
         log_error "$failed platform installations failed"
