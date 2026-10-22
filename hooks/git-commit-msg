@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Git commit-msg hook: the risk receipt goes in the commit message too (trailers or body),
+# so the floor holds for any agent or person that commits through git, not only Claude Code.
+# Same line format as hooks/risk-gate. Install: ./install.sh --git.
+# Bypass: git commit --no-verify, or BEARPAWS_ENFORCE=0.
+# Honest limit: git sees a claimed review (a Review: line), not a dispatched one.
+# tests/hooks/run-git-gate-tests.sh pins every rule.
+
+set -uo pipefail
+
+[ "${BEARPAWS_ENFORCE:-1}" = 0 ] && exit 0
+. "$(dirname "${BASH_SOURCE[0]}")/lib-receipt" || { echo "bearpaws git gate: hooks/lib-receipt missing; rerun install.sh --git, or commit with --no-verify" >&2; exit 1; }
+
+# The message as git will store it: no comment lines, nothing below the scissors line (git commit -v appends the diff there).
+# core.commentChar and core.commentString are one setting to git: the last one read wins.
+# With "auto" git picks the char from a fixed list, so any of them starts a comment and any prefix before the scissors cuts.
+cc="$(git config --get-regexp '^core\.comment(char|string)$' 2>/dev/null | tail -1 | cut -d' ' -f2-)"; [ -n "$cc" ] || cc='#'
+# Through ENVIRON, not -v, so awk does not unescape backslashes in the comment string.
+msg="$(c="$cc" awk '
+  BEGIN { c = ENVIRON["c"]; s = " ------------------------ >8 ------------------------" }
+  c == "auto" ? (length($0) > length(s) && substr($0, length($0) - length(s) + 1) == s) : (index($0, c) == 1 && substr($0, length(c) + 1) == s) { exit }
+  c == "auto" ? index("#;@!$%^&|:", substr($0, 1, 1)) == 0 || $0 == "" : index($0, c) != 1' <"$1")" || exit 1
+[[ "$msg" =~ [^[:space:]] ]] || exit 0
+case "$(grep -m1 '[^[:space:]]' <<<"$msg")" in 'Merge '*|'fixup! '*|'squash! '*) exit 0 ;; esac
+[ -e "$(git rev-parse --git-path MERGE_HEAD)" ] && exit 0
+# Repo-relative; git quotes control characters, so the names are safe to print.
+staged="$(git diff --cached --name-only)" || { echo "bearpaws git gate: could not list staged paths" >&2; exit 1; }
+[ -n "$staged" ] || exit 0
+
+if field Risk elevated; then risk=elevated
+elif field Risk routine; then risk=routine
+else
+  echo "bearpaws: this commit has no risk receipt. Add one to the message, as trailers or in the body: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion." >&2
+  exit 1
+fi
+# Only the last Status line counts, and INCOMPLETE must be its value.
+grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
+if [ "$risk" = elevated ]; then
+  field Review "[^*_\`[:space:]]" || [ "$incomplete" = 1 ] || {
+    echo "bearpaws: an elevated-risk commit needs a Review line (reviewer and verdict), or Status: INCOMPLETE." >&2
+    exit 1
+  }
+  exit 0
+fi
+hits="$(grep -iE "$SENSITIVE" <<<"$staged" | head -5 | tr '\n' ' ')"
+[ -z "$hits" ] || echo "bearpaws: staged ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt." >&2
+exit 0

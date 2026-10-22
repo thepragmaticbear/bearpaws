@@ -1,0 +1,9 @@
+# Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
+
+# Path-name heuristic for work that looks elevated-risk.
+SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
+LEAD='^[[:space:]>*_#0-9.`-]*'
+TRAIL='[*_`]*'
+
+# field <key> <value regex>: a receipt line in $msg, tolerating bullets and markdown bold/backticks.
+field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }

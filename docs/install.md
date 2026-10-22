@@ -22,6 +22,17 @@ Or pass it on the command line without installing: `claude --plugin-dir /path/to
 
 The risk gate (the `Stop` hook that enforces the risk receipt and the elevated-risk review) needs `jq`. Without it, the gate prints a note and does nothing. Set `BEARPAWS_ENFORCE=0` to turn it off.
 
+## Git gate (any agent)
+
+From a Bearpaws checkout, run the installer inside the repository you want to gate:
+
+```bash
+cd /path/to/your/repo
+/path/to/bearpaws/install.sh --git
+```
+
+It writes a `commit-msg` hook (in `.git/hooks/`, or `core.hooksPath` if set) that runs the checkout's `hooks/git-commit-msg`, so updating the checkout updates the gate. Commits with staged changes then need the risk receipt in the message. It refuses to replace a `commit-msg` hook it did not write and prints the line to chain it instead. Bypass with `git commit --no-verify` or `BEARPAWS_ENFORCE=0`; remove it by deleting the hook. It needs only bash and git.
+
 ### Recommended Claude Code setup
 
 For non-trivial work, Bearpaws pairs well with Claude Code's built-in `/model opusplan` setting: Claude Code uses Opus in native Plan Mode and Sonnet for execution, in the same session. Bearpaws governs how planning and implementation are done; Claude Code chooses the model for each phase. `opusplan` is recommended, not required, and Bearpaws never switches models itself.

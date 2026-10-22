@@ -343,3 +343,68 @@ if ls -A "$GROK_MV_HOME/.grok/rules" | grep -q .; then
 fi
 
 echo "OK: Grok installer (requires --global, skills via ~/.agents/skills, owned rule, idempotent, never clobbers, GROK_HOME)"
+
+# ========== Git Gate Installer Tests ==========
+mkdir -p "$WORK/hooks"
+cp "$REPO_ROOT/hooks/git-commit-msg" "$REPO_ROOT/hooks/lib-receipt" "$WORK/hooks/"
+GIT_HOME="$TMP_ROOT/git-home"
+GREPO="$TMP_ROOT/git repo"   # a space in the path exercises the exec line's quoting
+mkdir -p "$GIT_HOME"
+git init -q "$GREPO"
+git -C "$GREPO" config user.email t@example.com
+git -C "$GREPO" config user.name t
+git -C "$GREPO" config commit.gpgsign false
+GHOOK="$(git -C "$GREPO" rev-parse --path-format=absolute --git-path hooks)/commit-msg"
+
+# Fails loudly outside a git repository
+NOREPO="$TMP_ROOT/not-a-repo"
+mkdir -p "$NOREPO"
+if ( cd "$NOREPO" && HOME="$GIT_HOME" GIT_CEILING_DIRECTORIES="$TMP_ROOT" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-norepo.log" 2>&1; then
+  echo "FAIL: --git outside a git repository should fail"
+  exit 1
+fi
+grep -qF "Not inside a git repository" "$TMP_ROOT/git-norepo.log"
+
+# Writes an owned, executable hook that runs the gate from this checkout
+( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-install.log" 2>&1
+test -f "$GHOOK" && test -x "$GHOOK" && test ! -L "$GHOOK"
+grep -qF '# bearpaws-owned' "$GHOOK"
+grep -qF "$WORK/hooks/git-commit-msg" "$GHOOK"
+echo one >"$GREPO/a.txt"; git -C "$GREPO" add a.txt
+if git -C "$GREPO" commit -qm "no receipt" >/dev/null 2>&1; then
+  echo "FAIL: installed hook let a commit without a receipt through"
+  exit 1
+fi
+git -C "$GREPO" commit -qm $'Add a\n\nRisk: routine\nVerified: none\nStatus: COMPLETE'
+
+# Idempotent: rerun leaves the same file
+cp "$GHOOK" "$TMP_ROOT/hook.before"
+( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >/dev/null 2>&1
+cmp -s "$GHOOK" "$TMP_ROOT/hook.before"
+
+# A moved or deleted checkout blocks commits with a message naming the fix and the bypass
+mv "$WORK/hooks/git-commit-msg" "$TMP_ROOT/gate.moved"
+echo two >>"$GREPO/a.txt"; git -C "$GREPO" add a.txt
+if git -C "$GREPO" commit -qm $'More\n\nRisk: routine' >/dev/null 2>"$TMP_ROOT/git-moved.err"; then
+  echo "FAIL: installed hook with a missing gate let a commit through"
+  exit 1
+fi
+grep -qF -- "--no-verify" "$TMP_ROOT/git-moved.err"
+mv "$TMP_ROOT/gate.moved" "$WORK/hooks/git-commit-msg"
+git -C "$GREPO" reset -q --hard
+
+# A foreign commit-msg is never overwritten, and the install says how to chain
+printf '#!/bin/sh\necho mine\n' >"$GHOOK"
+if ( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-foreign.log" 2>&1; then
+  echo "FAIL: --git should fail rather than overwrite a foreign commit-msg"
+  exit 1
+fi
+grep -qx 'echo mine' "$GHOOK"
+grep -qF "not created by Bearpaws" "$TMP_ROOT/git-foreign.log"
+grep -qF "To chain the gate" "$TMP_ROOT/git-foreign.log"
+if ls -A "$(dirname "$GHOOK")" | grep -q '^\.commit-msg\.'; then
+  echo "FAIL: --git left a staged temp file in the hooks directory"
+  exit 1
+fi
+
+echo "OK: Git gate installer (owned hook, runs the gate, idempotent, never clobbers, fails outside a repo)"
