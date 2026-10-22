@@ -53,6 +53,8 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
 
   Routine work needs only `Risk:`, `Verified:`, and `Status:`. A missing step means `Status: INCOMPLETE`, never a softened line.
 
+  When committing, put the same receipt lines in the commit message as trailers.
+
   ## Red Flags — STOP
 
   - Using "should", "probably", "seems to"

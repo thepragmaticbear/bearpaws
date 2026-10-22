@@ -30,14 +30,12 @@ log="$dir/$sid.log"
 umask 077
 mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log" ] || exit 0
 
-# Path-name heuristic: one nudge per pending batch.
-SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
+# SENSITIVE (one nudge per pending batch), LEAD, TRAIL and field(). Without it, allow.
+. "$(dirname "${BASH_SOURCE[0]}")/lib-receipt" 2>/dev/null || exit 0
 # Review description: starts with "review" (closed list of prefixes), not followed by a fix word.
 REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[\s-]+)*review(ing)?\b(?!\W*(fix|feedback|comment|finding|follow))'
 # Test files: a tests/, test/ or __tests__/ directory, or a conventional test file name.
 TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.(jsx?|tsx?|mjs|cjs)|[^/]*_spec\.rb|[^/]*Test\.java)$'
-LEAD='^[[:space:]>*_#0-9.`-]*'
-TRAIL='[*_`]*'
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -77,7 +75,6 @@ track_tree() { # <cwd> <tool>
 }
 
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
-field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 
 case "$mode" in
   baseline)

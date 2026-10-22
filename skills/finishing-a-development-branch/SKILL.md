@@ -41,6 +41,7 @@ description: Use when implementation on a branch is complete, tests pass, and it
     <rule>Never merge without verifying tests on result.</rule>
     <rule>Never delete work without typed confirmation.</rule>
     <rule>Never force-push without explicit request.</rule>
+    <rule>When committing, put the risk receipt in the commit message as trailers (the same lines as the chat receipt).</rule>
   </rules>
 
   ## Integration
