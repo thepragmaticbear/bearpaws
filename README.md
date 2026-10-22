@@ -50,7 +50,7 @@ Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 o
 
 ### Git gate
 
-The same receipt can be required in commit messages, as trailers or in the body, for any agent or person that commits through git. Run `./install.sh --git` inside a repository to add a `commit-msg` hook: a commit with staged changes and no `Risk:` line is refused, an elevated commit needs a `Review:` line or `Status: INCOMPLETE`, and a routine commit touching sensitive-looking paths gets a warning. `git commit --no-verify` or `BEARPAWS_ENFORCE=0` bypasses it. Git sees a claimed review, not a dispatched one: only the Claude Code hook can check that a review actually ran.
+The same receipt can be required in commit messages, as trailers or in the body, for any agent or person that commits through git. Run `./install.sh --git` inside a repository to add a `commit-msg` hook: a commit with staged changes and no `Risk:` line is refused, an elevated commit needs a `Review:` line or `Status: INCOMPLETE`, and a routine commit touching sensitive-looking paths gets a warning. `git commit --no-verify` or `BEARPAWS_ENFORCE=0` bypasses it; a cherry-pick or revert of a pre-gate commit that stops on a conflict needs one of these to finish, and a clean cherry-pick or revert never runs `commit-msg`, so the gate does not see it. Git sees a claimed review, not a dispatched one: only the Claude Code hook can check that a review actually ran.
 
 ## Evidence
 

@@ -31,7 +31,7 @@ cd /path/to/your/repo
 /path/to/bearpaws/install.sh --git
 ```
 
-It writes a `commit-msg` hook (in `.git/hooks/`, or `core.hooksPath` if set) that runs the checkout's `hooks/git-commit-msg`, so updating the checkout updates the gate. Commits with staged changes then need the risk receipt in the message. It refuses to replace a `commit-msg` hook it did not write and prints the line to chain it instead. Bypass with `git commit --no-verify` or `BEARPAWS_ENFORCE=0`; remove it by deleting the hook. It needs only bash and git.
+It writes a `commit-msg` hook (in `.git/hooks/`, or `core.hooksPath` if set) that runs the checkout's `hooks/git-commit-msg`, so updating the checkout updates the gate. Commits with staged changes then need the risk receipt in the message. It refuses to replace a `commit-msg` hook it did not write and prints the line to chain it instead. Bypass with `git commit --no-verify` or `BEARPAWS_ENFORCE=0`; remove it by deleting the hook. It needs only bash and git 2.31 or later. A clean cherry-pick or revert does not run `commit-msg`, so the gate does not see it; one that stops on a conflict carries the original message, so for a pre-gate commit finish it with `git commit --no-verify` (or `BEARPAWS_ENFORCE=0`).
 
 ### Recommended Claude Code setup
 

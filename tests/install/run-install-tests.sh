@@ -365,6 +365,19 @@ if ( cd "$NOREPO" && HOME="$GIT_HOME" GIT_CEILING_DIRECTORIES="$TMP_ROOT" "$WORK
 fi
 grep -qF "Not inside a git repository" "$TMP_ROOT/git-norepo.log"
 
+# git older than 2.31 echoes the unknown --path-format flag back with rc 0; that must fail with the version hint
+OLDGIT="$TMP_ROOT/old-git"
+mkdir -p "$OLDGIT"
+printf '%s\n' '#!/usr/bin/env bash' \
+  '[ "$1" = rev-parse ] && [[ "$2" == --path-format=* ]] && { printf "%s\n.git/hooks\n" "$2"; exit 0; }' \
+  "exec $(printf %q "$(command -v git)") \"\$@\"" >"$OLDGIT/git"
+chmod +x "$OLDGIT/git"
+if ( cd "$GREPO" && HOME="$GIT_HOME" PATH="$OLDGIT:$PATH" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-old.log" 2>&1; then
+  echo "FAIL: --git with git older than 2.31 should fail"
+  exit 1
+fi
+grep -qF "2.31" "$TMP_ROOT/git-old.log"
+
 # Writes an owned, executable hook that runs the gate from this checkout
 ( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-install.log" 2>&1
 test -f "$GHOOK" && test -x "$GHOOK" && test ! -L "$GHOOK"

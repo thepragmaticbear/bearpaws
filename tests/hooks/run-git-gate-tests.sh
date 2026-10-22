@@ -71,7 +71,7 @@ reset; stage src/auth/login.py; printf '%s\n' "$ROUTINE" >"$TMP_ROOT/msg"; rc=0;
 
 # Skips.
 reset; stage src/x.py; : >"$(git -C "$R" rev-parse --path-format=absolute --git-path MERGE_HEAD)"; gate "Resolve conflicts"; expect "merge in progress skips" pass
-reset; stage src/x.py; gate "Merge branch 'feature'"; expect "Merge subject skips" pass
+reset; stage src/x.py; gate "Merge tool rewrite"; expect "Merge subject without MERGE_HEAD is checked" block "Risk:"
 reset; stage src/x.py; gate "fixup! Fix button label"; expect "fixup skips" pass
 reset; stage src/x.py; gate "squash! Fix button label"; expect "squash skips" pass
 reset; gate "Empty commit"; expect "no staged paths skips" pass
@@ -115,6 +115,10 @@ forge; commit -m "$ROUTINE" && echo "OK: git commit with receipt succeeds" || fa
 echo more >>"$R/notes.txt"; git -C "$R" add notes.txt
 commit -m "No receipt" && fail "git commit without receipt succeeded" || echo "OK: git commit without receipt is refused"
 commit --no-verify -m "No receipt" && echo "OK: --no-verify bypasses" || fail "--no-verify did not bypass"
+# A real merge runs commit-msg with MERGE_HEAD present and needs no receipt.
+git -C "$R" checkout -qb side; echo s >"$R/side.txt"; git -C "$R" add side.txt; commit --no-verify -m side; git -C "$R" checkout -q -
+(cd "$R" && GIT_EDITOR=true git -c core.hooksPath="$TMP_ROOT/hooks" merge -q --no-ff --edit side) >/dev/null 2>"$TMP_ROOT/err" \
+  && echo "OK: git merge --no-ff passes without a receipt" || fail "git merge --no-ff was refused: $(cat "$TMP_ROOT/err")"
 
 if [ "$failures" -gt 0 ]; then echo "$failures GIT-GATE TEST(S) FAILED"; exit 1; fi
 echo "ALL GIT-GATE TESTS PASSED"

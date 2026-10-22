@@ -193,8 +193,10 @@ install_git() {
     log_info "Setting up the git commit-msg risk gate..."
     local hooks_dir
     # --git-path follows core.hooksPath and shares hooks across worktrees, as git itself does
-    if ! hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks 2>/dev/null)"; then
-        log_error "Not inside a git repository; run ./install.sh --git from the repository to gate"
+    # Git before 2.31 echoes the unknown --path-format flag back and exits 0, so require one absolute path
+    if ! hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks 2>/dev/null)" \
+       || [[ "$hooks_dir" != /* || "$hooks_dir" == *$'\n'* ]]; then
+        log_error "Not inside a git repository (or git is older than 2.31); run ./install.sh --git from the repository to gate"
         return 1
     fi
     local hook="$hooks_dir/commit-msg"
