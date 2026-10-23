@@ -2,7 +2,7 @@
   "name": "bp",
   "displayName": "Bearpaws",
   "description": "An independent low-token skills library for TDD, debugging, planning, code review, and parallel execution.",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "author": {
     "name": "Brandon Fitzgerald",
     "email": "fitzgerald.brandoni@gmail.com"
