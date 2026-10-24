@@ -1,8 +1,12 @@
 # Bearpaws
 
-**Adaptive engineering discipline for coding agents.**
+**Safety habits for AI assistants that write code.**
 
-Bearpaws separates difficulty from danger. Elevated-risk work gets more proof: pinned behavior, a failing test first, an independent review, and verification evidence. Routine work stays light, however large it is. In Claude Code, the risk floor is enforced by a hook, not just requested.
+AI coding assistants, such as Claude Code, can write and change software on their own. Bearpaws is a free add-on that makes them more careful when a mistake would be costly, and keeps them quick when it wouldn't.
+
+A one-line change to how passwords are checked can do more harm than a 500-line change to how a page looks. So Bearpaws judges each change by what could go wrong, not by how big it is. For risky changes, such as logins, payments, or deleting data, the assistant has to show that its work is safe. It runs tests before and after the change, gets a second, independent review, and reports the results. Everyday changes skip that extra work. In Claude Code, Bearpaws doesn't just ask for this: it stops the assistant from calling risky work finished until the review has happened.
+
+The rest of this page is written for developers.
 
 ## Difficulty is not danger
 
