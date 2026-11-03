@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Risk gate for Claude Code. Sends the agent back when pending edits have no risk
 # receipt, or when elevated work is COMPLETE without a review after the last edit.
+# Also blocks a Verified or Pinned line that claims a test run the log doesn't show.
 # Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop).
-# The log holds edits not yet accepted by a receipt; an allowing stop clears it,
+# The log holds edits and test runs not yet accepted by a receipt; an allowing stop clears it,
 # except elevated INCOMPLETE work with no review, which stays pending.
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
@@ -36,6 +37,11 @@ mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log"
 REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[\s-]+)*review(ing)?\b(?!\W*(fix|feedback|comment|finding|follow))'
 # Test files: a tests/, test/ or __tests__/ directory, or a conventional test file name.
 TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.(jsx?|tsx?|mjs|cjs)|[^/]*_spec\.rb|[^/]*Test\.java)$'
+# Test run: a runner in command position (start, or after ; & | ( or a backtick), after optional
+# VAR=value and wrappers. A command that only mentions one (echo pytest, cat tests/x.sh) is not a run.
+# ponytail: exit status is not checked, so a failing run counts as a run; newlines become ;, so a
+# heredoc or commit-message line that starts with a runner name also counts.
+TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?)[[:space:]]+|(bash|sh)[[:space:]]+-c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|gradle|gradlew|make|bazel|just)[[:space:]]+test|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -74,6 +80,15 @@ track_tree() { # <cwd> <tool>
   return 0
 }
 
+# Accept the pending work: clear the log, but keep a test run that followed the last edit,
+# so the next turn's Pinned can rest on it.
+accept() {
+  local e r
+  e="$(grep -nE '^edit(-test)? ' "$log" | tail -1 | cut -d: -f1)"
+  r="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
+  if [ "${r:-0}" -gt "${e:-0}" ]; then echo test-run >"$log"; else rm -f "$log"; fi
+  exit 0
+}
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
 
 case "$mode" in
@@ -94,13 +109,16 @@ case "$mode" in
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
-          # Test-file edits don't restart the review requirement.
+          # Test-file edits are logged apart: Pinned needs a run only before the first non-test edit.
           if [[ "$path" != /* && "$path" != *../* && "$path" =~ $TESTFILE ]]; then printf 'edit-test %s\n' "$path" >>"$log"; else printf 'edit %s\n' "$path" >>"$log"; fi
         fi
         track_tree "$cwd" "$tool"
         ;;
       Bash)
+        # Tree first: files the run itself writes land before its test-run line.
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
+        cmd="$(jq -r '.tool_input.command // empty' <<<"$input")"
+        [[ "${cmd//$'\n'/;}" =~ $TESTRUN ]] && echo test-run >>"$log"
         ;;
       Agent|Task|SendMessage)
         # Reviewer subagent_type, or a matching description (SendMessage: summary, not to main). Never the prompt.
@@ -120,20 +138,35 @@ case "$mode" in
     fi
     # Only the last Status line counts, and INCOMPLETE must be its value.
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
+    # Line numbers: the last edit of any kind (test edits included), the first non-test edit, test runs.
+    last_edit="$(grep -nE '^edit(-test)? ' "$log" | tail -1 | cut -d: -f1)"
+    first_edit="$(grep -n '^edit ' "$log" | head -1 | cut -d: -f1)"
+    [ -n "$first_edit" ] || first_edit="$(grep -nE '^edit-test ' "$log" | head -1 | cut -d: -f1)"
+    first_run="$(grep -n '^test-run$' "$log" | head -1 | cut -d: -f1)"
+    last_run="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
+    # Verified claims a run when it names a runner or says pass/passed/passing.
+    verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
+    # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
+    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && { [[ "${verified#*:}" =~ $TESTRUN ]] || grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]]|$)' <<<"$verified"; } \
+       && [ "${last_run:-0}" -le "$last_edit" ]; then
+      block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
+    fi
+    # Pinned claims a run unless it says none, n/a, no, not, or a dash; it must precede the first non-test edit.
+    if [ "$incomplete" = 0 ] && field Pinned '[^*_`[:space:]]' && ! field Pinned '(\(?(none|n/?a|no|not)([^[:alnum:]]|$)|(-|—)([[:space:]]|$))' && [ "${first_run:-$first_edit}" -ge "$first_edit" ]; then
+      block "Pinned: claims tests passed before the edit, but no test run was logged before the first edit. Correct the line: Pinned: none, and why."
+    fi
     if [ "$risk" = elevated ]; then
-      # The review must follow the last non-test edit; with only test edits, the last edit of any kind.
-      last_edit="$(grep -n '^edit ' "$log" | tail -1 | cut -d: -f1)"
-      [ -n "$last_edit" ] || last_edit="$(grep -nE '^edit-test ' "$log" | tail -1 | cut -d: -f1)"
+      # The review must follow the last edit of any kind: a test edit can weaken what the review saw.
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
-      [ "${last_review:-0}" -gt "$last_edit" ] && { rm -f "$log"; exit 0; }
+      [ "${last_review:-0}" -gt "$last_edit" ] && accept
       # Elevated INCOMPLETE without a review stays pending.
       [ "$incomplete" = 1 ] && exit 0
       block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
     fi
-    [ "$incomplete" = 1 ] && { rm -f "$log"; exit 0; }
-    grep -qx nudged "$log" && { rm -f "$log"; exit 0; }
+    [ "$incomplete" = 1 ] && accept
+    grep -qx nudged "$log" && accept
     hits="$(grep -E '^edit(-test)? ' "$log" | sed -E 's/^edit(-test)? //' | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
-    [ -n "$hits" ] || { rm -f "$log"; exit 0; }
+    [ -n "$hits" ] || accept
     echo nudged >>"$log"
     block "Edited ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt."
     ;;

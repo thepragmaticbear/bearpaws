@@ -59,14 +59,15 @@ expect() { # <label> allow|block [reason substring]; a non-zero hook exit fails 
   fi
 }
 
-ROUTINE=$'Done.\n\nRisk: routine\nVerified: pytest — 12 passed\nStatus: COMPLETE'
-ELEVATED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: test_owner_allowed passed before edit\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nAssumptions: org_id is never null\nVerified: pytest — 14 passed\nStatus: COMPLETE'
+# These receipts claim no test run, so cases for other rules need no logged runs.
+ROUTINE=$'Done.\n\nRisk: routine\nVerified: git diff — only the label changed\nStatus: COMPLETE'
+ELEVATED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: none — no test covered this path\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nAssumptions: org_id is never null\nVerified: git diff — only the org check changed\nStatus: COMPLETE'
 ELEVATED_INCOMPLETE="${ELEVATED/Status: COMPLETE/Status: INCOMPLETE}"
 
 reset; stop "The answer is 42."; expect "no edits: allow" allow
 reset; edit src/app.py; stop "Done, looks good."; expect "edit without receipt: block" block "risk receipt"
 reset; edit src/ui/button.py; stop "$ROUTINE"; expect "routine receipt: allow" allow
-reset; edit src/ui/button.py; stop $'Done.\n\n**Risk:** routine\n**Verified:** pytest — 3 passed\n**Status:** COMPLETE'
+reset; edit src/ui/button.py; stop $'Done.\n\n**Risk:** routine\n**Verified:** git diff — label only\n**Status:** COMPLETE'
 expect "markdown-bold receipt: allow" allow
 reset; edit src/authz.py; stop "$ELEVATED"; expect "elevated without review: block" block "independent review"
 reset; review; edit src/authz.py; stop "$ELEVATED"; expect "review before last edit does not count" block "independent review"
@@ -164,7 +165,7 @@ reset; edit src/authz.py; stop $'> Status: COMPLETE\n\n'"$ELEVATED_INCOMPLETE"; 
 # Receipt line variants: heading, list item, code span.
 for r in '## Risk: routine' '1. Risk: routine' '`Risk: routine`'; do
   reset; edit src/ui/button.py
-  stop "$(printf 'Done.\n\n%s\nVerified: pytest — 3 passed\nStatus: COMPLETE' "$r")"
+  stop "$(printf 'Done.\n\n%s\nVerified: git diff — label only\nStatus: COMPLETE' "$r")"
   expect "receipt variant '$r': allow" allow
 done
 
@@ -245,7 +246,7 @@ reset; edit src/app.py; stop "Done."; expect "block keeps the log" block "risk r
 if [ -e "$(logfile)" ]; then echo "OK: block keeps the log"; else fail "block cleared the log"; fi
 
 # M-1: a backticked Risk value is accepted, like the Status value.
-reset; edit src/ui/button.py; stop $'Done.\n\nRisk: `routine`\nVerified: pytest — 3 passed\nStatus: COMPLETE'
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: `routine`\nVerified: git diff — label only\nStatus: COMPLETE'
 expect "backticked Risk value: allow" allow
 # M-2: the missing-receipt reason names the allowed values.
 reset; edit src/app.py; stop "Done."; expect "reason names Risk: routine" block "Risk: routine or Risk: elevated (surface)"
@@ -546,9 +547,13 @@ expect "SendMessage object summary is not a review" block "independent review"
 reset; edit src/authz.py; sendmsg_raw '{"to":"reviewer","summary":["Review it"],"message":"x"}'; stop "$ELEVATED"
 expect "SendMessage array summary is not a review" block "independent review"
 
-# Test-only edits after a review don't restart the review requirement.
+# A test-file edit after the review restarts the review requirement: tests can be weakened too.
 reset; edit src/authz.py; review; edit tests/test_authz.py; stop "$ELEVATED"
-expect "test-only edit after review: allow" allow
+expect "test-only edit after review: block" block "independent review"
+reset; edit src/authz.py; review; edit tests/test_authz.py; stop "$ELEVATED_INCOMPLETE"
+expect "test-only edit after review, INCOMPLETE: allow" allow
+reset; edit src/authz.py; review; edit tests/test_authz.py; review; stop "$ELEVATED"
+expect "test-only edit after review, then re-review: allow" allow
 reset; edit src/authz.py; review; edit src/authz.py; stop "$ELEVATED"
 expect "production edit after review: block" block "independent review"
 reset; edit tests/test_x.py; stop "$ELEVATED"
@@ -567,6 +572,52 @@ expect "spec/ data file after review is a production edit: block" block "indepen
 reset; edit tests/test_x.py; stop "Done."; expect "receipt still required after test-only edit" block "risk receipt"
 reset; edit tests/test_x.py; stop "$ROUTINE"; expect "routine receipt after test-only edit: allow" allow
 reset; edit tests/auth/test_login.py; stop "$ROUTINE"; expect "sensitive test path still nudges" block "tests/auth/test_login.py"
+# Test runs: logged from Bash commands; Verified and Pinned claims are checked against them.
+ran() { # <command>
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" '{session_id:$s,tool_name:"Bash",tool_input:{command:$c}}')"
+}
+R_TESTED=$'Done.\n\nRisk: routine\nVerified: pytest — 12 passed\nStatus: COMPLETE'
+E_TESTED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: test_owner_allowed passed before edit\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nAssumptions: org_id is never null\nVerified: pytest — 14 passed\nStatus: COMPLETE'
+reset; edit src/ui/button.py; stop "$R_TESTED"; expect "Verified claims tests, none ran: block" block "Verified"
+reset; ran "pytest -q"; edit src/ui/button.py; stop "$R_TESTED"; expect "Verified claims tests, run only before the edit: block" block "Verified"
+reset; edit src/ui/button.py; ran "pytest -q"; stop "$R_TESTED"; expect "Verified claims tests, run after the edit: allow" allow
+reset; edit src/ui/button.py; ran "pytest -q"; edit tests/test_button.py; stop "$R_TESTED"
+expect "test edit after the run needs a new run: block" block "Verified"
+reset; edit src/ui/button.py; ran "ls tests"; stop "$R_TESTED"; expect "non-test command is not a test run" block "Verified"
+reset; edit src/ui/button.py; ran "cat tests/hooks/run-hook-tests.sh"; stop "$R_TESTED"; expect "reading a test script is not a run" block "Verified"
+# Honest incompleteness is never blocked: "pytest not run" reads like a claim but is not one.
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: pytest not run (no venv)\nStatus: INCOMPLETE'
+expect "Verified test claim with INCOMPLETE: allow" allow
+reset; edit src/authz.py; stop "${E_TESTED/Status: COMPLETE/Status: INCOMPLETE}"; expect "Pinned claim with INCOMPLETE: allow" allow
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: bypass flag read in the diff\nStatus: COMPLETE'
+expect "Verified without a test claim needs no run" allow
+reset; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"; expect "Pinned claimed, no run before the edit: block" block "Pinned"
+reset; ran "pytest"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"; expect "Pinned and Verified runs logged: allow" allow
+reset; edit tests/test_authz.py; ran "pytest"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
+expect "failing test written first, then run, then the fix: Pinned holds" allow
+for v in "none — no test covered this path" "N/A" "no existing tests" "not run" "-" "(none)" "None, new module"; do
+  reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
+  expect "Pinned: '$v' is not a claim" allow
+done
+# A run after the last edit carries over an accepted stop, so the next turn's Pinned holds.
+reset; edit src/ui/button.py; ran "pytest"; stop "$R_TESTED"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
+expect "run from the previous accepted turn pins the next edit" allow
+reset; ran "pytest"; edit src/ui/button.py; stop "$ROUTINE"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
+expect "run before an earlier accepted edit does not carry over" block "Pinned"
+for c in "pytest" "python -m pytest -x tests/" "uv run pytest" "cd api && npm test" "pnpm run test" "yarn test --watch=false" \
+         "go test ./..." "cargo test" "FOO=1 bundle exec rspec" "npx vitest run" "bash tests/hooks/run-hook-tests.sh" \
+         "tests/hooks/run-risk-gate-tests.sh" "python3 tests/codex/test_conformance.py" "make test" $'cd x\npytest' \
+         "rtk pytest" "rtk cargo test" "uv run rtk pytest" "rtk go test ./..." ".venv/bin/pytest -q" "./node_modules/.bin/jest" \
+         "npm run test:unit" "yarn test:ci" "pnpm vitest run" "pnpm exec jest" "env CI=1 pytest" "uvx pytest" \
+         "bash -c 'pytest'" "python3.12 -m pytest" "node --test" "npm t" "nice pytest" "xvfb-run pytest" \
+         "bazel test //..." "just test"; do
+  reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "test runner: '$c'" allow
+done
+for c in "echo pytest" "git log --grep 'go test'" "grep -r cargo test src" "vim tests/a.py" "npm install" "pytest-watch-config" \
+         "pnpm install" "rtk git status" "env | grep test" "bash -c 'echo pytest'" "npm run build" "yarn testify"; do
+  reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "not a test runner: '$c'" block "Verified"
+done
+
 # Classifier, observed through the log line.
 for row in "test|tests/x.py" "test|src/test_x.py" "test|pkg/x_test.go" "test|web/a.test.tsx" "test|a.spec.js" \
            "test|spec/models/u_spec.rb" "test|src/FooTest.java" "test|src/__tests__/a.js" "test|a/test/b.rb" "prod|a/specs/b.rb" "prod|spec/openapi.yaml" "prod|/abs/tests/x.py" "prod|tests/../src/a.py" "prod|Tests/x.py" "prod|testdata/x.py" \
