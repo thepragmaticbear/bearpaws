@@ -633,6 +633,14 @@ done
 v="n/a — no existing test passes over this path"
 reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
 expect "Pinned: a leading n/a wins over a later pass word" allow
+for v in "pytest: 41 passed (e2e not run)" "unit tests pass (integration not run)" "pytest: 12 passed. e2e not run" "tests pass (CI unavailable)" "all tests green, e2e not run" "suite green" "tests: OK"; do
+  reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: '"$v"$'\nStatus: COMPLETE'
+  expect "Verified: '$v' still claims a run" block "Verified"
+done
+for v in "curl localhost:3000 returned 200 OK" "build ok in 2.1s" "manually curled /health -> 200 OK" "latest build 2 ok" "CI green on 3 jobs" "rendered ok — no test suite for docs" "ok - tests not applicable" "tests unaffected and lint green" "pytest not installed, checked by reading"; do
+  reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: '"$v"$'\nStatus: COMPLETE'
+  expect "Verified: '$v' claims no run" allow
+done
 # A run after the last edit carries over an accepted stop, so the next turn's Pinned holds.
 reset; edit src/ui/button.py; ran "pytest"; stop "$R_TESTED"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
 expect "run from the previous accepted turn pins the next edit" allow
