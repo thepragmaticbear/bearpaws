@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a review fixture: a base commit and a head commit implementing task.txt.
-# Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund|refund-narrow] tests/review-eval/setup.sh <dir>
+# Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund|refund-narrow|refund-scoped|refund-offscope] tests/review-eval/setup.sh <dir>
 # planted (default): (1) missing requirement: empty input must raise ValueError, returns 0;
 #   (2) unrequested scope: a "d" (days) unit; (3) bug: "1h1h" is accepted and double-counts;
 #   (4) quality: duplicated per-unit parsing branches.
@@ -16,6 +16,10 @@
 #   None amounts, which no caller in the repository passes.
 # refund-narrow: the cap only, with no sign check. A negative amount is a value support staff can
 #   type, so the reviewer must flag it as Important (the value/type line the bootstrap draws).
+# refund-scoped: refund-narrow, but the author's report says the sign check is out of scope.
+#   The reviewer must still flag it: the author's scope claim is not evidence.
+# refund-offscope: refund, plus a scope claim about a different risk class (type hints, docstring
+#   style). The reviewer should still approve: the scope rule must not turn style into blockers.
 set -euo pipefail
 dir="$1"
 fixture="${FIXTURE:-planted}"
@@ -23,7 +27,7 @@ mkdir -p "$dir/src" "$dir/tests"
 cd "$dir"
 git init -q
 touch src/__init__.py tests/__init__.py
-if [ "$fixture" = refund ] || [ "$fixture" = refund-narrow ]; then
+if [ "$fixture" = refund ] || [ "$fixture" = refund-narrow ] || [ "$fixture" = refund-scoped ] || [ "$fixture" = refund-offscope ]; then
 cat > src/billing.py <<'PY'
 class Order:
     def __init__(self, total_cents):
@@ -250,7 +254,7 @@ def parse_duration(text: str) -> int:
     return _default_parser.parse(text)
 PY
 ;;
-refund)
+refund|refund-offscope)
 cat > src/billing.py <<'PY'
 class Order:
     def __init__(self, total_cents):
@@ -313,7 +317,7 @@ if __name__ == "__main__":
     unittest.main()
 PY
 ;;
-refund-narrow)
+refund-narrow|refund-scoped)
 cat > src/billing.py <<'PY'
 class Order:
     def __init__(self, total_cents):
@@ -490,5 +494,5 @@ PY
 fi
 msg="Add parse_duration"
 [ "$fixture" = traversal ] && msg="Fix path traversal in read_user_file"
-[ "$fixture" = refund ] || [ "$fixture" = refund-narrow ] && msg="Reject refunds above the order total"
+[ "$fixture" = refund ] || [ "$fixture" = refund-narrow ] || [ "$fixture" = refund-scoped ] || [ "$fixture" = refund-offscope ] && msg="Reject refunds above the order total"
 git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "$msg"

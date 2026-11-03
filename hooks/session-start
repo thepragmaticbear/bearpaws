@@ -61,7 +61,15 @@ elif { [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -z "${COPILOT_CLI:-}" ]; } \
      || [ -n "${DEVIN_PROJECT_DIR:-}" ] || [ -n "${DEVIN_PLUGIN_ROOT:-}" ]; then
   # Claude Code sets CLAUDE_PLUGIN_ROOT without COPILOT_CLI. Devin CLI reads
   # the same nested hookSpecificOutput shape for SessionStart context.
-  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$session_context"
+  # Claude Code runs hooks/risk-gate; when it can't, tell the user in one line.
+  notice=""
+  if [ -z "${DEVIN_PROJECT_DIR:-}${DEVIN_PLUGIN_ROOT:-}" ]; then
+    if [ "${BEARPAWS_ENFORCE:-1}" = 0 ]; then why="BEARPAWS_ENFORCE=0"
+    elif ! command -v jq >/dev/null 2>&1; then why="jq not found"
+    else why=""; fi
+    [ -z "$why" ] || notice=",\n  \"systemMessage\": \"bearpaws: risk gate inactive (${why}); receipts and reviews are not enforced\""
+  fi
+  printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }%b\n}\n' "$session_context" "$notice"
 else
   # Copilot CLI or unknown platform — SDK standard format
   printf '{\n  "additionalContext": "%s"\n}\n' "$session_context"
