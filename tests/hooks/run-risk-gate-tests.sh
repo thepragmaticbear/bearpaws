@@ -133,10 +133,10 @@ reset; edit src/authz.py; gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,las
 expect "non-string last_assistant_message: allow" allow
 
 # Paths are logged relative to cwd, so a sensitive-looking project dir does not nudge.
-CWD=/Users/maclean/repos/oauth-proxy
+CWD="$HOME/repos/oauth-proxy"
 reset; editc "$CWD" "$CWD/src/ui/button.py"; stop "$ROUTINE"; expect "sensitive project dir, routine path: allow" allow
 reset; editc "$CWD" "$CWD/src/auth/login.py"; stop "$ROUTINE"; expect "sensitive path under cwd still nudges" block "src/auth/login.py"
-if jq -e '.hookSpecificOutput.additionalContext | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
+if jq -e --arg c "$CWD" '.hookSpecificOutput.additionalContext | contains($c)' "$TMP_ROOT/out" >/dev/null; then
   fail "nudge reason leaks the absolute path: $(cat "$TMP_ROOT/out")"
 else
   echo "OK: nudge reason shows the relative path"
