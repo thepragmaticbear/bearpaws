@@ -599,6 +599,17 @@ for v in "none — no test covered this path" "N/A" "no existing tests" "not run
   reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
   expect "Pinned: '$v' is not a claim" allow
 done
+for v in "nothing to pin, new module" "there were no tests" "skipped: new file" "n.a."; do
+  reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
+  expect "Pinned: '$v' is not a claim" allow
+done
+reset; edit src/authz.py; ran "pytest"; review; stop "Pinned: none (quoted earlier)"$'\n'"$E_TESTED"
+expect "an earlier Pinned: none line does not cancel the receipt's claim" block "Pinned"
+for v in "cargo clippy passes, no warnings" "tsc --noEmit passes" "header pass-through checked in diff" \
+         "pytest not run — docs-only change" "npm test unavailable (no node); read the diff"; do
+  reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: '"$v"$'\nStatus: COMPLETE'
+  expect "Verified: '$v' is not a test-run claim" allow
+done
 # A run after the last edit carries over an accepted stop, so the next turn's Pinned holds.
 reset; edit src/ui/button.py; ran "pytest"; stop "$R_TESTED"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
 expect "run from the previous accepted turn pins the next edit" allow
@@ -610,7 +621,8 @@ for c in "pytest" "python -m pytest -x tests/" "uv run pytest" "cd api && npm te
          "rtk pytest" "rtk cargo test" "uv run rtk pytest" "rtk go test ./..." ".venv/bin/pytest -q" "./node_modules/.bin/jest" \
          "npm run test:unit" "yarn test:ci" "pnpm vitest run" "pnpm exec jest" "env CI=1 pytest" "uvx pytest" \
          "bash -c 'pytest'" "python3.12 -m pytest" "node --test" "npm t" "nice pytest" "xvfb-run pytest" \
-         "bazel test //..." "just test"; do
+         "bazel test //..." "just test" "bundle exec rails test" "bin/rails test" "mvn -q test" "docker compose exec app pytest" \
+         "cargo nextest run" "flutter test" "sbt test" "bash -lc pytest" "npm --prefix web test" "./scripts/test"; do
   reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "test runner: '$c'" allow
 done
 for c in "echo pytest" "git log --grep 'go test'" "grep -r cargo test src" "vim tests/a.py" "npm install" "pytest-watch-config" \
@@ -618,6 +630,15 @@ for c in "echo pytest" "git log --grep 'go test'" "grep -r cargo test src" "vim 
   reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "not a test runner: '$c'" block "Verified"
 done
 
+bashrun() { # <cwd> <command>
+  gate record "$(jq -cn --arg s "$SID" --arg d "$1" --arg c "$2" '{session_id:$s,cwd:$d,tool_name:"Bash",tool_input:{command:$c}}')"
+}
+T="$(mkrepo 7)"
+reset; bashrun "$T" "true"; echo two >"$T/a.py"; bashrun "$T" "pytest"; stop "$R_TESTED"
+expect "one Bash call that edits and runs tests: the run follows the edit" allow
+reset; bashrun "$T" "true"; echo t >"$T/test_a.py"; bashrun "$T" "cat > test_a.py"; bashrun "$T" "pytest"
+edit a.py; bashrun "$T" "pytest"; review; stop "$E_TESTED"
+expect "failing test written through Bash, then run, then the fix: Pinned holds" allow
 # Classifier, observed through the log line.
 for row in "test|tests/x.py" "test|src/test_x.py" "test|pkg/x_test.go" "test|web/a.test.tsx" "test|a.spec.js" \
            "test|spec/models/u_spec.rb" "test|src/FooTest.java" "test|src/__tests__/a.js" "test|a/test/b.rb" "prod|a/specs/b.rb" "prod|spec/openapi.yaml" "prod|/abs/tests/x.py" "prod|tests/../src/a.py" "prod|Tests/x.py" "prod|testdata/x.py" \

@@ -41,7 +41,7 @@ TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]
 # VAR=value and wrappers. A command that only mentions one (echo pytest, cat tests/x.sh) is not a run.
 # ponytail: exit status is not checked, so a failing run counts as a run; newlines become ;, so a
 # heredoc or commit-message line that starts with a runner name also counts.
-TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?)[[:space:]]+|(bash|sh)[[:space:]]+-c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|gradle|gradlew|make|bazel|just)[[:space:]]+test|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
+TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?|docker([[:space:]]+compose)?[[:space:]]+(exec|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*)[[:space:]]+|(bash|sh)[[:space:]]+-[a-z]*c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+(--prefix|--dir|--cwd|-C)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|mvnw|gradle|gradlew|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal)([[:space:]]+-[^[:space:]]+)*[[:space:]]+test|cargo[[:space:]]+nextest|rake|(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -140,19 +140,26 @@ case "$mode" in
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
     # Line numbers: the last edit of any kind (test edits included), the first non-test edit, test runs.
     last_edit="$(grep -nE '^edit(-test)? ' "$log" | tail -1 | cut -d: -f1)"
-    first_edit="$(grep -n '^edit ' "$log" | head -1 | cut -d: -f1)"
-    [ -n "$first_edit" ] || first_edit="$(grep -nE '^edit-test ' "$log" | head -1 | cut -d: -f1)"
+    # Bash edits carry no path and may be the failing test, so they count only when nothing else does.
+    first_edit="$(grep -n '^edit ' "$log" | grep -vF ':edit (bash)' | head -1 | cut -d: -f1)"
+    [ -n "$first_edit" ] || first_edit="$(grep -nE '^edit(-test)? ' "$log" | head -1 | cut -d: -f1)"
     first_run="$(grep -n '^test-run$' "$log" | head -1 | cut -d: -f1)"
     last_run="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
-    # Verified claims a run when it names a runner or says pass/passed/passing.
+    # Verified claims a run when it names a runner, or says passed next to test/spec or a count,
+    # unless it says the run did not happen.
     verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
+    grep -qiE "not run|unavailable|skipped|did ?n[o']t|could ?n[o']t" <<<"$verified" && verified=""
     # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
-    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && { [[ "${verified#*:}" =~ $TESTRUN ]] || grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]]|$)' <<<"$verified"; } \
+    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && { [[ "${verified#*:}" =~ $TESTRUN ]] || { grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$verified" && grep -qiE 'test|spec|[0-9]' <<<"$verified"; }; } \
        && [ "${last_run:-0}" -le "$last_edit" ]; then
       block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
     fi
-    # Pinned claims a run unless it says none, n/a, no, not, or a dash; it must precede the first non-test edit.
-    if [ "$incomplete" = 0 ] && field Pinned '[^*_`[:space:]]' && ! field Pinned '(\(?(none|n/?a|no|not)([^[:alnum:]]|$)|(-|—)([[:space:]]|$))' && [ "${first_run:-$first_edit}" -ge "$first_edit" ]; then
+    # Pinned (its last line) claims a run unless it says none, n/a, no, not, nothing, skipped, or is a
+    # dash; it must precede the first non-test edit.
+    pinned="$(grep -iE "${LEAD}Pinned${TRAIL}:" <<<"$msg" | tail -1)"; pinned="${pinned#*:}"
+    if [ "$incomplete" = 0 ] && [[ "$pinned" =~ [^*_\`[:space:]] ]] \
+       && ! grep -qiE '(^|[^[:alnum:]])(none|n/?a|n\.a|no|not|nothing|skip(ped)?)([^[:alnum:]]|$)|^[*_`[:space:]]*(-|—)([[:space:]]|$)' <<<"$pinned" \
+       && [ "${first_run:-$first_edit}" -ge "$first_edit" ]; then
       block "Pinned: claims tests passed before the edit, but no test run was logged before the first edit. Correct the line: Pinned: none, and why."
     fi
     if [ "$risk" = elevated ]; then
