@@ -41,7 +41,7 @@ TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]
 # VAR=value and wrappers. A command that only mentions one (echo pytest, cat tests/x.sh) is not a run.
 # ponytail: exit status is not checked, so a failing run counts as a run; newlines become ;, so a
 # heredoc or commit-message line that starts with a runner name also counts.
-TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?|docker([[:space:]]+compose)?[[:space:]]+(exec|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*)[[:space:]]+|(bash|sh)[[:space:]]+-[a-z]*c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+(--prefix|--dir|--cwd|-C)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|mvnw|gradle|gradlew|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal)([[:space:]]+-[^[:space:]]+)*[[:space:]]+test|cargo[[:space:]]+nextest|rake([[:space:]]+(test|spec)[^[:space:];&|]*|[[:space:]]*$|[[:space:]]*[;&|)])|(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
+TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?|docker([[:space:]]+compose)?[[:space:]]+(exec|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*)[[:space:]]+|(bash|sh)[[:space:]]+-[a-z]*c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+(--prefix|--dir|--cwd|-C)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|mvnw|gradle|gradlew|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal)([[:space:]]+-[^[:space:]]+)*[[:space:]]+test|cargo[[:space:]]+nextest|rake([[:space:]]+-[^[:space:]]+)*([[:space:]]+(test|spec)(:[^[:space:];&|]*)?|[[:space:]]*$|[[:space:]]*[;&|)])|(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -90,6 +90,19 @@ accept() {
   exit 0
 }
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
+
+OKW='(^|[^[:alnum:]])(pass(ed|es|ing)?|ok|green)([^[:alnum:]-]|$)'
+NEG='(none|n/?a|n\.a|no|not|nothing|skip(ped)?)'
+run_claim() { # <Verified value>: does any clause claim a test run?
+  local c
+  while IFS= read -r c; do
+    grep -qiE "not run|unavailable|(did|could) ?n[o']t run|(^|[^0-9[:space:]])[[:space:]]*skipped([^=]|$)" <<<"$c" && continue
+    [[ "$c" =~ $TESTRUN ]] && return 0
+    grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$c" && grep -qiE 'test|spec|[0-9]' <<<"$c" && return 0
+    grep -qiE '(^|[^[:alnum:]])(ok|green)([^[:alnum:]-]|$)' <<<"$c" && grep -qE '[0-9]' <<<"$c" && return 0
+  done < <(tr ';,' '\n\n' <<<"$1")
+  return 1
+}
 
 case "$mode" in
   baseline)
@@ -145,22 +158,21 @@ case "$mode" in
     [ -n "$first_edit" ] || first_edit="$(grep -nE '^edit(-test)? ' "$log" | head -1 | cut -d: -f1)"
     first_run="$(grep -n '^test-run$' "$log" | head -1 | cut -d: -f1)"
     last_run="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
-    # Verified claims a run when it names a runner, or says passed next to test/spec or a count,
-    # unless it says the run did not happen and claims no pass.
-    PASSW='(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)'
+    # Verified claims a run when any clause (split on ; and ,) names a runner, says passed next to
+    # test/spec or a count, or says ok/green next to a count, and that clause does not say the run
+    # did not happen ("1 skipped" and "skipped=2" are counts, not cancels).
     verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
-    grep -qiE "not run|unavailable|skipped|did ?n[o']t|could ?n[o']t" <<<"$verified" && ! grep -qiE "$PASSW" <<<"$verified" && verified=""
     # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
-    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && { [[ "${verified#*:}" =~ $TESTRUN ]] || { grep -qiE "$PASSW" <<<"$verified" && grep -qiE 'test|spec|[0-9]' <<<"$verified"; }; } \
-       && [ "${last_run:-0}" -le "$last_edit" ]; then
+    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "${verified#*:}" && [ "${last_run:-0}" -le "$last_edit" ]; then
       block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
     fi
-    # Pinned (its last line) claims a run unless it says none, n/a, no, not, nothing or skipped and no
-    # pass, or is a dash; it must precede the first non-test edit.
+    # Pinned (its last line) claims a run unless it starts with none, n/a, no, not, nothing, skipped,
+    # "there were no" or a dash, or says one of those anywhere and no pass/ok/green; it must precede
+    # the first non-test edit.
     pinned="$(grep -iE "${LEAD}Pinned${TRAIL}:" <<<"$msg" | tail -1)"; pinned="${pinned#*:}"
     if [ "$incomplete" = 0 ] && [[ "$pinned" =~ [^*_\`[:space:]] ]] \
-       && ! { grep -qiE '(^|[^[:alnum:]])(none|n/?a|n\.a|no|not|nothing|skip(ped)?)([^[:alnum:]]|$)' <<<"$pinned" && ! grep -qiE "$PASSW" <<<"$pinned"; } \
-       && ! grep -qE '^[*_`[:space:]]*(-|—)([[:space:]]|$)' <<<"$pinned" \
+       && ! grep -qiE '^[*_`[:space:](]*((none|n/?a|n\.a\.?|no|not|nothing|skip(ped)?|there (were|was|are|is) no)([^[:alnum:]]|$)|(-|—)([[:space:]]|$))' <<<"$pinned" \
+       && ! { grep -qiE "(^|[^[:alnum:]])$NEG([^[:alnum:]]|$)" <<<"$pinned" && ! grep -qiE "$OKW" <<<"$pinned"; } \
        && [ "${first_run:-$first_edit}" -ge "$first_edit" ]; then
       block "Pinned: claims tests passed before the edit, but no test run was logged before the first edit. Correct the line: Pinned: none, and why."
     fi

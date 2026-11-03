@@ -618,6 +618,21 @@ for v in "test_owner_allowed passed before edit, no failures" "41 passed, 2 skip
   reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
   expect "Pinned: '$v' still claims a run" block "Pinned"
 done
+for v in "shellcheck passed; tests not run (no harness)" "lint passed, pytest unavailable" "tsc passes; didn't run tests"; do
+  reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: '"$v"$'\nStatus: COMPLETE'
+  expect "Verified: '$v' claims no run" allow
+done
+for v in "go test ./...: ok, 1 skipped" "pytest -q: 41 ok, 2 skipped" "python -m unittest: OK (skipped=2)" "all 41 green, 2 skipped" "pytest didn't fail"; do
+  reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nVerified: '"$v"$'\nStatus: COMPLETE'
+  expect "Verified: '$v' still claims a run" block "Verified"
+done
+for v in "test_owner green before edit; no flakes" "test_owner ok before edit, not flaky"; do
+  reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
+  expect "Pinned: '$v' still claims a run" block "Pinned"
+done
+v="n/a — no existing test passes over this path"
+reset; edit src/authz.py; ran "pytest"; review; stop "${E_TESTED/Pinned: test_owner_allowed passed before edit/Pinned: $v}"
+expect "Pinned: a leading n/a wins over a later pass word" allow
 # A run after the last edit carries over an accepted stop, so the next turn's Pinned holds.
 reset; edit src/ui/button.py; ran "pytest"; stop "$R_TESTED"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
 expect "run from the previous accepted turn pins the next edit" allow
@@ -630,11 +645,11 @@ for c in "pytest" "python -m pytest -x tests/" "uv run pytest" "cd api && npm te
          "npm run test:unit" "yarn test:ci" "pnpm vitest run" "pnpm exec jest" "env CI=1 pytest" "uvx pytest" \
          "bash -c 'pytest'" "python3.12 -m pytest" "node --test" "npm t" "nice pytest" "xvfb-run pytest" \
          "bazel test //..." "just test" "bundle exec rails test" "bin/rails test" "mvn -q test" "docker compose exec app pytest" \
-         "cargo nextest run" "bundle exec rake" "rake spec && echo ok" "flutter test" "sbt test" "bash -lc pytest" "npm --prefix web test" "./scripts/test"; do
+         "cargo nextest run" "bundle exec rake" "rake spec && echo ok" "rake -j4 test" "flutter test" "sbt test" "bash -lc pytest" "npm --prefix web test" "./scripts/test"; do
   reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "test runner: '$c'" allow
 done
 for c in "echo pytest" "git log --grep 'go test'" "grep -r cargo test src" "vim tests/a.py" "npm install" "pytest-watch-config" \
-         "pnpm install" "rtk git status" "env | grep test" "bash -c 'echo pytest'" "npm run build" "yarn testify" "rake db:migrate" "bundle exec rake routes"; do
+         "pnpm install" "rtk git status" "env | grep test" "bash -c 'echo pytest'" "npm run build" "yarn testify" "rake db:migrate" "bundle exec rake routes" "rake testdata:load"; do
   reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "not a test runner: '$c'" block "Verified"
 done
 
