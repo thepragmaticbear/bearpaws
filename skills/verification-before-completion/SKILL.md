@@ -30,12 +30,13 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
 
   | Claim | Requires | Not sufficient |
   |---|---|---|
-  | Tests pass | Test output: 0 failures | Previous run, "should pass" |
+  | Tests pass | Test output: 0 failures, and the test count before and after; say so if added tests didn't change the count | Previous run, "should pass", a count with no baseline |
   | Linter clean | Linter output: 0 errors | Partial check, extrapolation |
   | Build succeeds | Build command: exit 0 | Linter passing, logs look good |
   | Bug fixed | Original symptom test passes | Code changed, assumed fixed |
   | Agent completed | VCS diff shows changes | Agent reports "success" |
   | Requirements met | Line-by-line checklist | Tests passing alone |
+  | Pure move/refactor | Diff of the moved code only (old body vs new body) | Whole-file diff, `git diff --stat` |
 
   ## Risk receipt
 
@@ -47,11 +48,12 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
   Failing first: test_admin_cross_org_denied failed, then passed
   Review: bp:code-reviewer — Ready to merge: Yes
   Assumptions: org_id is never null on users or resources
-  Verified: pytest — 14 passed, 0 failed
+  Verified: pytest — 12 passed before, 14 passed after, 0 failed
+  Not checked: ruff, mypy (CI runs both); the CLI by hand
   Status: COMPLETE                                    ← INCOMPLETE if any step is missing
   ```
 
-  Routine work needs only `Risk:`, `Verified:`, and `Status:`. A missing step means `Status: INCOMPLETE`, never a softened line.
+  Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. `Not checked:` names every check you did not run (CI jobs, linters, manual paths), or `none`. A missing step means `Status: INCOMPLETE`, never a softened line.
 
   When committing, put the same receipt lines in the commit message as trailers.
 
