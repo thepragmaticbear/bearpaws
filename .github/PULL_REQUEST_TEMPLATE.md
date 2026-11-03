@@ -73,6 +73,7 @@ of human involvement will be closed without review.
 
 ## Human review
 - [ ] A human has reviewed the COMPLETE proposed diff before submission
+- [ ] No personal emails, home paths or tokens in transcripts or logs
 
 <!--
 STOP. If the checkbox above is not checked, do not submit this PR.
