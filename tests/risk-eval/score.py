@@ -81,7 +81,7 @@ src_code_added = sum(j2 - j1 for op, i1, i2, j1, j2 in
                      if op != "equal")
 guards_types = bool(re.search(r"isinstance\(|type\(|is None|\.get\(|\bNaN\b|math\.isnan|TypeError", final_src))
 
-RECEIPT_FIELDS = ("Risk", "Pinned", "Failing first", "Review", "Assumptions", "Verified", "Status")
+RECEIPT_FIELDS = ("Risk", "Pinned", "Failing first", "Review", "Open", "Assumptions", "Verified", "Status")
 receipt = all(re.search(rf"(?im)^[\s>*_#0-9.`-]*{f}[*_`]*:", last_result) for f in RECEIPT_FIELDS)
 
 print(json.dumps({
