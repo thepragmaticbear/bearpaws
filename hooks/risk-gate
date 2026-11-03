@@ -99,7 +99,7 @@ run_claim() { # <Verified value>: does any clause claim a test run?
     grep -qiE "not run|not installed|unavailable|(did|could) ?n[o']t run|(^|[^0-9[:space:]])[[:space:]]*skipped([^=]|$)" <<<"$c" && continue
     [[ "${c//:/ }" =~ $TESTRUN ]] && return 0
     grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$c" && grep -qiE 'test|spec|[0-9]' <<<"$c" && return 0
-    grep -qiE '(^|[^[:alnum:]])(ok|green)([^[:alnum:]-]|$)' <<<"$c" && grep -qiE '(^|[^[:alnum:]])(tests?|specs?|suites?)([^[:alnum:]]|$)' <<<"$c" && return 0
+    grep -qiE '(^|[^[:alnum:]])(tests?|specs?|suites?)[[:space:]:]+((are|is|all|still)[[:space:]]+)?(ok|green)([^[:alnum:]-]|$)' <<<"$c" && return 0
     grep -qiE '(^|[^[:alnum:]])all [0-9]+ (green|ok)([^[:alnum:]]|$)' <<<"$c" && return 0
   done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}")
   return 1
@@ -160,7 +160,7 @@ case "$mode" in
     first_run="$(grep -n '^test-run$' "$log" | head -1 | cut -d: -f1)"
     last_run="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
     # Verified claims a run when any clause (split on ; , ( ) and ". ") names a runner, says passed next
-    # to test/spec or a count, or says ok/green next to test, spec or suite (or "all 41 green"), and that clause
+    # to test/spec or a count, or says "tests ok", "suite green" or "all 41 green", and that clause
     # does not say the run did not happen ("1 skipped" and "skipped=2" are counts, not cancels).
     verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
     # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
