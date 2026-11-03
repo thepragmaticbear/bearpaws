@@ -22,6 +22,7 @@ description: Use when implementation on a branch is complete, tests pass, and it
     <step>**Verify tests** — Run project's test suite. If tests fail: show failures, stop. Cannot proceed until green.</step>
     <step>**Determine base branch** — `git merge-base HEAD main` or ask.</step>
     <step>**Present exactly 4 options** — (1) Merge locally, (2) Push and create PR, (3) Keep branch as-is, (4) Discard. No explanation — keep concise.</step>
+    <step>**Check commit identity** — before options 1 and 2, once per branch. Run `git log <base>..HEAD --format='%h %ae %ce'` and scan `Co-authored-by` trailers (`git log <base>..HEAD --format='%h %(trailers:key=Co-authored-by,valueonly)'`). Flag each email that is neither `*@users.noreply.github.com` (or GitHub's `noreply@github.com`) nor on the project's `Allowed commit emails:` line from onboarding; a noreply address is never flagged. If any are flagged, list them and offer: rewrite (`git rebase -r <base> --exec 'git commit --amend --no-edit --reset-author'` after setting `user.email`; trailers are edited by hand), proceed, or stop. Wait for the choice.</step>
     <step>**Execute choice** — see option details below.</step>
     <step>**Cleanup worktree** — For options 1, 2, 4: `git worktree remove <path>`. For option 3: keep.</step>
   </process>
@@ -41,6 +42,7 @@ description: Use when implementation on a branch is complete, tests pass, and it
     <rule>Never merge without verifying tests on result.</rule>
     <rule>Never delete work without typed confirmation.</rule>
     <rule>Never force-push without explicit request.</rule>
+    <rule>Never rewrite commits or authorship without your human partner's choice.</rule>
     <rule>When committing, put the risk receipt in the commit message as trailers (the same lines as the chat receipt).</rule>
   </rules>
 

@@ -41,7 +41,7 @@ description: Applies when a session involves an existing codebase or project con
       - Container: `Dockerfile`, `docker-compose.yml`, `compose.yaml`
       - Infrastructure: `terraform`, `*.tf`, `pulumi.yaml`, `Chart.yaml` (Helm)
     </step>
-    <step>**Read project guidance.** `README.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/*`, `CONTRIBUTING.md`, `.editorconfig`. These encode team conventions the manifest can't.</step>
+    <step>**Read project guidance.** `README.md`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/*`, `CONTRIBUTING.md`, `.editorconfig`. These encode team conventions the manifest can't. Note an `Allowed commit emails:` line if one exists; `bp:finishing-a-development-branch` and the pre-push hook check commit emails against it.</step>
     <step>**Find the test command.** From the manifest's `scripts`/`test`/`tasks` block, or `Makefile`, or CI config (`.github/workflows/*`, `.gitlab-ci.yml`, `.circleci/config.yml`). Run it cold once to verify the baseline before changing anything.</step>
     <step>**Find similar files.** For "I'm about to write a service/handler/component/migration", grep for 2-3 existing examples of the same shape. Match their structure.</step>
     <step>**Apply process skills.** The discovered conventions plus stack-agnostic process skills (`bp:test-driven-development`, `bp:systematic-debugging`, `bp:writing-plans`, `bp:requesting-code-review`) are sufficient. The stack only changes the *commands you run*, not the *discipline*.</step>

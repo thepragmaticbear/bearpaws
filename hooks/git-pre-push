@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Git pre-push hook: flags commits whose author, committer or Co-authored-by email is not a
+# GitHub noreply address or on the project's allowed list, before they become public.
+# Allowed list: an "Allowed commit emails: <glob>, <glob>" line in CLAUDE.md, AGENTS.md or CONTRIBUTING.md.
+# Flags once per branch: pushing the same branch again proceeds. Install: ./install.sh --git.
+# Bypass: git push --no-verify, or BEARPAWS_ENFORCE=0.
+# tests/hooks/run-git-gate-tests.sh pins every rule.
+
+set -uo pipefail
+# Allowed-list entries are patterns: never expand them against files in the current directory.
+set -f
+
+[ "${BEARPAWS_ENFORCE:-1}" = 0 ] && exit 0
+top="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+flagged="$(git rev-parse --path-format=absolute --git-path bearpaws-identity-flagged 2>/dev/null)" || exit 0
+allowed="$(cd -- "$top" && grep -hiE '^[[:space:]>*_-]*Allowed commit emails[*_]*:' CLAUDE.md AGENTS.md CONTRIBUTING.md 2>/dev/null \
+  | sed -E 's/^[^:]*:[*_]*//' | tr ',`' '  ')"
+
+ok() { # <email>
+  local e g
+  e="$(tr '[:upper:]' '[:lower:]' <<<"$1")"
+  case "$e" in *@users.noreply.github.com|noreply@github.com) return 0 ;; esac
+  for g in $allowed; do
+    # Unquoted on purpose (set -f keeps it from touching files): each entry is a glob such as *@example.com.
+    # shellcheck disable=SC2053
+    [[ "$e" == $(tr '[:upper:]' '[:lower:]' <<<"$g") ]] && return 0
+  done
+  return 1
+}
+
+out=""
+while read -r lref lsha rref rsha; do
+  [[ "$lsha" =~ ^0+$ ]] && continue
+  grep -qxF -- "$rref" "$flagged" 2>/dev/null && continue
+  # New branch, or a remote tip this clone never fetched: everything not already on a remote.
+  # Existing branch: only what the push adds.
+  if [[ "$rsha" =~ ^0+$ ]] || ! git cat-file -e "$rsha^{commit}" 2>/dev/null; then range=("$lsha" --not --remotes); base="<base>"
+  else range=("$rsha..$lsha"); base="$rsha"; fi
+  # Fail loudly: a log that cannot be read must not pass the push.
+  log="$(git log --format='%h%x09%ae%x09%ce%x09%(trailers:key=Co-authored-by,valueonly,separator=%x20)' "${range[@]}" 2>/dev/null)" || {
+    echo "bearpaws: could not list commits for $rref; push with --no-verify to skip the identity check" >&2; exit 1; }
+  hits=""
+  while IFS=$'\t' read -r h ae ce co; do
+    [ -n "$h" ] || continue
+    ok "$ae" || hits+="  $h author $ae"$'\n'
+    ok "$ce" || hits+="  $h committer $ce"$'\n'
+    while read -r c; do
+      [ -n "$c" ] && { ok "$c" || hits+="  $h co-author $c"$'\n'; }
+    done < <(grep -oE '[^<>[:space:]]+@[^<>[:space:]]+' <<<"$co")
+  done <<<"$log"
+  [ -n "$hits" ] || continue
+  out+="${rref#refs/heads/} (rewrite: git rebase -r $base --exec 'git commit --amend --no-edit --reset-author'):"$'\n'"$hits"
+  printf '%s\n' "$rref" >>"$flagged"
+done
+
+[ -n "$out" ] || exit 0
+{
+  echo "bearpaws: these commits carry emails that are not GitHub noreply addresses or on the project's allowed list:"
+  printf '%s' "$out"
+  echo "Choose one:"
+  echo "  rewrite: set user.email, then run the rebase shown for each branch (edit Co-authored-by trailers by hand)"
+  echo "  proceed: push again; each branch is flagged once"
+  echo "  stop:    leave it unpushed"
+} >&2
+exit 1

@@ -346,7 +346,7 @@ echo "OK: Grok installer (requires --global, skills via ~/.agents/skills, owned 
 
 # ========== Git Gate Installer Tests ==========
 mkdir -p "$WORK/hooks"
-cp "$REPO_ROOT/hooks/git-commit-msg" "$REPO_ROOT/hooks/lib-receipt" "$WORK/hooks/"
+cp "$REPO_ROOT/hooks/git-commit-msg" "$REPO_ROOT/hooks/git-pre-push" "$REPO_ROOT/hooks/lib-receipt" "$WORK/hooks/"
 GIT_HOME="$TMP_ROOT/git-home"
 GREPO="$TMP_ROOT/git repo"   # a space in the path exercises the exec line's quoting
 mkdir -p "$GIT_HOME"
@@ -390,6 +390,19 @@ if git -C "$GREPO" commit -qm "no receipt" >/dev/null 2>&1; then
 fi
 git -C "$GREPO" commit -qm $'Add a\n\nRisk: routine\nVerified: none\nStatus: COMPLETE'
 
+# The same install adds an owned pre-push hook that runs the identity check
+PHOOK="$(dirname "$GHOOK")/pre-push"
+test -f "$PHOOK" && test -x "$PHOOK" && grep -qF '# bearpaws-owned' "$PHOOK" && grep -qF "$WORK/hooks/git-pre-push" "$PHOOK"
+git init -q --bare "$TMP_ROOT/remote.git"
+git -C "$GREPO" remote add origin "$TMP_ROOT/remote.git"
+git -C "$GREPO" -c user.email=dana.kowalski82@gmail.com commit -q --allow-empty --no-verify -m gmail
+if git -C "$GREPO" push -q origin HEAD:refs/heads/main >/dev/null 2>"$TMP_ROOT/push.err"; then
+  echo "FAIL: installed pre-push hook let a gmail.com commit through"
+  exit 1
+fi
+grep -qF "dana.kowalski82@gmail.com" "$TMP_ROOT/push.err"
+git -C "$GREPO" push -q origin HEAD:refs/heads/main 2>/dev/null   # flagged once: the second push proceeds
+
 # Idempotent: rerun leaves the same file
 cp "$GHOOK" "$TMP_ROOT/hook.before"
 ( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >/dev/null 2>&1
@@ -420,4 +433,13 @@ if ls -A "$(dirname "$GHOOK")" | grep -q '^\.commit-msg\.'; then
   exit 1
 fi
 
-echo "OK: Git gate installer (owned hook, runs the gate, idempotent, never clobbers, fails outside a repo)"
+# A foreign pre-push is never overwritten either; the commit-msg gate still installs
+rm -f "$GHOOK"; printf '#!/bin/sh\necho theirs\n' >"$PHOOK"
+if ( cd "$GREPO" && HOME="$GIT_HOME" "$WORK/install.sh" --git ) >"$TMP_ROOT/git-foreign-pp.log" 2>&1; then
+  echo "FAIL: --git should fail rather than overwrite a foreign pre-push"
+  exit 1
+fi
+grep -qx 'echo theirs' "$PHOOK" && grep -qF '# bearpaws-owned' "$GHOOK"
+grep -qF "not created by Bearpaws" "$TMP_ROOT/git-foreign-pp.log"
+
+echo "OK: Git gate installer (owned commit-msg and pre-push hooks, run the gates, idempotent, never clobber, fail outside a repo)"
