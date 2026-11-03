@@ -30,7 +30,7 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
 
   | Claim | Requires | Not sufficient |
   |---|---|---|
-  | Tests pass | Test output: 0 failures, and the test count before and after; say so if added tests didn't change the count | Previous run, "should pass", a count with no baseline |
+  | Tests pass | Test output: 0 failures, and the test count before and after your edit (write `no baseline` if you did not run them before); say so if added tests didn't change the count | Previous run, "should pass", a bare count |
   | Linter clean | Linter output: 0 errors | Partial check, extrapolation |
   | Build succeeds | Build command: exit 0 | Linter passing, logs look good |
   | Bug fixed | Original symptom test passes | Code changed, assumed fixed |
