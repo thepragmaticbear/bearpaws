@@ -32,10 +32,11 @@ out=""
 while read -r lref lsha rref rsha; do
   [[ "$lsha" =~ ^0+$ ]] && continue
   grep -qxF -- "$rref" "$flagged" 2>/dev/null && continue
-  # New branch, or a remote tip this clone never fetched: everything not already on a remote.
-  # Existing branch: only what the push adds.
-  if [[ "$rsha" =~ ^0+$ ]] || ! git cat-file -e "$rsha^{commit}" 2>/dev/null; then range=("$lsha" --not --remotes); base="<base>"
-  else range=("$rsha..$lsha"); base="$rsha"; fi
+  # Only commits no remote has yet: a teammate's commit merged in from main is not this push's to check.
+  range=("$lsha" --not --remotes); base="<base>"
+  if ! [[ "$rsha" =~ ^0+$ ]] && git cat-file -e "$rsha^{commit}" 2>/dev/null; then
+    range+=("$rsha"); git merge-base --is-ancestor "$rsha" "$lsha" 2>/dev/null && base="$rsha"
+  fi
   # Fail loudly: a log that cannot be read must not pass the push.
   log="$(git log --format='%h%x09%ae%x09%ce%x09%(trailers:key=Co-authored-by,valueonly,separator=%x20)' "${range[@]}" 2>/dev/null)" || {
     echo "bearpaws: could not list commits for $rref; push with --no-verify to skip the identity check" >&2; exit 1; }

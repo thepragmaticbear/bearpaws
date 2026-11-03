@@ -169,6 +169,14 @@ prepush "refs/heads/e $(tip) refs/heads/e $Z" BEARPAWS_ENFORCE=0; expect "pre-pu
 preset; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "x"
 prepush "refs/heads/k $(tip) refs/heads/k 1111111111111111111111111111111111111111"; expect "pre-push: unknown remote sha still checks the new commits" block "dana.kowalski82@gmail.com"
 prepush "refs/heads/k2 0123456789abcdef refs/heads/k2 $Z"; expect "pre-push: a local sha git cannot read fails loudly" block "could not list commits"
+# A teammate's commit already on a remote, merged into a pushed branch, is not this push's to check.
+preset; pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com "feat"; FEAT="$(tip)"
+git -C "$P" checkout -q --detach "$BASE"; pc teammate@corp.example teammate@corp.example "t1"
+git -C "$P" update-ref refs/remotes/origin/main HEAD; T1="$(tip)"; git -C "$P" checkout -q --detach "$FEAT"
+GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=1+t@users.noreply.github.com GIT_COMMITTER_NAME=c GIT_COMMITTER_EMAIL=1+t@users.noreply.github.com \
+  git -C "$P" merge -q --no-ff --no-verify -m merge "$T1"
+prepush "refs/heads/feat $(tip) refs/heads/feat $FEAT"; expect "pre-push: commits already on a remote are not checked" pass
+git -C "$P" update-ref -d refs/remotes/origin/main
 # Allowed-list entries are patterns, never expanded against files in the repo.
 preset; printf 'Allowed commit emails: *\n' >"$P/CLAUDE.md"; touch "$P/evil@acme.dev"
 pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "x"
