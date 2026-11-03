@@ -49,10 +49,11 @@ Status: COMPLETE
 In Claude Code, a `Stop` hook enforces the floor:
 
 - A reply that leaves file edits pending without a receipt is blocked.
-- Elevated work cannot end `Status: COMPLETE` unless a review was dispatched after the last edit. `Status: INCOMPLETE` is always allowed.
+- Elevated work cannot end `Status: COMPLETE` unless a review was dispatched after the last edit, test-file edits included, and `Open:` says `none`. A finding the review raised and you did not fix keeps the work INCOMPLETE. `Status: INCOMPLETE` is always allowed.
+- A `Verified:` line that claims a test run is blocked when no test command ran after the last edit. A `Pinned:` line that claims tests passed before the edit is blocked when none ran before the first edit.
 - Routine work that edited sensitive-looking paths (auth, token, payment, migration, sql, …) gets a one-time nudge to reclassify or say why it is routine.
 
-Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later; without either it does nothing. Elsewhere, these rules are instructions only. The hook checks that a receipt and a review exist, not that every line in the receipt is true.
+Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later. When it is off or `jq` is missing, the session starts with a one-line notice. Elsewhere, these rules are instructions only. The hook checks the receipt against what the session actually did (edits, test commands, review dispatches). It does not check that a test passed or that every line is true.
 
 ### Git gate
 
@@ -139,7 +140,7 @@ Bearpaws began as a fork of [Superpowers](https://github.com/obra/superpowers), 
 |---|---|---|
 | What sets the amount of process | Scope: the agent classifies a request as spike, bounded, or architectural and says so, so the human can override | Scope and blast radius, as two separate axes |
 | Small but risky changes | No separate risk tier. Risk is one input to choosing the reviewer's model, and a security-sensitive action stops execution to ask the human | A fixed floor for [elevated-risk changes](#difficulty-is-not-danger): pinned behavior, failing test first, narrow diff, stated assumptions, independent review |
-| Finishing a change | Verify before claiming done | Verify, then end every reply that changed files with a risk receipt (`Risk`, `Verified`, `Status`) |
+| Finishing a change | Verify before claiming done | Verify, then end every reply that changed files with a risk receipt (`Risk`, `Verified`, `Not checked`, `Status`) |
 | Findings from review | Critical and Important findings go through a fix loop with re-review. Minor ones are logged for the final review | The same, plus: a same-risk defect found in the changed code is part of the fix even if it falls outside the request, or the work ends `INCOMPLETE` |
 | How the rules are applied | Instructions to the agent | Instructions, plus a Claude Code hook (see [Show me](#show-me)) |
 | Getting to know a project | Part of brainstorming | A separate onboarding step that runs first |
