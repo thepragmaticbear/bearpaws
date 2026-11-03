@@ -156,8 +156,8 @@ python3 tests/claude-code/analyze-token-usage.py ~/.claude/projects/<project-dir
 Session transcripts are stored in `~/.claude/projects/` with the working directory path encoded:
 
 ```bash
-# Example for ~/Downloads/bearpaws (the directory name is the absolute path with / replaced by -)
-SESSION_DIR="$HOME/.claude/projects/$(printf '%s' "$HOME/Downloads/bearpaws" | tr / -)"
+# Example for ~/Downloads/bearpaws (the directory name is the absolute path with every non-alphanumeric character replaced by -)
+SESSION_DIR="$HOME/.claude/projects/$(printf '%s' "$HOME/Downloads/bearpaws" | tr -c '[:alnum:]' -)"
 
 # Find recent sessions
 ls -lt "$SESSION_DIR"/*.jsonl | head -5
