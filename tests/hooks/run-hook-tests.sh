@@ -16,7 +16,7 @@ fail() { echo "FAIL: $1"; failures=$((failures + 1)); }
 run_hook() { # hook-path out-file [VAR=value ...]
   local hook="$1" out="$2"; shift 2
   env -u CLAUDE_PLUGIN_ROOT -u CURSOR_PLUGIN_ROOT -u COPILOT_CLI \
-      -u DEVIN_PROJECT_DIR -u DEVIN_PLUGIN_ROOT "$@" bash "$hook" >"$out" 2>"$out.err"
+      -u DEVIN_PROJECT_DIR -u DEVIN_PLUGIN_ROOT -u BEARPAWS_ENFORCE "$@" bash "$hook" >"$out" 2>"$out.err"
 }
 
 # check_shape <label> <expected key path> [VAR=value ...]
@@ -60,6 +60,28 @@ check_shape copilot-cli    additionalContext  CLAUDE_PLUGIN_ROOT="$REPO_ROOT" CO
 check_shape devin-project  hookSpecificOutput DEVIN_PROJECT_DIR="$REPO_ROOT"
 check_shape devin-plugin   hookSpecificOutput DEVIN_PLUGIN_ROOT="$REPO_ROOT"
 check_shape unknown-sdk    additionalContext
+
+# Other harnesses never run the risk gate, so they get no inactive-gate notice.
+check_shape cursor-enforce-off  additional_context CURSOR_PLUGIN_ROOT="$REPO_ROOT" BEARPAWS_ENFORCE=0
+check_shape copilot-enforce-off additionalContext  CLAUDE_PLUGIN_ROOT="$REPO_ROOT" COPILOT_CLI=1 BEARPAWS_ENFORCE=0
+
+# Claude Code: one systemMessage line when the risk gate is inactive, beside the usual context.
+NOJQ="$TMP_ROOT/nojq-bin"; mkdir -p "$NOJQ"
+for t in bash cat dirname; do ln -s "$(command -v "$t")" "$NOJQ/$t"; done
+check_inactive() { # <label> <reason substring> [VAR=value ...]
+  local label="$1" want="$2" out="$TMP_ROOT/$1.json"; shift 2
+  if run_hook "$HOOK" "$out" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" "$@" && python3 - "$out" "$want" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+assert set(data) == {"hookSpecificOutput", "systemMessage"}, sorted(data)
+m = data["systemMessage"]
+assert "risk gate inactive" in m and sys.argv[2] in m and "\n" not in m, m
+assert data["hookSpecificOutput"]["additionalContext"].startswith('<warning level="hard">')
+PY
+  then echo "OK: $label"; else fail "$label: expected one systemMessage line naming '$want', got $(cat "$out")"; fi
+}
+check_inactive "enforce off: notice" "BEARPAWS_ENFORCE=0" BEARPAWS_ENFORCE=0
+check_inactive "jq missing: notice" "jq" PATH="$NOJQ"
 
 # Claude Code payload is release-blocking: lock the wrapper text so a change to
 # shared wording is a deliberate, reviewed edit.
