@@ -146,6 +146,7 @@ Document what you specifically tried to break: edge cases traced, error paths fo
 ## Critical Rules
 
 **DO:**
+- Redact emails, home paths (`/Users/<name>`, `/home/<name>` → `~`), hostnames and tokens in diffs and verification evidence before writing any review artifact (a report, file or comment).
 - Complete all four adversarial gates before stating a verdict
 - Enumerate failure modes BEFORE forming an opinion
 - Document specific break attempts with results ("Tried: [executed|reasoned] X — Y")

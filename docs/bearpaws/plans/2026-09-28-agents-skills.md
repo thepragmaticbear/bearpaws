@@ -366,7 +366,7 @@ Expected: only the "Windsurf Cascade is retired" line in `docs/agent-support.md`
 - [x] **Step 1: Temp project**
 
 ```bash
-S=$(mktemp -d) && cd "$S" && git init -q && mkdir -p .agents && ln -s /Users/brandon/repos/bearpaws/.claude/worktrees/llm-state-alignment-649e48/skills .agents/skills
+S=$(mktemp -d) && cd "$S" && git init -q && mkdir -p .agents && ln -s "$HOME/repos/bearpaws/.claude/worktrees/llm-state-alignment-649e48/skills" .agents/skills
 ```
 
 - [x] **Step 2: OpenCode discovery**

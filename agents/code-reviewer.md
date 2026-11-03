@@ -55,6 +55,7 @@ Your review MUST follow this structure. Sections marked [GATE] are adversarial c
    - An approval without break attempts is not an approval
 
 9. **Communication Protocol**:
+    - Redact emails, home paths (`/Users/<name>`, `/home/<name>` → `~`), hostnames and tokens in diffs and verification evidence before writing any review artifact (a report, file or comment).
     - Significant plan deviations: ask the coding agent to review and confirm
     - Issues with the original plan: recommend plan updates
     - Implementation problems: provide clear fix guidance
