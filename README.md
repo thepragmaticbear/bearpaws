@@ -32,7 +32,7 @@ Risk has two levels: routine and elevated. Bearpaws does not grade it any finer.
 
 ## Show me
 
-Every reply that changed files ends with a risk receipt. Routine work needs only `Risk:`, `Verified:`, and `Status:`. Elevated work adds the rest:
+Every reply that changed files ends with a risk receipt. Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. Elevated work adds the rest:
 
 ```text
 Risk: elevated (authorization)
@@ -40,7 +40,8 @@ Pinned: test_owner_allowed, test_admin_same_org passed before edit
 Failing first: test_admin_cross_org_denied failed, then passed
 Review: bp:code-reviewer — Ready to merge: Yes
 Assumptions: org_id is never null on users or resources
-Verified: pytest — 14 passed, 0 failed
+Verified: pytest — 12 passed before, 14 passed after, 0 failed
+Not checked: none
 Status: COMPLETE
 ```
 

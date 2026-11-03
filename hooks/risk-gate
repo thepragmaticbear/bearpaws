@@ -147,7 +147,7 @@ case "$mode" in
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
-    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
+    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
     fi
     # Only the last Status line counts, and INCOMPLETE must be its value.
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
