@@ -52,6 +52,7 @@ Read the log in order. `edited` means at least one `edit` line, `edit (bash)` in
 2b. A `Pinned:` line has a value other than `none` or `n/a`, and no `test-run` precedes the first non-test `edit` (with only test edits, the first `edit-test`) → block: "Pinned: claims tests passed before the edit, but no test run was logged before the first edit. Correct the line: Pinned: none, and why." Only the last `Pinned:` line counts; what makes it a non-claim is listed under known gaps below (`Pinned: there were no tests`). An `edit (bash)` counts as the first edit only when the log has no other edit, since it may be the failing test written through Bash. Skipped when INCOMPLETE. Writing the failing test first and running the suite before the fix satisfies it.
 3. The last `Status:` line in the message, whose value must be `INCOMPLETE`, → allow. Honest incompleteness is never blocked. A quoted earlier line or the pasted template `Status: COMPLETE | INCOMPLETE` does not count.
 4. `Risk: elevated` and not `reviewed` → block (`reviewed` means a `review` line after the last edit of any kind, `edit-test` and `edit (bash)` included, because a test edit after the review can weaken what the reviewer saw; `Status: INCOMPLETE` is the way out when a reviewer's request for more tests should not trigger another review): "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch bp:requesting-code-review, or set Status: INCOMPLETE."
+4a. Status is not INCOMPLETE and the first `Open:` line after the last `Risk:` line lists anything other than `none`, `n/a` or nothing → block: "Open: lists unfixed review findings, so the work is not COMPLETE. ..." For `Risk: elevated`, a missing `Open:` line also blocks, because the hook cannot tell an empty list from an omitted one. Checked after rule 4, so an unreviewed edit reports the review first. The block text ends "If nothing is open, write exactly Open: none.", since an annotated `Open: none — all fixed` also blocks. Elevated INCOMPLETE with a non-empty `Open:` keeps the log, like unreviewed INCOMPLETE work, so a later COMPLETE reply is judged again.
 5. `Risk: routine` and an edited path matches the sensitive-path pattern → block once per pending batch (marker line `nudged` in the log): "Edited <paths> look elevated-risk. Reclassify, or keep routine and say why in the receipt." The second time, allow. The `nudged` marker lives in the log, so it persists until a stop is accepted.
 
 Edited paths have CR and LF replaced with spaces before they are logged, so a crafted file name cannot forge a `review` line.
@@ -76,6 +77,7 @@ Risk: elevated (<surface>)            # or: Risk: routine
 Pinned: <tests> passed before edit    # elevated only
 Failing first: <test> failed, then passed   # elevated only
 Review: <reviewer> — <verdict>        # elevated only
+Open: none                            # elevated only; else each unfixed Critical/Important finding, and Status: INCOMPLETE
 Assumptions: <what you took as true without checking>   # elevated only
 Verified: <command> — <result>
 Status: COMPLETE | INCOMPLETE
@@ -108,7 +110,8 @@ Wording changes follow `bp:writing-skills`: first a baseline run without the rec
 - `.tree` files, and logs of sessions that end with edits pending, are never cleaned up.
 - Anything that rewrites files counts as an edit, for example `git checkout`, `git stash` or a formatter that touches mtimes. Staging and committing do not.
 - Background agents. Edits a background subagent makes after the controller ends its turn stay pending across turns until a receipt accepts them, so its report-back turn is judged (this closes the final-review FM-1 gap). The consequence: edits stay pending until a receipt accepts them, so a Q&A turn right after an unreceipted edit also needs a receipt.
-- Unreviewed elevated work marked INCOMPLETE stays pending for the rest of the session. Every later reply needs a receipt until a review is dispatched, or the agent reclassifies to routine after the nudge.
+- Elevated work marked INCOMPLETE without a review, or with an open finding, stays pending: the log gets a `pending` line. While nothing follows it, a reply with no Risk or Status line passes (the human partner may have deferred the finding), and a reply with a receipt is judged again, so a later COMPLETE still needs the review and `Open: none`.
+- Only the first `Open:` line after the last `Risk:` line counts, so `Open:` prose before the receipt or a note after it is ignored.
 - Rule 2 checks only the `Risk:` line; `Verified:` and `Status:` are required by the skill text, not the hook.
 - An implementer's own PostToolUse events precede its parent's Agent event, so a review counts only by reviewer `subagent_type` or a description that starts with review.
 - A reviewer described in other words, for example "Thorough review", is blocked. The agent clears that by rewording the description or setting `Status: INCOMPLETE`.

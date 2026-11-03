@@ -61,7 +61,7 @@ expect() { # <label> allow|block [reason substring]; a non-zero hook exit fails 
 
 # These receipts claim no test run, so cases for other rules need no logged runs.
 ROUTINE=$'Done.\n\nRisk: routine\nVerified: git diff — only the label changed\nStatus: COMPLETE'
-ELEVATED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: none — no test covered this path\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nAssumptions: org_id is never null\nVerified: git diff — only the org check changed\nStatus: COMPLETE'
+ELEVATED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: none — no test covered this path\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nOpen: none\nAssumptions: org_id is never null\nVerified: git diff — only the org check changed\nStatus: COMPLETE'
 ELEVATED_INCOMPLETE="${ELEVATED/Status: COMPLETE/Status: INCOMPLETE}"
 
 reset; stop "The answer is 42."; expect "no edits: allow" allow
@@ -134,10 +134,10 @@ reset; edit src/authz.py; gate stop "$(jq -cn --arg s "$SID" '{session_id:$s,las
 expect "non-string last_assistant_message: allow" allow
 
 # Paths are logged relative to cwd, so a sensitive-looking project dir does not nudge.
-CWD=/Users/maclean/repos/oauth-proxy
+CWD="$HOME/repos/oauth-proxy"
 reset; editc "$CWD" "$CWD/src/ui/button.py"; stop "$ROUTINE"; expect "sensitive project dir, routine path: allow" allow
 reset; editc "$CWD" "$CWD/src/auth/login.py"; stop "$ROUTINE"; expect "sensitive path under cwd still nudges" block "src/auth/login.py"
-if jq -e '.hookSpecificOutput.additionalContext | contains("/Users/")' "$TMP_ROOT/out" >/dev/null; then
+if jq -e --arg c "$CWD" '.hookSpecificOutput.additionalContext | contains($c)' "$TMP_ROOT/out" >/dev/null; then
   fail "nudge reason leaks the absolute path: $(cat "$TMP_ROOT/out")"
 else
   echo "OK: nudge reason shows the relative path"
@@ -577,7 +577,7 @@ ran() { # <command>
   gate record "$(jq -cn --arg s "$SID" --arg c "$1" '{session_id:$s,tool_name:"Bash",tool_input:{command:$c}}')"
 }
 R_TESTED=$'Done.\n\nRisk: routine\nVerified: pytest — 12 passed\nStatus: COMPLETE'
-E_TESTED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: test_owner_allowed passed before edit\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nAssumptions: org_id is never null\nVerified: pytest — 14 passed\nStatus: COMPLETE'
+E_TESTED=$'Fixed.\n\nRisk: elevated (authorization)\nPinned: test_owner_allowed passed before edit\nFailing first: test_cross_org_denied failed, then passed\nReview: bp:code-reviewer — Ready to merge: Yes\nOpen: none\nAssumptions: org_id is never null\nVerified: pytest — 14 passed\nStatus: COMPLETE'
 reset; edit src/ui/button.py; stop "$R_TESTED"; expect "Verified claims tests, none ran: block" block "Verified"
 reset; ran "pytest -q"; edit src/ui/button.py; stop "$R_TESTED"; expect "Verified claims tests, run only before the edit: block" block "Verified"
 reset; edit src/ui/button.py; ran "pytest -q"; stop "$R_TESTED"; expect "Verified claims tests, run after the edit: allow" allow
@@ -670,6 +670,39 @@ expect "one Bash call that edits and runs tests: the run follows the edit" allow
 reset; bashrun "$T" "true"; echo t >"$T/test_a.py"; bashrun "$T" "cat > test_a.py"; bashrun "$T" "pytest"
 edit a.py; bashrun "$T" "pytest"; review; stop "$E_TESTED"
 expect "failing test written through Bash, then run, then the fix: Pinned holds" allow
+# Open: unfixed Critical or Important findings. Elevated COMPLETE needs the line, and it must say none.
+reset; edit src/authz.py; review; stop "${ELEVATED/$'Open: none\n'/}"; expect "elevated COMPLETE without an Open line: block" block "Open"
+OPEN_IMP="${ELEVATED/Open: none/Open: Important — a negative amount bypasses the cap}"
+reset; edit src/authz.py; review; stop "$OPEN_IMP"; expect "elevated COMPLETE with an open finding: block" block "Open"
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; expect "open finding with INCOMPLETE: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Open: none/**Open:** None.}"; expect "markdown Open: None.: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Open: none/Open: n/a}"; expect "Open: n/a: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Open: none/Open:}"; expect "empty Open line: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Open: none/Open: none of the Critical ones; Important — sign check}"
+expect "Open value that starts with none but lists a finding: block" block "Open"
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nOpen: Important — label overflows\nVerified: git diff — label only\nStatus: COMPLETE'
+expect "routine COMPLETE with an open finding: block" block "Open"
+reset; edit src/ui/button.py; stop "$ROUTINE"; expect "routine without an Open line: allow" allow
+reset; edit src/authz.py; review; edit src/authz.py; stop "$OPEN_IMP"; expect "unreviewed edit still blocks on review first" block "independent review"
+reset; edit src/authz.py; review; stop "${ELEVATED/Open: none/Open: none — both findings fixed}"; expect "annotated none blocks with a hint" block "write exactly Open: none"
+# An open finding with INCOMPLETE stays pending, so a later COMPLETE reply is judged again.
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; stop "$OPEN_IMP"
+expect "open finding stays pending after INCOMPLETE" block "Open"
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; stop "$ELEVATED"
+expect "pending finding closed by a later Open: none" allow
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; stop "The answer is 42."
+expect "a reply with no receipt while a finding is pending: allow" allow
+stop "$OPEN_IMP"; expect "the finding is still pending after that reply" block "Open"
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; stop $'All fixed.\n\nStatus: COMPLETE'
+expect "a Status line without Risk while pending: block" block "risk receipt"
+reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; stop "Ok."; stop "Sure."
+[ "$(grep -cx pending "$(logfile)")" = 1 ] && echo "OK: replies without a receipt keep one pending line" || fail "pending lines: $(cat "$(logfile)")"
+edit src/authz.py; stop "Ok."; expect "a new edit after pending needs a receipt" block "risk receipt"
+reset; edit src/ui/button.py; stop $'Added the shortcut.\n- Open: Ctrl+O opens a file\n\nRisk: routine\nVerified: git diff — label only\nStatus: COMPLETE'
+expect "an Open: prose line before the receipt is not the receipt's" allow
+reset; edit src/authz.py; review; stop "$ELEVATED"$'\nOpen: the cache file is reopened per call (note)'
+expect "a note after the receipt does not override its Open: none" allow
+
 # Classifier, observed through the log line.
 for row in "test|tests/x.py" "test|src/test_x.py" "test|pkg/x_test.go" "test|web/a.test.tsx" "test|a.spec.js" \
            "test|spec/models/u_spec.rb" "test|src/FooTest.java" "test|src/__tests__/a.js" "test|a/test/b.rb" "prod|a/specs/b.rb" "prod|spec/openapi.yaml" "prod|/abs/tests/x.py" "prod|tests/../src/a.py" "prod|Tests/x.py" "prod|testdata/x.py" \

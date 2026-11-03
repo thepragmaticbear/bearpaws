@@ -4,7 +4,8 @@
 # Also blocks a Verified or Pinned line that claims a test run the log doesn't show.
 # Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop).
 # The log holds edits and test runs not yet accepted by a receipt; an allowing stop clears it,
-# except elevated INCOMPLETE work with no review, which stays pending.
+# except elevated INCOMPLETE work with no review or with an open finding, which stays
+# pending: a later reply with receipt lines is judged again, one without them passes.
 # Design: docs/bearpaws/plans/2026-10-11-risk-gate-design.md
 # tests/hooks/run-risk-gate-tests.sh pins every rule.
 
@@ -90,6 +91,20 @@ accept() {
   exit 0
 }
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
+# Open: lists unfixed Critical/Important findings. 0: empty (none, n/a or blank), or absent on routine
+# work; 1: absent on elevated work; 2: lists something.
+open_state() { # <risk>
+  local line
+  # The first Open line after the last Risk line: prose before the receipt or notes after it don't count.
+  line="$(awk -v re="${LEAD}Risk${TRAIL}:" 'tolower($0) ~ tolower(re) {r=NR} {l[NR]=$0} END{for(i=r;i<=NR;i++) print l[i]}' <<<"$msg" \
+    | grep -iE "${LEAD}Open${TRAIL}:" | head -1)"
+  if [ -z "$line" ]; then [ "$1" = elevated ] && return 1; return 0; fi
+  grep -qiE '^[[:space:]]*((none|n/a)[.[:space:]]*)?$' <<<"$(tr -d '*_`' <<<"${line#*:}")" && return 0
+  return 2
+}
+pend() { [ "$(tail -1 "$log")" = pending ] || echo pending >>"$log"; exit 0; }
+OPEN_MISSING="Elevated work needs an Open line: Open: none, or each unfixed Critical or Important review finding with Status: INCOMPLETE."
+OPEN_LISTED="Open: lists unfixed review findings, so the work is not COMPLETE. Fix each with its own failing test, or set Status: INCOMPLETE naming it. If nothing is open, write exactly Open: none."
 
 OKW='(^|[^[:alnum:]])(pass(ed|es|ing)?|ok|green)([^[:alnum:]-]|$)'
 NEG='(none|n/?a|n\.a|no|not|nothing|skip(ped)?)'
@@ -148,7 +163,9 @@ case "$mode" in
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
     if field Risk elevated; then risk=elevated
     elif field Risk routine; then risk=routine
-    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Assumptions). See bp:verification-before-completion."
+    # Pending from an earlier INCOMPLETE, nothing since, and no receipt now: an unrelated reply passes.
+    elif [ "$(tail -1 "$log")" = pending ] && ! grep -qiE "${LEAD}(Risk|Status)${TRAIL}:" <<<"$msg"; then exit 0
+    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion."
     fi
     # Only the last Status line counts, and INCOMPLETE must be its value.
     grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
@@ -180,11 +197,18 @@ case "$mode" in
     if [ "$risk" = elevated ]; then
       # The review must follow the last edit of any kind: a test edit can weaken what the review saw.
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
-      [ "${last_review:-0}" -gt "$last_edit" ] && accept
+      if [ "${last_review:-0}" -gt "$last_edit" ]; then
+        open_state elevated; o=$?
+        # An open finding under INCOMPLETE stays pending, so a later COMPLETE is judged again.
+        [ "$o" = 2 ] && [ "$incomplete" = 1 ] && pend
+        [ "$incomplete" = 1 ] || { [ "$o" = 1 ] && block "$OPEN_MISSING"; [ "$o" = 2 ] && block "$OPEN_LISTED"; }
+        accept
+      fi
       # Elevated INCOMPLETE without a review stays pending.
-      [ "$incomplete" = 1 ] && exit 0
+      [ "$incomplete" = 1 ] && pend
       block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
     fi
+    [ "$incomplete" = 1 ] || { open_state routine || block "$OPEN_LISTED"; }
     [ "$incomplete" = 1 ] && accept
     grep -qx nudged "$log" && accept
     hits="$(grep -E '^edit(-test)? ' "$log" | sed -E 's/^edit(-test)? //' | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
