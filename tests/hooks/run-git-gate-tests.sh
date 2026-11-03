@@ -120,5 +120,78 @@ git -C "$R" checkout -qb side; echo s >"$R/side.txt"; git -C "$R" add side.txt; 
 (cd "$R" && GIT_EDITOR=true git -c core.hooksPath="$TMP_ROOT/hooks" merge -q --no-ff --edit side) >/dev/null 2>"$TMP_ROOT/err" \
   && echo "OK: git merge --no-ff passes without a receipt" || fail "git merge --no-ff was refused: $(cat "$TMP_ROOT/err")"
 
+# Pre-push identity check: commit emails outside *@users.noreply.github.com, noreply@github.com
+# and the project's "Allowed commit emails:" line are flagged once per branch.
+PRE="$REPO_ROOT/hooks/git-pre-push"
+P="$TMP_ROOT/push"
+Z=0000000000000000000000000000000000000000
+git init -q "$P"
+git -C "$P" config commit.gpgsign false
+pc() { # <author email> <committer email> <message>: an empty commit in P
+  GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL="$1" GIT_COMMITTER_NAME=c GIT_COMMITTER_EMAIL="$2" \
+    git -C "$P" commit -q --allow-empty --no-verify -m "$3"
+}
+pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com init
+BASE="$(git -C "$P" rev-parse HEAD)"
+prepush() { # <stdin line> [VAR=value ...]
+  local line="$1" rc=0; shift
+  (cd "$P" && printf '%s\n' "$line" | env -u BEARPAWS_ENFORCE "$@" bash "$PRE" origin https://example.invalid/r.git) >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
+  echo "$rc" >"$TMP_ROOT/rc"
+}
+preset() { git -C "$P" checkout -q --detach "$BASE"; rm -f "$(git -C "$P" rev-parse --path-format=absolute --git-path bearpaws-identity-flagged)" "$P/CLAUDE.md"; }
+tip() { git -C "$P" rev-parse HEAD; }
+
+preset; pc dana.kowalski82@gmail.com 1+t@users.noreply.github.com "feat: x"
+prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"
+expect "pre-push: gmail.com author is flagged" block "dana.kowalski82@gmail.com"
+grep -qF "git rebase -r" "$TMP_ROOT/err" && grep -qF -- "--reset-author" "$TMP_ROOT/err" && grep -qF "$(git -C "$P" rev-parse --short HEAD)" "$TMP_ROOT/err" \
+  && echo "OK: pre-push: flag names the commit and offers the rewrite" || fail "pre-push flag lacks sha or rewrite command: $(cat "$TMP_ROOT/err")"
+prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: second push of a flagged branch proceeds" pass
+prepush "refs/heads/f2 $(tip) refs/heads/f2 $Z"; expect "pre-push: flag is per branch" block "dana.kowalski82@gmail.com"
+preset; pc 1+T@Users.Noreply.GitHub.com noreply@github.com "web merge"
+prepush "refs/heads/ok $(tip) refs/heads/ok $Z"; expect "pre-push: noreply author (any case) and GitHub committer pass" pass
+preset; pc 1+t@users.noreply.github.com dana@corp.example "x"
+prepush "refs/heads/c $(tip) refs/heads/c $Z"; expect "pre-push: committer email is checked" block "dana@corp.example"
+preset; pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com $'x\n\nCo-authored-by: Dana <dana.kowalski82@gmail.com>'
+prepush "refs/heads/t $(tip) refs/heads/t $Z"; expect "pre-push: Co-authored-by trailer is checked" block "dana.kowalski82@gmail.com"
+preset; printf '# Rules\n\n- **Allowed commit emails:** *@corp.example, ops@other.example\n' >"$P/CLAUDE.md"
+pc dana@corp.example ops@other.example "allowed"
+prepush "refs/heads/a $(tip) refs/heads/a $Z"; expect "pre-push: project allowed list passes" pass
+pc dana.kowalski82@gmail.com dana@corp.example "not allowed"
+prepush "refs/heads/a2 $(tip) refs/heads/a2 $Z"; expect "pre-push: allowed list does not admit gmail.com" block "dana.kowalski82@gmail.com"
+preset; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "old"; OLD="$(tip)"; pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com "new"
+prepush "refs/heads/u $(tip) refs/heads/u $OLD"; expect "pre-push: only commits new to the remote are checked" pass
+prepush "(delete) $Z refs/heads/gone $OLD"; expect "pre-push: branch deletion passes" pass
+prepush "refs/heads/same $OLD refs/heads/same $OLD"; expect "pre-push: a push with no new commits passes" pass
+preset; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "x"
+prepush "refs/heads/e $(tip) refs/heads/e $Z" BEARPAWS_ENFORCE=0; expect "pre-push: BEARPAWS_ENFORCE=0 bypasses" pass
+# A remote tip this clone never fetched (a force-push over it) falls back to "not on any remote".
+preset; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "x"
+prepush "refs/heads/k $(tip) refs/heads/k 1111111111111111111111111111111111111111"; expect "pre-push: unknown remote sha still checks the new commits" block "dana.kowalski82@gmail.com"
+prepush "refs/heads/k2 0123456789abcdef refs/heads/k2 $Z"; expect "pre-push: a local sha git cannot read fails loudly" block "could not list commits"
+# A teammate's commit already on a remote, merged into a pushed branch, is not this push's to check.
+preset; pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com "feat"; FEAT="$(tip)"
+git -C "$P" checkout -q --detach "$BASE"; pc teammate@corp.example teammate@corp.example "t1"
+git -C "$P" update-ref refs/remotes/origin/main HEAD; T1="$(tip)"; git -C "$P" checkout -q --detach "$FEAT"
+GIT_AUTHOR_NAME=a GIT_AUTHOR_EMAIL=1+t@users.noreply.github.com GIT_COMMITTER_NAME=c GIT_COMMITTER_EMAIL=1+t@users.noreply.github.com \
+  git -C "$P" merge -q --no-ff --no-verify -m merge "$T1"
+prepush "refs/heads/feat $(tip) refs/heads/feat $FEAT"; expect "pre-push: commits already on a remote are not checked" pass
+git -C "$P" update-ref -d refs/remotes/origin/main
+# Allowed-list entries are patterns, never expanded against files in the repo.
+preset; printf 'Allowed commit emails: *\n' >"$P/CLAUDE.md"; touch "$P/evil@acme.dev"
+pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "x"
+prepush "refs/heads/g $(tip) refs/heads/g $Z"; expect "pre-push: allow-all * is not glob-expanded" pass
+printf 'Allowed commit emails: *@acme.dev\n' >"$P/CLAUDE.md"; pc me@acme.dev me@acme.dev "y"
+prepush "refs/heads/g2 $(tip) refs/heads/g2 $Z"; expect "pre-push: a file named like an email does not shadow the pattern" block "dana.kowalski82@gmail.com"
+grep -qF "me@acme.dev" "$TMP_ROOT/err" && fail "pre-push: me@acme.dev wrongly flagged" || echo "OK: pre-push: me@acme.dev matches *@acme.dev despite the file"
+rm -f "$P/evil@acme.dev"
+preset; pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com $'x\n\nCo-authored-by: dana.kowalski82@gmail.com'
+prepush "refs/heads/b $(tip) refs/heads/b $Z"; expect "pre-push: a bare Co-authored-by email is checked" block "dana.kowalski82@gmail.com"
+# Two flagged refs in one push: each names its own rewrite base.
+preset; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "one"; ONE="$(tip)"; pc dana.kowalski82@gmail.com dana.kowalski82@gmail.com "two"
+prepush "$(printf 'refs/heads/m1 %s refs/heads/m1 %s\nrefs/heads/m2 %s refs/heads/m2 %s' "$(tip)" "$ONE" "$(tip)" "$Z")"
+grep -qF "git rebase -r $ONE" "$TMP_ROOT/err" && grep -qF "m2" "$TMP_ROOT/err" \
+  && echo "OK: pre-push: each flagged ref gets its own rewrite base" || fail "pre-push: per-ref rewrite base missing: $(cat "$TMP_ROOT/err")"
+
 if [ "$failures" -gt 0 ]; then echo "$failures GIT-GATE TEST(S) FAILED"; exit 1; fi
 echo "ALL GIT-GATE TESTS PASSED"

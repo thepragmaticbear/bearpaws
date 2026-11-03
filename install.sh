@@ -186,11 +186,11 @@ install_grok() {
     log_success "Installed Grok bootstrap rule: $rule"
 }
 
-# Install the git risk gate: a commit-msg hook in the current repository that execs this
-# checkout's hooks/git-commit-msg, so updating the checkout updates the gate.
+# Install the git gates in the current repository: a commit-msg hook (risk receipt) and a pre-push
+# hook (commit identity check), each execing this checkout's script, so updating the checkout updates them.
 GIT_HOOK_MARKER="# bearpaws-owned: written by install.sh --git. Delete this file to remove the gate."
 install_git() {
-    log_info "Setting up the git commit-msg risk gate..."
+    log_info "Setting up the git risk gate (commit-msg) and identity check (pre-push)..."
     local hooks_dir
     # --git-path follows core.hooksPath and shares hooks across worktrees, as git itself does
     # Git before 2.31 echoes the unknown --path-format flag back and exits 0, so require one absolute path
@@ -199,30 +199,37 @@ install_git() {
         log_error "Not inside a git repository (or git is older than 2.31); run ./install.sh --git from the repository to gate"
         return 1
     fi
-    local hook="$hooks_dir/commit-msg"
-    local gate="$BEARPAWS_ROOT/hooks/git-commit-msg"
-    if [[ ! -f "$gate" ]]; then
-        log_error "Gate script missing: hooks/git-commit-msg"
-        return 1
-    fi
-    if [[ -e "$hook" || -L "$hook" ]] && ! grep -qxF "$GIT_HOOK_MARKER" "$hook" 2>/dev/null; then
-        log_error "$hook exists and was not created by Bearpaws; leaving it untouched"
-        log_info "To chain the gate, add this line to that hook: bash $(printf %q "$gate") \"\$1\" || exit 1"
-        return 1
-    fi
-    mkdir -p "$hooks_dir"
-    local staged
-    staged="$(mktemp "$hooks_dir/.commit-msg.XXXXXX")"
-    local q
-    q="$(printf %q "$gate")"
-    if ! { printf '#!/usr/bin/env bash\n%s\n[ -f %s ] || { echo "bearpaws: git gate missing at "%s"; rerun install.sh --git, or commit with --no-verify" >&2; exit 1; }\nexec bash %s "$@"\n' \
-               "$GIT_HOOK_MARKER" "$q" "$q" "$q" > "$staged" \
-             && chmod +x "$staged" && mv -f "$staged" "$hook"; }; then
-        rm -f "$staged"
-        log_error "Failed to write $hook"
-        return 1
-    fi
-    log_success "Installed git commit-msg risk gate: $hook"
+    local rc=0 pair name script hook gate staged q
+    for pair in commit-msg:git-commit-msg pre-push:git-pre-push; do
+        name="${pair%%:*}"; script="${pair#*:}"
+        hook="$hooks_dir/$name"
+        gate="$BEARPAWS_ROOT/hooks/$script"
+        if [[ ! -f "$gate" ]]; then
+            log_error "Gate script missing: hooks/$script"
+            rc=1; continue
+        fi
+        if [[ -e "$hook" || -L "$hook" ]] && ! grep -qxF "$GIT_HOOK_MARKER" "$hook" 2>/dev/null; then
+            log_error "$hook exists and was not created by Bearpaws; leaving it untouched"
+            if [[ "$name" == commit-msg ]]; then
+                log_info "To chain the gate, add this line to that hook: bash $(printf %q "$gate") \"\$1\" || exit 1"
+            else
+                log_info "To chain the gate, add this line to that hook: bash $(printf %q "$gate") \"\$@\" || exit 1 (it reads the refs on stdin)"
+            fi
+            rc=1; continue
+        fi
+        mkdir -p "$hooks_dir"
+        staged="$(mktemp "$hooks_dir/.$name.XXXXXX")"
+        q="$(printf %q "$gate")"
+        if ! { printf '#!/usr/bin/env bash\n%s\n[ -f %s ] || { echo "bearpaws: git gate missing at "%s"; rerun install.sh --git, or bypass with --no-verify" >&2; exit 1; }\nexec bash %s "$@"\n' \
+                   "$GIT_HOOK_MARKER" "$q" "$q" "$q" > "$staged" \
+                 && chmod +x "$staged" && mv -f "$staged" "$hook"; }; then
+            rm -f "$staged"
+            log_error "Failed to write $hook"
+            rc=1; continue
+        fi
+        log_success "Installed git $name gate: $hook"
+    done
+    return "$rc"
 }
 
 # Install for Google Antigravity
@@ -320,7 +327,7 @@ main() {
                 echo "  --antigravity Install Bearpaws plugin for Google Antigravity"
                 echo "  --agents      Link skills into ~/.agents/skills (Codex, Devin, OpenCode, Cursor, Copilot, ...)"
                 echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
-                echo "  --git         Risk-receipt commit-msg hook in the current git repository (bypass: git commit --no-verify)"
+                echo "  --git         Risk-receipt commit-msg and identity-check pre-push hooks in the current git repository (bypass: --no-verify)"
                 echo "  --global      Required for --antigravity, --agents and --grok"
                 echo "  --help        Show this help message"
                 exit 0
@@ -388,7 +395,7 @@ main() {
             echo "  • Run 'grok inspect' to confirm the rule and skills load"
         fi
         if [[ " ${platforms[*]} " =~ " git " ]]; then
-            echo "  • Git: commits with staged changes now need a risk receipt in the message (bypass: git commit --no-verify)"
+            echo "  • Git: commits with staged changes now need a risk receipt in the message; pushes flag non-noreply commit emails once per branch (bypass: --no-verify)"
         fi
     else
         log_error "$failed platform installations failed"
