@@ -39,6 +39,7 @@ Risk: elevated (authorization)
 Pinned: test_owner_allowed, test_admin_same_org passed before edit
 Failing first: test_admin_cross_org_denied failed, then passed
 Review: bp:code-reviewer — Ready to merge: Yes
+Open: none
 Assumptions: org_id is never null on users or resources
 Verified: pytest — 12 passed before, 14 passed after, 0 failed
 Not checked: none

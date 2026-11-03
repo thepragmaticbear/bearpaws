@@ -47,13 +47,14 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
   Pinned: test_owner_allowed, test_admin_same_org passed before edit
   Failing first: test_admin_cross_org_denied failed, then passed
   Review: bp:code-reviewer — Ready to merge: Yes
+  Open: none                                          ← else each unfixed Critical/Important finding
   Assumptions: org_id is never null on users or resources
   Verified: pytest — 12 passed before, 14 passed after, 0 failed
   Not checked: ruff, mypy (CI runs both); the CLI by hand
   Status: COMPLETE                                    ← INCOMPLETE if any step is missing
   ```
 
-  Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. `Not checked:` names every check you did not run (CI jobs, linters, manual paths), or `none`. A missing step means `Status: INCOMPLETE`, never a softened line.
+  Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. `Not checked:` names every check you did not run (CI jobs, linters, manual paths), or `none`. A missing step means `Status: INCOMPLETE`, never a softened line. `Open:` lists every Critical or Important review finding you did not fix; `COMPLETE` needs exactly `Open: none`, with no note after it; put notes (an optional Minor left undone) on another line. A finding your human partner deferred is still open.
 
   When committing, put the same receipt lines in the commit message as trailers.
 
