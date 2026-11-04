@@ -75,8 +75,10 @@ rejected in 3/9 on the main-branch templates. The misses never opened `src/clock
 only this module" from the diff alone.
 
 TDD GREEN/REFACTOR wording (candidate b) did not move reuse-eval (`guards_types` 1/3 → 2/3) and was reverted. The
-guards come from review, not refactoring: the agent calls the money task elevated, the reviewer files "a bare string
-passed as `amounts`" as Important, and the agent adds a `TypeError` guard test-first.
+guards come from review, not refactoring: the agent calls the money task elevated and dispatches an ad-hoc review
+subagent with its own prompt (reuse-eval runs without `PLUGIN_DIR`, so the plugin's reviewer templates are not
+loaded). That reviewer files "a bare string passed as `amounts`" as Important, and the agent adds a `TypeError`
+guard test-first.
 
 GREEN (candidate c): both reviewer templates file a reimplementation of an existing function as Important and tell
 the reviewer to grep the whole source tree, not only the diff. `reimplemented` 7/9 blocking and rejected; `minimal`
