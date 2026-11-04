@@ -17,6 +17,8 @@ DEFECTS = {
     "unknown_units_ignored": r"unknown unit|invalid unit|ignor|silently|garbage|\"1x\"|'1x'|1x|abc",
     # refund-narrow: a negative amount is user input, so it must be a blocking finding.
     "negative_amount_blocking": r"negative|<=? ?0\b|non-positive|sign check",
+    # reimplemented: parse_duration duplicates src/clock.py hms_seconds, so the reuse finding must be blocking.
+    "reimplements_helper_blocking": r"hms_seconds|clock\.py|reimplement|duplicat|already (exists|provides|implements|has)",
 }
 GATES = [r"failure mode", r"have to be true", r"didn'?t check", r"break attempt"]
 # Over-building, read from the Critical and Important sections only (Minor is advisory).
