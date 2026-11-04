@@ -123,6 +123,7 @@ tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>    
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
 tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # elevated-risk floor: pin behavior, narrow diff, assumptions
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
+tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
