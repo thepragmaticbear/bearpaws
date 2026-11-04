@@ -109,6 +109,7 @@ python3 tests/codex/test_conformance.py                                       # 
 python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
 python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
+python3 tests/drift-eval/test_score.py                                        # drift-eval scorer tests (only the Drift: block counts)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
@@ -123,6 +124,7 @@ tests/skill-triggering/routing/run.sh skills/using-bearpaws/SKILL.md <label>    
 tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <label>  # weakened tests are caught
 tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # elevated-risk floor: pin behavior, narrow diff, assumptions
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
+tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  # finishing flags code that drifted from a checked-off plan (CLEAN=1: no-drift control)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)

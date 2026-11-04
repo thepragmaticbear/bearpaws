@@ -6,7 +6,7 @@ description: Use when implementation on a branch is complete, tests pass, and it
 <skill>
 
   <purpose>
-    Guide completion of development work. Verify tests → Present options → Execute choice → Clean up.
+    Guide completion of development work. Verify tests → Check drift → Present options → Execute choice → Clean up.
   </purpose>
 
   <triggers>
@@ -21,6 +21,7 @@ description: Use when implementation on a branch is complete, tests pass, and it
   <process>
     <step>**Verify tests** — Run project's test suite. If tests fail: show failures, stop. Cannot proceed until green.</step>
     <step>**Determine base branch** — `git merge-base HEAD main` or ask.</step>
+    <step>**Check drift** — If a plan under `docs/bearpaws/plans/` drove this branch and no final review checked the whole branch against it, read each task against the current code and `git diff <base>...HEAD`. Passing tests and checked boxes do not show a task was built. Report only divergences: behavior a task names that the code lacks, a planned name, field or argument missing or hardcoded, a source change no task covers (tests, docs, release notes and the plan itself do not count). If there are none, say "No drift." Otherwise write `Drift:` followed by one bullet per divergence, and offer: fix, update the plan to match, or proceed. Wait for the choice. After a fix, return to Verify tests.</step>
     <step>**Present exactly 4 options** — (1) Merge locally, (2) Push and create PR, (3) Keep branch as-is, (4) Discard. No explanation — keep concise.</step>
     <step>**Check commit identity** — before options 1 and 2, once per branch. Run `git log <base>..HEAD --format='%h %ae %ce'` and scan `Co-authored-by` trailers (`git log <base>..HEAD --format='%h %(trailers:key=Co-authored-by,valueonly)'`). Flag each email that is neither `*@users.noreply.github.com` (or GitHub's `noreply@github.com`) nor on the project's `Allowed commit emails:` line from onboarding; a noreply address is never flagged. If any are flagged, list them and offer: rewrite (`git rebase -r <base> --exec 'git commit --amend --no-edit --reset-author'` after setting `user.email`; trailers are edited by hand), proceed, or stop. Wait for the choice.</step>
     <step>**Execute choice** — see option details below.</step>
