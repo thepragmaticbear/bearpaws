@@ -65,3 +65,26 @@ REFACTOR (`e9657dc`): a negative or oversized amount is a defect; only a type no
 fixture `refund-narrow` (cap, no sign check) must be rejected: 3/3, negative amount blocking in 3/3. `refund` and
 `traversal` approved 3/3, `overbuilt` flagged 3/3, planted 4/4 in 3/3, routing 5/5, risk-eval 3/3. Benchmark:
 escapes 5/30 (refund 0), code-only lines 4.9, guards 9/30 (the attack-required `None` org checks), $/run 0.257.
+
+## 2026-11-04: reuse first (`tests/reuse-eval`, `FIXTURE=reimplemented`)
+
+RED, current skills (sonnet, n=3): reuse-eval `reused_helper` 3/3, `reimplemented` 0/3, `guards_types` 1/3,
+`narrow_diff` 3/3; the bootstrap reuse clause (candidate a) was dropped. New fixture `reimplemented` (a correct
+hand-rolled `parse_duration` next to an existing `src/clock.py:hms_seconds`): reuse finding blocking and verdict
+rejected in 3/9 on the main-branch templates. The misses never opened `src/clock.py`; one wrote "`src/` contains
+only this module" from the diff alone.
+
+TDD GREEN/REFACTOR wording (candidate b) did not move reuse-eval (`guards_types` 1/3 → 2/3) and was reverted. The
+guards come from review, not refactoring: the agent calls the money task elevated and dispatches an ad-hoc review
+subagent with its own prompt (reuse-eval runs without `PLUGIN_DIR`, so the plugin's reviewer templates are not
+loaded). That reviewer files "a bare string passed as `amounts`" as Important, and the agent adds a `TypeError`
+guard test-first.
+
+GREEN (candidate c): both reviewer templates file a reimplementation of an existing function as Important and tell
+the reviewer to grep the whole source tree, not only the diff. `reimplemented` 7/9 blocking and rejected (the plan's
+3/3 pin was not met); `minimal` approved 3/3; `refund-narrow` rejected 3/3 with the negative amount blocking; `refund`
+and `traversal` approved 3/3; `overbuilt` and planted rejected 3/3; routing 5/5; risk-eval gates 3/3.
+
+(c) was then reverted: in the benchmark the finding fired in 1 of 57 candidate transcripts while `grep -rn`
+transcripts roughly doubled (13 → 24 risk, 7 → 13 routine), adding review work with no diff-size return. Both
+reviewer templates match `main`; the `reimplemented` fixture stays as a regression guard for a future attempt.

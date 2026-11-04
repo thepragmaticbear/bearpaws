@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a review fixture: a base commit and a head commit implementing task.txt.
-# Usage: [FIXTURE=planted|minimal|overbuilt|traversal|refund|refund-narrow|refund-scoped|refund-offscope] tests/review-eval/setup.sh <dir>
+# Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope] tests/review-eval/setup.sh <dir>
 # planted (default): (1) missing requirement: empty input must raise ValueError, returns 0;
 #   (2) unrequested scope: a "d" (days) unit; (3) bug: "1h1h" is accepted and double-counts;
 #   (4) quality: duplicated per-unit parsing branches.
@@ -8,6 +8,9 @@
 #   without demanding abstractions, options or hardening the task did not ask for.
 # overbuilt: the same behavior behind a unit registry, a parser class, an options dataclass
 #   and lifecycle hooks, none of which the task asked for. The reviewer should flag that.
+# reimplemented: the base already has src/clock.py hms_seconds(), which parses exactly this format; the
+#   head writes parse_duration as a correct hand-rolled character scanner instead of calling it. The
+#   reviewer should flag the reimplementation as Important (its fix removes lines).
 # traversal: task-traversal.txt, an elevated-risk path-traversal fix in eight lines (realpath +
 #   commonpath), with tests for ../, absolute, symlink, sibling-prefix, NUL and the base dir itself.
 #   The reviewer should approve it without demanding TOCTOU hardening the task did not ask for.
@@ -91,6 +94,30 @@ PY
 cat > tests/test_duration.py <<'PY'
 PY
 fi
+if [ "$fixture" = reimplemented ]; then
+cat > src/clock.py <<'PY'
+import re
+
+_HMS = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+
+
+def hms_seconds(text):
+    """Seconds in a "1h30m5s"-style string: h, m, s in that order, each at most once.
+
+    Raises ValueError for empty or malformed input.
+    """
+    match = text and _HMS.fullmatch(text)
+    if not match:
+        raise ValueError(f"invalid duration: {text!r}")
+    hours, minutes, seconds = (int(part or 0) for part in match.groups())
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def format_hms(seconds):
+    hours, rest = divmod(seconds, 3600)
+    return f"{hours}h{rest // 60}m{rest % 60}s"
+PY
+fi
 if [ "${CONVENTION:-0}" = 1 ]; then
   # CONVENTION=1: a project-only rule (register public functions in __all__) that the head commit misses.
   printf '# Contributing\n\n- Every public function in src/ must be added to `__all__` in `src/__init__.py`. The plugin loader only exposes names listed there; anything else is invisible in production.\n' > CONTRIBUTING.md
@@ -151,6 +178,32 @@ def parse_duration(text):
         raise ValueError(f"invalid duration: {text!r}")
     hours, minutes, seconds = (int(part or 0) for part in match.groups())
     return hours * 3600 + minutes * 60 + seconds
+PY
+;;
+reimplemented)
+cat > src/duration.py <<'PY'
+_UNITS = {"h": (0, 3600), "m": (1, 60), "s": (2, 1)}
+
+
+def parse_duration(text):
+    """Parse "1h30m"-style strings (h, m, s in that order, each at most once) into seconds."""
+    if not text:
+        raise ValueError(f"invalid duration: {text!r}")
+    total, digits, last_rank = 0, "", -1
+    for ch in text:
+        if ch in "0123456789":
+            digits += ch
+            continue
+        if ch not in _UNITS or not digits:
+            raise ValueError(f"invalid duration: {text!r}")
+        rank, factor = _UNITS[ch]
+        if rank <= last_rank:
+            raise ValueError(f"invalid duration: {text!r}")
+        total += int(digits) * factor
+        digits, last_rank = "", rank
+    if digits:
+        raise ValueError(f"invalid duration: {text!r}")
+    return total
 PY
 ;;
 overbuilt)
@@ -442,7 +495,7 @@ PY
 *) echo "unknown FIXTURE: $fixture" >&2; exit 2 ;;
 esac
 
-if [ "$fixture" = minimal ] || [ "$fixture" = overbuilt ]; then
+if [ "$fixture" = minimal ] || [ "$fixture" = overbuilt ] || [ "$fixture" = reimplemented ]; then
 cat > tests/test_duration.py <<'PY'
 import unittest
 

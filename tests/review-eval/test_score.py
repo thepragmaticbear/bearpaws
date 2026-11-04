@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Scorer tests: which text counts as a blocking issue, and what the verdict line means."""
 import os
+import re
 import sys
 import unittest
 
@@ -26,6 +27,18 @@ class BlockingIssuesTest(unittest.TestCase):
     def test_important_section_is_kept(self):
         text = "#### Critical (Must Fix)\nNone\n#### Important (Should Fix)\n- negative amount accepted\n#### Minor\n- style\n"
         self.assertIn("negative amount", score.blocking_issues(text))
+
+
+class ReimplementsHelperTest(unittest.TestCase):
+    def blocking(self, important):
+        text = f"#### Critical\nNone\n#### Important\n- {important}\n#### Minor\n- style\n"
+        return bool(re.search(score.DEFECTS["reimplements_helper_blocking"], score.blocking_issues(text), re.I))
+
+    def test_reuse_finding_counts(self):
+        self.assertTrue(self.blocking("src/duration.py reimplements hms_seconds in src/clock.py; call it"))
+
+    def test_unrelated_already_has_does_not_count(self):
+        self.assertFalse(self.blocking("the report says 7 tests but the file already has 10 tests"))
 
 
 class VerdictTest(unittest.TestCase):

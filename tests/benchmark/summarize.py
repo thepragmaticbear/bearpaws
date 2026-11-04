@@ -109,13 +109,32 @@ def _lines(path):
         return None  # binary: not counted
 
 
+def code_lines(lines):
+    """Lines that are code: blanks, # comments and triple-quoted docstrings dropped."""
+    out, inq = [], False
+    for l in lines:
+        t = l.strip(); n = t.count('"""') + t.count("\'\'\'")
+        if inq:
+            if n % 2: inq = False
+            continue
+        if n % 2: inq = True; continue
+        if t and not t.startswith("#"): out.append(l)
+    return out
+
+
+def added_lines(a, b):
+    """Lines of b that difflib marks as added or replaced going from a."""
+    return [line for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+            if op != "equal" for line in b[j1:j2]]
+
+
 def tree_diff(base, other, overlay=False):
-    """Source lines added and removed, and source files added, going from base to other.
+    """Source lines added and removed, source files added, and code-only lines added, going from base to other.
 
     overlay=True treats other as a partial overlay: files it lacks are unchanged, not deleted.
     """
     base_files, other_files = source_files(base), source_files(other)
-    added = removed = files_added = 0
+    added = removed = files_added = code_added = 0
     for rel in sorted(set(base_files) | set(other_files)):
         if overlay and rel not in other_files:
             continue
@@ -128,21 +147,27 @@ def tree_diff(base, other, overlay=False):
             if op != "equal":
                 removed += i2 - i1
                 added += j2 - j1
-    return {"src_added": added, "src_removed": removed, "src_files_added": files_added}
+        code_added += len(added_lines(code_lines(a), code_lines(b)))
+    return {"src_added": added, "src_removed": removed, "src_files_added": files_added, "code_added": code_added}
 
 
 def reference_size(scenario_dir):
-    """Source lines the scenario's reference fix adds, or None without hidden/reference/."""
+    """{src_added, code_added} for the scenario's reference fix, or None without hidden/reference/."""
     ref = Path(scenario_dir) / "hidden" / "reference"
-    return tree_diff(Path(scenario_dir) / "repo", ref, overlay=True)["src_added"] if ref.is_dir() else None
+    if not ref.is_dir():
+        return None
+    d = tree_diff(Path(scenario_dir) / "repo", ref, overlay=True)
+    return {"src_added": d["src_added"], "code_added": d["code_added"]}
 
 
 def diff_fields(work, scenario_dir):
-    fields = dict.fromkeys(("src_added", "src_removed", "src_files_added", "ref_src_added"))
+    fields = dict.fromkeys(("src_added", "src_removed", "src_files_added", "ref_src_added", "code_added", "ref_code_added"))
     # A work tree with no source files was cleaned after the run (the 2026-10-12 run dirs): unmeasured, not "deleted everything".
     if work and scenario_dir and (Path(scenario_dir) / "repo").is_dir() and Path(work).is_dir() and source_files(work):
         fields.update(tree_diff(Path(scenario_dir) / "repo", work))
-        fields["ref_src_added"] = reference_size(scenario_dir)
+        ref = reference_size(scenario_dir)
+        if ref:
+            fields["ref_src_added"], fields["ref_code_added"] = ref["src_added"], ref["code_added"]
     return fields
 
 
@@ -543,7 +568,9 @@ def summarize(paths):
     if measured:
         print("\nDiff size (completed sessions; source lines changed vs the scenario repo; tests, docs and caches excluded)")
         print("bloat=mean over runs of added / the reference fix's added lines; only scenarios with hidden/reference")
-        print(f"{'group':<34} {'n':>3} {'added':>7} {'removed':>8} {'new files':>10} {'bloat':>6}")
+        print("code=the same with blank, comment and docstring lines dropped from both sides")
+        print(f"{'group':<34} {'n':>3} {'added':>7} {'removed':>8} {'new files':>10} {'bloat':>6} "
+              f"{'code added':>11} {'code bloat':>11}")
         for key_fn in (lambda r: r["arm"], lambda r: f"{r['scenario']}/{r['arm']}"):
             groups = defaultdict(list)
             for r in measured:
@@ -552,9 +579,15 @@ def summarize(paths):
                 g = groups[key]
                 ratios = [r["src_added"] / r["ref_src_added"] for r in g if r.get("ref_src_added")]
                 bloat = f"{sum(ratios) / len(ratios):.2f}" if ratios else "n/a"
+                coded = [r["code_added"] for r in g if r.get("code_added") is not None]
+                code_ratios = [r["code_added"] / r["ref_code_added"] for r in g
+                               if r.get("code_added") is not None and r.get("ref_code_added")]
+                code_mean = f"{sum(coded) / len(coded):.1f}" if coded else "n/a"
+                code_bloat = f"{sum(code_ratios) / len(code_ratios):.2f}" if code_ratios else "n/a"
                 print(f"{key:<34} {len(g):>3} {sum(r['src_added'] for r in g) / len(g):>7.1f} "
                       f"{sum(r['src_removed'] for r in g) / len(g):>8.1f} "
-                      f"{sum(r['src_files_added'] for r in g) / len(g):>10.1f} {bloat:>6}")
+                      f"{sum(r['src_files_added'] for r in g) / len(g):>10.1f} {bloat:>6} "
+                      f"{code_mean:>11} {code_bloat:>11}")
 
     print("\nBy arm tokens (totals; all four dimensions included in tokens/accepted)")
     print(f"{'arm':<20} {'input':>10} {'output':>10} {'cache_read':>12} {'cache_write':>12} {'tokens/accepted':>16}")
