@@ -1,6 +1,6 @@
 # Diff size, reuse first — 2026-11-04
 
-This tested whether a reuse-first, scoped-simplification change could cut Bearpaws' over-building on the six elevated-risk tasks without letting more defects escape. **It did not cut diff size.** Code-only bloat was 1.44× for the candidate against 1.46× for a concurrent control arm on `main`, short of the 1.1× bar. Escapes held at 5 of 30, with risk-refund at 0. Routine cost rose 16%. Of the three candidate edits, only the reviewer reimplementation finding moved its own eval. It ships; the other two were dropped or reverted.
+This tested whether a reuse-first, scoped-simplification change could cut Bearpaws' over-building on the six elevated-risk tasks without letting more defects escape. **It did not cut diff size.** Code-only bloat was 1.44× for the candidate against 1.46× for a concurrent control arm on `main`, short of the 1.1× bar. Escapes held at 5 of 30, with risk-refund at 0. Routine cost rose about 15%. Of the three candidate edits, only the reviewer reimplementation finding moved its own eval. It ships; the other two were dropped or reverted.
 
 ## Success criteria (fixed before the run)
 
@@ -19,7 +19,7 @@ The plan's floor estimate held. risk-refund stays at 2.0×: every run in both ar
 |---|---|---|---|
 | (a) Bootstrap reuse clause | Not written | reuse-eval RED: `reused_helper` 3/3, `reimplemented` 0/3. The bootstrap already gets reuse right on this task. | Dropped; the fixture stays as a regression guard |
 | (b) TDD GREEN "reuse first", REFACTOR "simplify only the changed lines, drop checks for inputs no caller passes" | `skills/test-driven-development/SKILL.md`, two sentences | reuse-eval `guards_types` 1/3 → 2/3, code added [3,3,5] → [5,3,5] | **Reverted** |
-| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9 | Kept |
+| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9; the plan's 3/3 pin was **not met** | Kept: detection moved 3/9 → 7/9 and no other fixture regressed |
 | (d) Same-class rule limited to reachable defects | Already shipped in `e9657dc` | — | — |
 | (e) Receipt line for deliberate shortcuts | Skipped as planned | — | — |
 
@@ -67,18 +67,19 @@ reset-token escapes in every run of both arms; the control arm disclosed two of 
 |---|---|---|
 | reuse-eval (new): fixed / reused / reimplemented / type guards / narrow diff | 3/3, 3/3, 0/3, 1/3, 3/3; code added [3,3,5]; $0.304 | 3/3, 3/3, 0/3, 1/3, 3/3; code added [3,5,3]; $0.314 |
 | risk-eval: all gates | 3/3; code added [1,1,3]; type guards 1/3 | 3/3; code added [1,1,1]; type guards 0/3 |
-| review `reimplemented` (new): reuse finding blocking, rejected | 3/9 | 7/9 |
+| review `reimplemented` (new): reuse finding blocking, rejected | 3/9 | 7/9 (plan pin 3/3: **not met**) |
 | review `minimal`: approved | 2/3 | 3/3 |
 | review `refund-narrow`: rejected, negative blocking | 3/3, 3/3 | 3/3, 3/3 |
 | review `refund`, `traversal`: approved | 3/3, 3/3 | 3/3, 3/3 |
 | review `overbuilt`, planted: rejected | 3/3, 3/3 | 3/3, 3/3 |
 | routing | 5/5 scenarios 3/3 | 5/5 scenarios 3/3 |
 
-reuse-eval, risk-eval and routing do not load the reviewer templates, so their final runs (on the first wording of (c)) stand for the final wording. The grep wording was tuned on `reimplemented` and `minimal` in three rounds, each at 2/3 on `reimplemented`, and confirmed with six more runs per side (RED 2/6 on the control checkout's templates, final 5/6). Every other review fixture was re-run on the final wording. The first `reimplemented` RED reported "7 tests" against 10 in the file, and reviewers flagged the mismatch. It was discarded and the fixture's report corrected.
+reuse-eval, risk-eval and routing do not load the reviewer templates, so their final runs (on the first wording of (c)) stand for the final wording. The first wording of (c) and three tuned wordings each scored 2/3 on `reimplemented` (out dirs `green-c`, `green-c2`, `green-c3`, `green-c4`). The last, which adds the grep, was confirmed with six more runs per side (RED 2/6 on the control checkout's templates, final 5/6). Every other review fixture was re-run on the final wording. The first `reimplemented` RED reported "7 tests" against 10 in the file, and reviewers flagged the mismatch. It was discarded and the fixture's report corrected.
 
 ## Limits
 
 - n=5 per risk task and n=3 per routine task, one model, one CLI version. A 0.02× difference in bloat and a $0.017 difference in routine cost are both inside run-to-run noise at this n. The criteria are stated as bars, so they are reported as missed rather than re-tested.
 - The control arm defines the baseline. The 2026-10-21 1.38× code-only figure came from a one-off script on work trees that no longer exist; this run's control measures 1.46× with the summarizer's own `code_lines()`.
-- reuse-eval runs without `PLUGIN_DIR`, so a review the agent dispatches uses its own prompt, not the plugin's reviewer templates. It cannot exercise the templated review path; `PLUGIN_DIR=<checkout>` would.
+- reuse-eval runs without `PLUGIN_DIR` and with `--setting-sources project,local`, so no Bearpaws plugin loads, and a review the agent dispatches uses its own prompt rather than the plugin's reviewer templates. It cannot exercise the templated review path. `PLUGIN_DIR=<checkout>` makes that path available, but the agent may still write its own review prompt.
+- `code_lines()` is a line heuristic. A single-line `"""docstring"""` counts as code, and a lone `"""` inside a string literal toggles docstring state, which drops the rest of that file from the count. Both arms are measured the same way.
 - reuse-eval has one fixture. On it the bootstrap already reuses the helper, so it cannot show whether a reuse clause would help in a case where the helper is harder to find.

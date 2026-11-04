@@ -122,9 +122,10 @@ def code_lines(lines):
     return out
 
 
-def _added(a, b):
-    return sum(j2 - j1 for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
-               if op != "equal")
+def added_lines(a, b):
+    """Lines of b that difflib marks as added or replaced going from a."""
+    return [line for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+            if op != "equal" for line in b[j1:j2]]
 
 
 def tree_diff(base, other, overlay=False):
@@ -146,7 +147,7 @@ def tree_diff(base, other, overlay=False):
             if op != "equal":
                 removed += i2 - i1
                 added += j2 - j1
-        code_added += _added(code_lines(a), code_lines(b))
+        code_added += len(added_lines(code_lines(a), code_lines(b)))
     return {"src_added": added, "src_removed": removed, "src_files_added": files_added, "code_added": code_added}
 
 

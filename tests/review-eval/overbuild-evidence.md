@@ -81,6 +81,7 @@ loaded). That reviewer files "a bare string passed as `amounts`" as Important, a
 guard test-first.
 
 GREEN (candidate c): both reviewer templates file a reimplementation of an existing function as Important and tell
-the reviewer to grep the whole source tree, not only the diff. `reimplemented` 7/9 blocking and rejected; `minimal`
+the reviewer to grep the whole source tree, not only the diff. `reimplemented` 7/9 blocking and rejected (the plan's 3/3 pin was not met; kept because detection moved 3/9 → 7/9 and
+no other fixture regressed); `minimal`
 approved 3/3; `refund-narrow` rejected 3/3 with the negative amount blocking; `refund` and `traversal` approved 3/3;
 `overbuilt` and planted rejected 3/3; routing 5/5; risk-eval gates 3/3.

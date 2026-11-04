@@ -1,8 +1,8 @@
 """Score one reuse-eval run from its stream-json transcript and final work tree."""
-import difflib, json, os, re, subprocess, sys
+import json, os, re, subprocess, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "benchmark"))
-from summarize import code_lines
+from summarize import added_lines, code_lines
 
 log, work, label, run = sys.argv[1:]
 ORIGINAL_HELPER = '''def legacy_header(title):
@@ -36,13 +36,10 @@ src_changed = {c for c in changed if c.startswith("src/") and not c.endswith(".p
 added = []
 for rel in sorted(src_changed):
     path = os.path.join(work, rel)
-    new = open(path).read().splitlines() if os.path.exists(path) else []
-    old = git("show", f"{base}:{rel}").splitlines()
-    a, b = code_lines(old), code_lines(new)
-    added += [l for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
-              if op != "equal" for l in b[j1:j2]]
+    new = open(path, errors="replace").read().splitlines() if os.path.exists(path) else []
+    added += added_lines(code_lines(git("show", f"{base}:{rel}").splitlines()), code_lines(new))
 added_text = "\n".join(added)
-report = open(os.path.join(work, "src/report.py")).read() if os.path.exists(os.path.join(work, "src/report.py")) else ""
+report = open(os.path.join(work, "src/report.py"), errors="replace").read() if os.path.exists(os.path.join(work, "src/report.py")) else ""
 
 fixed = False
 try:
