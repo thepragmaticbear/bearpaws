@@ -72,7 +72,6 @@ Use explicit "none known" or "not supplied" instead of silently omitting a field
 **Architecture:**
 - Sound design for the stated requirements?
 - Generality the requirements do not need (one-implementation interfaces, unset options, uncalled hooks, registries for fixed sets)? Flag it; the fix is deletion.
-- Reimplements a function the repository, the stdlib or an installed dependency already provides? Grep the whole source tree, not only the diff, for each new function's job (`grep -rn` its key terms) before answering. Flag it as Important; the fix is to call the existing one. "Could be shorter" is not this finding.
 - Performance implications?
 - Security concerns within the task's trust boundary?
 
@@ -109,7 +108,7 @@ Enumerate **at least 3 concrete, testable failure modes** — specific ways this
 [Bugs, security issues, data loss risks, broken functionality]
 
 #### Important (Should Fix)
-[Requirements unmet or misread, failure modes reachable from the code's actual inputs and trust boundary, broken project conventions, unrequested generality, reimplementations of an existing function, missing tests for behavior the requirements name]
+[Requirements unmet or misread, failure modes reachable from the code's actual inputs and trust boundary, broken project conventions, unrequested generality, missing tests for behavior the requirements name]
 
 #### Minor (Nice to Have)
 [Hardening against an actor the task's threat model does not include, tests for behavior the requirements do not name, code style, optimization opportunities, documentation]

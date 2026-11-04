@@ -1,6 +1,6 @@
 # Diff size, reuse first — 2026-11-04
 
-This tested whether a reuse-first, scoped-simplification change could cut Bearpaws' over-building on the six elevated-risk tasks without letting more defects escape. **It did not cut diff size.** Code-only bloat was 1.44× for the candidate against 1.46× for a concurrent control arm on `main`, short of the 1.1× bar. Escapes held at 5 of 30, with risk-refund at 0. Routine cost rose about 15%. Of the three candidate edits, only the reviewer reimplementation finding moved its own eval. It ships; the other two were dropped or reverted.
+This tested whether a reuse-first, scoped-simplification change could cut Bearpaws' over-building on the six elevated-risk tasks without letting more defects escape. **It did not cut diff size.** Code-only bloat was 1.44× for the candidate against 1.46× for a concurrent control arm on `main`, short of the 1.1× bar. Escapes held at 5 of 30, with risk-refund at 0. Routine cost rose about 15%. Of the three candidate edits, only the reviewer reimplementation finding moved its own eval, and it was reverted too: it added review work with no diff-size return. No skill or template change ships. What ships is the code-only metric in the summarizer, the control-arm method, and two eval fixtures (`tests/reuse-eval` and review-eval `FIXTURE=reimplemented`).
 
 ## Success criteria (fixed before the run)
 
@@ -15,21 +15,21 @@ The plan's floor estimate held. risk-refund stays at 2.0×: every run in both ar
 
 ## Candidates
 
-| Candidate | Change | Eval before → after | Kept |
+| Candidate | Change | Eval before → after | Outcome |
 |---|---|---|---|
 | (a) Bootstrap reuse clause | Not written | reuse-eval RED: `reused_helper` 3/3, `reimplemented` 0/3. The bootstrap already gets reuse right on this task. | Dropped; the fixture stays as a regression guard |
 | (b) TDD GREEN "reuse first", REFACTOR "simplify only the changed lines, drop checks for inputs no caller passes" | `skills/test-driven-development/SKILL.md`, two sentences | reuse-eval `guards_types` 1/3 → 2/3, code added [3,3,5] → [5,3,5] | **Reverted** |
-| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9; the plan's 3/3 pin was **not met** | Kept: detection moved 3/9 → 7/9 and no other fixture regressed |
+| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9; the plan's 3/3 pin was **not met** | **Reverted**: the fixture moved 3/9 → 7/9, but the finding fired in 1 of 57 benchmark transcripts while `grep -rn` transcripts roughly doubled, which is review work with no diff-size return, against Bearpaws' low-token aim. The fixture stays as a regression guard. |
 | (d) Same-class rule limited to reachable defects | Already shipped in `e9657dc` | — | — |
 | (e) Receipt line for deliberate shortcuts | Skipped as planned | — | — |
 
 **Why (b) failed.** The extra guards in reuse-eval do not come from refactoring. The agent classes the money task as elevated and dispatches a review. Because reuse-eval runs without `PLUGIN_DIR`, that review is a general-purpose subagent with a prompt the agent wrote itself; the plugin's reviewer templates are not loaded. That ad-hoc reviewer files "a bare string passed as `amounts`" as Important, and the agent adds a `TypeError` guard test-first. A TDD sentence cannot reach that path.
 
-**What (c) costs.** In the benchmark the word "reimplement" appears in 1 of 57 candidate transcripts and none of the control ones. Transcripts containing `grep -rn` (implementer or reviewer) rose from 13 to 24 on the risk suite and from 7 to 13 on routine, which suggests reviewers ran the new search. If so, that is review work with no diff-size return on these tasks. It may account for part of the cost rise, but the run cannot separate it from dispatch noise. On routine, `multi-file-refactor` dispatched review in 3/3 candidate runs against 0/3 control, at $0.179 against $0.075; the reviewer text cannot change that decision, which is made before the reviewer loads. Excluding that scenario, routine cost is $0.119 against $0.114. Keeping (c) is a judgment call: it closes a real reviewer gap on the fixture built for it and costs review time everywhere.
+**What (c) costs.** In the benchmark the word "reimplement" appears in 1 of 57 candidate transcripts and none of the control ones. Transcripts containing `grep -rn` (implementer or reviewer) rose from 13 to 24 on the risk suite and from 7 to 13 on routine, which suggests reviewers ran the new search. If so, that is review work with no diff-size return on these tasks. It may account for part of the cost rise, but the run cannot separate it from dispatch noise. On routine, `multi-file-refactor` dispatched review in 3/3 candidate runs against 0/3 control, at $0.179 against $0.075; the reviewer text cannot change that decision, which is made before the reviewer loads. Excluding that scenario, routine cost is $0.119 against $0.114. The benchmark's candidate arm ran with (c) in place, so its numbers measure (c); they are the evidence for reverting it. The branch ships with both reviewer templates identical to `main`.
 
 ## Benchmark
 
-- Runner: `tests/benchmark/run.sh` with the `7913275` summarizer (new `code_added`, `ref_code_added`, `code bloat`), Claude Code 2.1.316, Sonnet, `--jobs 3`. Arms in one invocation: `control` = worktree at `2bfe625` (`main`), `bearpaws` = this branch at `73915b0`.
+- Runner: `tests/benchmark/run.sh` with the `7913275` summarizer (new `code_added`, `ref_code_added`, `code bloat`), Claude Code 2.1.316, Sonnet, `--jobs 3`. Arms in one invocation: `control` = worktree at `2bfe625` (`main`), `bearpaws` = this branch at `73915b0`, with (c) in place (since reverted).
 - Data: [`2026-11-04-diff-size-reuse-risk.jsonl`](2026-11-04-diff-size-reuse-risk.jsonl) (60 rows) and [`2026-11-04-diff-size-reuse-routine.jsonl`](2026-11-04-diff-size-reuse-routine.jsonl) (54 rows). Out dirs: `/tmp/bearpaws-tests/reduce-size/bench/{risk,routine}`.
 
 ### Risk suite
