@@ -19,7 +19,7 @@ The plan's floor estimate held. risk-refund stays at 2.0×: every run in both ar
 |---|---|---|---|
 | (a) Bootstrap reuse clause | Not written | reuse-eval RED: `reused_helper` 3/3, `reimplemented` 0/3. The bootstrap already gets reuse right on this task. | Dropped; the fixture stays as a regression guard |
 | (b) TDD GREEN "reuse first", REFACTOR "simplify only the changed lines, drop checks for inputs no caller passes" | `skills/test-driven-development/SKILL.md`, two sentences | reuse-eval `guards_types` 1/3 → 2/3, code added [3,3,5] → [5,3,5] | **Reverted** |
-| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9; the plan's 3/3 pin was **not met** | **Reverted**: the fixture moved 3/9 → 7/9, but the finding fired in 1 of 57 benchmark transcripts while `grep -rn` transcripts roughly doubled, which is review work with no diff-size return, against Bearpaws' low-token aim. The fixture stays as a regression guard. |
+| (c) Reviewer: a reimplementation of an existing function is Important; grep the whole source tree, not only the diff | `agents/code-reviewer.md`, `skills/requesting-code-review/code-reviewer.md` | `FIXTURE=reimplemented` blocking and rejected 3/9 → 7/9; the plan's 3/3 pin was **not met** | **Reverted**: the fixture moved 3/9 → 7/9, but the finding fired in 1 of 57 benchmark transcripts while `grep -rn` transcripts roughly doubled, which is review work with no diff-size return, against Bearpaws' low-token aim. The fixture stays as a target for a future attempt. |
 | (d) Same-class rule limited to reachable defects | Already shipped in `e9657dc` | — | — |
 | (e) Receipt line for deliberate shortcuts | Skipped as planned | — | — |
 
@@ -63,7 +63,7 @@ reset-token escapes in every run of both arms; the control arm disclosed two of 
 
 ## Evals (Sonnet, n=3 unless noted; out dirs under `/tmp/bearpaws-tests/reduce-size/`)
 
-| Eval | RED (`main` skills) | Final |
+| Eval | RED (`main` skills; what ships) | With (c), since reverted |
 |---|---|---|
 | reuse-eval (new): fixed / reused / reimplemented / type guards / narrow diff | 3/3, 3/3, 0/3, 1/3, 3/3; code added [3,3,5]; $0.304 | 3/3, 3/3, 0/3, 1/3, 3/3; code added [3,5,3]; $0.314 |
 | risk-eval: all gates | 3/3; code added [1,1,3]; type guards 1/3 | 3/3; code added [1,1,1]; type guards 0/3 |
@@ -74,7 +74,7 @@ reset-token escapes in every run of both arms; the control arm disclosed two of 
 | review `overbuilt`, planted: rejected | 3/3, 3/3 | 3/3, 3/3 |
 | routing | 5/5 scenarios 3/3 | 5/5 scenarios 3/3 |
 
-reuse-eval, risk-eval and routing do not load the reviewer templates, so their final runs (on the first wording of (c)) stand for the final wording. The first wording of (c) and three tuned wordings each scored 2/3 on `reimplemented` (out dirs `green-c`, `green-c2`, `green-c3`, `green-c4`). The last, which adds the grep, was confirmed with six more runs per side (RED 2/6 on the control checkout's templates, final 5/6). Every other review fixture was re-run on the final wording. The first `reimplemented` RED reported "7 tests" against 10 in the file, and reviewers flagged the mismatch. It was discarded and the fixture's report corrected.
+The right-hand column was measured with (c) in place; the branch ships the RED column's templates. reuse-eval, risk-eval and routing do not load the reviewer templates, so their runs on the first wording of (c) stand for the last wording. The first wording of (c) and three tuned wordings each scored 2/3 on `reimplemented` (out dirs `green-c`, `green-c2`, `green-c3`, `green-c4`). The last, which adds the grep, was confirmed with six more runs per side (RED 2/6 on the control checkout's templates, final 5/6). Every other review fixture was re-run on the final wording. The first `reimplemented` RED reported "7 tests" against 10 in the file, and reviewers flagged the mismatch. It was discarded and the fixture's report corrected.
 
 ## Limits
 
