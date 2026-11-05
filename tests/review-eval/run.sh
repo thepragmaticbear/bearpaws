@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Run one reviewer template against the planted-defect fixture N times.
-# Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope] [AGENT_PROMPT=agents/code-reviewer.md] tests/review-eval/run.sh <template.md> <label> [runs] [out-dir]
+# Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope|rereview] [AGENT_PROMPT=agents/code-reviewer.md] tests/review-eval/run.sh <template.md> <label> [runs] [out-dir]
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 template="$1"; label="$2"; runs="${3:-3}"
 out="${4:-/tmp/bearpaws-tests/review-eval/$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$out"
+# Runs cd into a work dir before writing here: keep the out-dir absolute.
+out="$(cd "$out" && pwd)"
 for i in $(seq 1 "$runs"); do
   (
     work="$(mktemp -d)"

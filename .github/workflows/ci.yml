@@ -78,9 +78,15 @@ jobs:
       - uses: actions/checkout@v7
       - run: python3 tests/benchmark/test_integrity.py
       - run: python3 tests/benchmark/check_scenarios.py
+      - run: tests/eval-runners/run-path-tests.sh
       - run: python3 tests/review-eval/test_render.py
       - run: python3 tests/review-eval/test_score.py
       - run: python3 tests/drift-eval/test_score.py
+      - run: python3 tests/fixloop-eval/test_score.py
+      - run: python3 tests/builder-eval/test_score.py
+      - run: python3 tests/diagnose-eval/test_score.py
+      - run: python3 tests/reuse-eval/test_score.py
+      - run: python3 tests/risk-eval/test_score.py
       - run: bash tests/claude-code/test-native-plan-static.sh
 
   # Model-free: installs Bearpaws into a throwaway HOME and asks each pinned CLI

@@ -16,14 +16,17 @@ ORIGINAL_HELPER = '''def legacy_header(title):
 REIMPLEMENTED = re.compile(r"\bre\.|float\(|Decimal|\*\s*100\b|(replace|strip|split)\(\s*['\"][$.]")
 GUARDS = re.compile(r"isinstance\(|type\(|is None|\.get\(|\bNaN\b|math\.isnan|TypeError")
 
-cost = 0.0
+# total_cost_usd is cumulative per session and repeats on each result event: max per session.
+costs = {}
 for line in open(log, errors="replace"):
     try:
         ev = json.loads(line)
     except ValueError:
         continue
     if ev.get("type") == "result":
-        cost += ev.get("total_cost_usd") or 0
+        sid = ev.get("session_id")
+        costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+cost = sum(costs.values())
 
 def git(*args):
     return subprocess.run(["git", *args], cwd=work, capture_output=True, text=True).stdout

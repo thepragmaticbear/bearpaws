@@ -30,7 +30,7 @@ description: Use when about to create or change features, components, or behavio
     <step>**Propose 2-3 approaches** — with trade-offs and your recommendation. Lead with recommended option.</step>
     <step>**Present design** — scale each section to complexity. Ask after each section if it looks right. Cover: architecture, components, data flow, error handling, testing.</step>
     <step>**Write design doc** — save to `docs/bearpaws/plans/YYYY-MM-DD-{topic}-design.md` (user prefs override). Commit it if the user or project allows commits without asking; otherwise leave it uncommitted and say so.</step>
-    <step>**Spec self-review** — scan for placeholders/TBD, internal contradictions, scope creep, ambiguity. Fix inline.</step>
+    <step>**Spec self-review** — scan for placeholders/TBD, internal contradictions, scope creep, ambiguity. Fix inline. If the design covers elevated-risk work (see bp:using-bearpaws), dispatch a fresh subagent with ./builder-check-prompt.md, wait for its result, and answer or fold in each question before the user review. Routine designs skip it.</step>
     <step>**User reviews spec** — ask user to review before proceeding. Wait for approval.</step>
     <step>**Transition** — invoke bp:writing-plans. That is the ONLY next skill.</step>
   </process>
@@ -73,6 +73,6 @@ description: Use when about to create or change features, components, or behavio
     <rule>**Follow existing patterns** in existing codebases. Only propose improvements that serve the current goal.</rule>
   </rules>
 
-  <see file="spec-document-reviewer-prompt.md"/>
+  <see file="builder-check-prompt.md"/>
 
 </skill>

@@ -10,6 +10,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 skill="$1"; label="$2"; runs="${3:-3}"
 out="${4:-/tmp/bearpaws-tests/risk-eval/$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$out"
+# Runs cd into a work dir before writing here: keep the out-dir absolute.
+out="$(cd "$out" && pwd)"
 if [ -n "${PLUGIN_DIR:-}" ]; then PLUGIN_DIR="$(cd "$PLUGIN_DIR" && pwd)"; fi
 for i in $(seq 1 "$runs"); do
   (

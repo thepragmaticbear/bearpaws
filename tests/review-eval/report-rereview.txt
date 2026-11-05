@@ -1,0 +1,3 @@
+Fix round 1. The implementer reports DONE for the open findings from the previous review:
+- Important: src/billing.py:7-11 — refund() accepts a negative amount_cents: refund(order, -500) lowers refunded_cents and credits money back. Raise ValueError for a negative amount and add a test.
+- Important: src/billing.py:9 — refund() compares each amount with order.total_cents but not with the running total, so refund(order, 600) twice on a 1000-cent order records 1200. Check order.refunded_cents + amount_cents against order.total_cents and add a test.

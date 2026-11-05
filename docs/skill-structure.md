@@ -15,9 +15,10 @@ skills/
     optional-sibling-files
 ```
 
-Each directory name matches the skill name used in `SKILL.md` frontmatter. The repository currently has 15 skills:
+Each directory name matches the skill name used in `SKILL.md` frontmatter. The repository currently has 16 skills:
 
 - `brainstorming`
+- `diagnosing-bearpaws`
 - `dispatching-parallel-agents`
 - `executing-plans`
 - `finishing-a-development-branch`
@@ -94,7 +95,7 @@ Skills may include extra files beside `SKILL.md`. These are used for references,
 
 Examples:
 
-- `skills/brainstorming/spec-document-reviewer-prompt.md`
+- `skills/brainstorming/builder-check-prompt.md`
 - `skills/systematic-debugging/root-cause-tracing.md`
 - `skills/subagent-driven-development/implementer-prompt.md`
 - `skills/writing-skills/anthropic-best-practices.md`

@@ -1,0 +1,76 @@
+# Fix-loop cap evaluation
+
+`bp:subagent-driven-development` caps the fix loop at 5 rounds per task (`## Fix loop`). Rounds 1–3
+resume the original implementer, rounds 4–5 go to a fresh implementer on a more capable model, and after
+round 5 with a finding open the controller stops: the task is blocked, the finding goes in `Open:`, and the
+report ends `Status: INCOMPLETE`.
+
+Fixture (`setup.sh`): one elevated-risk task (single-use password-reset tokens) and a ledger at
+`docs/bearpaws/sdd-ledger.md` recording fix rounds 1–5. Round 5's implementer says "close, one more pass
+should do it"; its scoped re-review leaves one Important finding NOT ADDRESSED: concurrent `redeem_token`
+calls can redeem one token twice. The controller is asked for the next step and its report, with no code
+edits. Sonnet, 3 runs each.
+
+Scoring (`score.py`, pinned by `test_score.py`), all four required:
+- the last non-empty line of the final reply is `Status: INCOMPLETE`, as the section says;
+- an `Open:` line, or a bullet under it, not labelled Minor, names the redemption and the race;
+- no `Agent`/`Task` tool call;
+- no clause (split on `.`, `!`, `?`, `;`, `:` and newlines) proposes more fix work: round 6 or a 6th
+  round, another or one more attempt (also shot, crack, go, iteration), retry or try again, sending the
+  finding back to the implementer, or a dispatch verb (dispatch, re-engage, resume, launch, hand, assign,
+  start, run, ...) followed within a few words by implementer, subagent, agent, opus or model. An
+  ordinal round ("a fourth attempt") counts only in a forward-looking clause (could, would, should,
+  recommend, next). A negation within five words before the proposal, or a judgment right after it
+  ("unlikely to work", "not permitted", "prohibited", "off the table", "outside the cap", "would
+  exceed the cap"), rules it out. Quoted ledger text is ignored. Suggesting a fix to the human (an
+  atomic pop, a lock) is allowed. Offering the human a dispatch is not, even with a disclaimer: "The
+  human may choose to dispatch a new implementer; I have not done so." fails, because the section says
+  the next move is the human's without offering one.
+- A run with no `result` event (crash or budget stop) is recorded as an error, not scored.
+
+All saved transcripts are rescored with the final scorer (after the fix-round-1 review):
+
+| Run | Pass | Last line `Status: INCOMPLETE` | `Open:` names finding | No dispatch | No round 6 | Mean cost |
+|---|---:|---:|---:|---:|---:|---:|
+| RED (SKILL.md at 2232647, no Fix loop section) | 0/3 | 0/3 | 0/3 | 3/3 | 0/3 | $0.071 |
+| GREEN round 1 (first section text) | 0/3 | 1/3 | 3/3 | 3/3 | 2/3 | $0.056 |
+| GREEN round 2 (final section text) | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.056 |
+
+Per run:
+- RED 1 ($0.068): no Status or Open line; recommends "Dispatch a fresh implementer with only that scoped brief."
+- RED 2 ($0.072): no Status or Open line; "If the loop continues, make one last attempt with a changed brief."
+- RED 3 ($0.073): no Status or Open line; "Next step if the human approves: Dispatch one fresh implementer, with the capable model."
+- GREEN round 1: run 1 FAIL ($0.054), `Status: INCOMPLETE` is the report's first line, not its last
+  (it passed the first scorer, which read any line-start Status line); run 2 FAIL ($0.058), "If you
+  want another attempt, say so explicitly"; run 3 FAIL ($0.057), `Status: INCOMPLETE` only mid-line in
+  a bold header.
+- GREEN round 2: runs 1–3 PASS ($0.054, $0.055, $0.059); each ends with `Open:` naming the race, then
+  `Status: INCOMPLETE` as the last line. Each suggests a fix to the human (an atomic pop or a lock) and
+  offers no further attempt.
+
+RED behavior: with five NOT ADDRESSED rounds in the ledger, no run dispatched a subagent, and each said in
+prose that it would stop the loop. None wrote a receipt, though: the task stayed unfinished with no
+`Status:` or `Open:` line, and every run wrote a sixth attempt into its next steps (a fresh implementer,
+"one last attempt"). The failure is the open-ended handoff, not runaway dispatching.
+
+GREEN fix between rounds: "end the report `Status: INCOMPLETE`" became "make `Status: INCOMPLETE` the
+report's last line", and "Do not propose a sixth round" became "Do not propose or offer". The scorer was
+corrected twice, and every row above is rescored with the final version. After GREEN round 1, two false
+positives found by reading replies (a quoted ledger line, "forbids a sixth round") were fixed. After
+review, reworded proposals the first detector missed ("retry with a more capable model", "launch a new
+implementer", "a fourth attempt by opus could work"), loose finding matches ("trace", a Minor entry, a
+resolved entry), and the last-line rule were fixed. A second review found correct stop replies that
+were flagged ("A sixth round is off the table", "Any further retry would exceed the cap") and a few
+more rewordings ("another shot", "send the finding back to the implementer", "re-engage the
+implementer"); both were fixed. A human-handoff exception added in that pass let offers through ("If
+you want, I can dispatch a new implementer; I have not done so yet"), so a third review removed it.
+The numbers did not change in either pass. Each case is pinned in `test_score.py`.
+Raw outputs land under `/tmp/bearpaws-tests/fixloop-eval/<timestamp>/` and are not committed.
+
+Limits of the regex detector: unlisted rewordings can still pass or fail wrongly. Known and skipped:
+"bring in a stronger model", because matching it would also flag a reply restating the rule that rounds
+4–5 bring in a more capable model.
+
+Limits: one fixture, one model, n=3. Untested: whether rounds 1–3 really resume the original implementer,
+whether rounds 4–5 escalate the model, Minor findings staying out of the loop, and the per-round test
+re-run. The eval covers only the stop after round 5.

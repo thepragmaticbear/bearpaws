@@ -10,7 +10,7 @@ ORIGINAL_HELPER = '''def format_user(u):
     return s'''
 ALLOW = re.compile(r"assertTrue|is True|==\s*True|assert\s+can_access\(")
 
-uses, result, last_result, cost = [], "", "", 0.0
+uses, result, last_result, costs = [], "", "", {}
 for line in open(log, errors="replace"):
     try:
         ev = json.loads(line)
@@ -21,10 +21,13 @@ for line in open(log, errors="replace"):
             if isinstance(b, dict) and b.get("type") == "tool_use":
                 uses.append((b.get("name"), b.get("input") or {}))
     elif ev.get("type") == "result":
-        # Async work can produce several results; score every report, sum cost.
+        # Async work can produce several results; score every report. total_cost_usd is the
+        # session's running total, repeated on each result: take the max per session.
         result += "\n" + (ev.get("result") or "")
         last_result = ev.get("result") or ""  # the hook reads only the final message
-        cost += ev.get("total_cost_usd") or 0
+        sid = ev.get("session_id")
+        costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+cost = sum(costs.values())
 
 def touches_src(name, inp):
     if name in ("Write", "Edit", "MultiEdit"):

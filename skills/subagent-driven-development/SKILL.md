@@ -39,11 +39,20 @@ description: Use when executing implementation plans with independent tasks in t
     <step>**Dispatch implementer** — Fresh subagent per task (use ./implementer-prompt.md). Provide full task text + context. Never make subagent read the plan file. For an elevated-risk task (see Classify risk), say so and require: tests pinning behavior that must not change, run and seen passing before edits; a failing test for the risk first; a diff limited to the task.</step>
     <step>**Handle status** — DONE: proceed to review. DONE_WITH_CONCERNS: assess before review. NEEDS_CONTEXT: provide and re-dispatch. BLOCKED: assess (context problem → re-dispatch; reasoning problem → more capable model; too large → break up; plan wrong → escalate to human).</step>
     <step>**Classify risk** — A task is elevated-risk if it touches authentication or authorization, secrets or cryptography, money, data deletion or migration, untrusted input reaching paths, SQL, shell, or deserialization, concurrency, or a public API or schema, or if the plan marks it high-risk. Otherwise it is routine. When unsure, it is elevated-risk. Size does not lower risk: a one-line auth change is elevated-risk.</step>
-    <step>**Routine: combined review** — Dispatch one code reviewer subagent (./code-quality-reviewer-prompt.md) with the full task text as requirements; it checks spec compliance and code quality together. If issues: implementer fixes → re-review → repeat until ✅.</step>
-    <step>**Elevated-risk: two-stage review** — Dispatch spec reviewer subagent (./spec-reviewer-prompt.md); it must pass before the code quality review (./code-quality-reviewer-prompt.md). If either finds issues: implementer fixes → re-review → repeat until ✅.</step>
+    <step>**Routine: combined review** — Dispatch one code reviewer subagent (./code-quality-reviewer-prompt.md) with the full task text as requirements; it checks spec compliance and code quality together. If issues: implementer fixes → scoped re-review (./re-review-prompt.md) of the open findings and the fix diff → repeat (see Fix loop).</step>
+    <step>**Elevated-risk: two-stage review** — Dispatch spec reviewer subagent (./spec-reviewer-prompt.md); it must pass before the code quality review (./code-quality-reviewer-prompt.md). If either finds issues: implementer fixes → scoped re-review (./re-review-prompt.md) of the open findings and the fix diff → repeat (see Fix loop).</step>
     <step>**Mark complete, next task** — Check the task off in the plan. Proceed to next task.</step>
     <step>**Final review + finish** — After all tasks: dispatch final reviewer for entire implementation, then invoke bp:finishing-a-development-branch.</step>
   </process>
+
+  ## Fix loop
+
+  A fix round is one fix dispatch plus one scoped re-review. At most 5 rounds per task.
+  - **Rounds 1–3:** resume the original implementer with the open findings verbatim.
+  - **Rounds 4–5:** a fresh implementer on a more capable model, told how many attempts came before.
+  - Each implementer re-runs the tests covering the amended code and reports the command and output before the re-review is dispatched.
+  - **After round 5 with findings open:** stop dispatching. The task is blocked: list its findings in `Open:` and make `Status: INCOMPLETE` the report's last line. Do not propose or offer a sixth round or another implementer; the next move is the human's.
+  - Minor findings never enter the loop; note them for the final review.
 
   ## Model selection
 
@@ -59,7 +68,7 @@ description: Use when executing implementation plans with independent tasks in t
     <rule>Never let implementer self-review replace actual review.</rule>
     <rule>For elevated-risk tasks, spec compliance must pass BEFORE code quality review.</rule>
     <rule>Never downgrade a task to routine to save a review. If the classification is arguable, it is elevated-risk.</rule>
-    <rule>If reviewer finds issues: implementer fixes → reviewer re-reviews → repeat.</rule>
+    <rule>If reviewer finds issues: implementer fixes → scoped re-review (./re-review-prompt.md) of the open findings and the fix diff → repeat (see Fix loop).</rule>
     <rule>If subagent asks questions: answer clearly before letting them proceed.</rule>
     <rule>If subagent fails: dispatch fix subagent — don't fix manually (context pollution).</rule>
   </rules>
@@ -75,5 +84,6 @@ description: Use when executing implementation plans with independent tasks in t
   <see file="implementer-prompt.md"/>
   <see file="spec-reviewer-prompt.md"/>
   <see file="code-quality-reviewer-prompt.md"/>
+  <see file="re-review-prompt.md"/>
 
 </skill>

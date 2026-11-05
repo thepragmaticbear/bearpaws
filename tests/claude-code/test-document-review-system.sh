@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Integration Test: Document Review System
-# Actually runs spec/plan review and verifies reviewers catch issues
+# Actually runs the brainstorming builder check and verifies it catches open questions
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -12,8 +12,8 @@ echo "========================================"
 echo ""
 echo "This test verifies the document review system by:"
 echo "  1. Creating a spec with intentional errors"
-echo "  2. Running the spec document reviewer"
-echo "  3. Verifying the reviewer catches the errors"
+echo "  2. Running the builder check (skills/brainstorming/builder-check-prompt.md)"
+echo "  3. Verifying the builder raises the open questions"
 echo ""
 
 # Create test project
@@ -28,7 +28,7 @@ cd "$TEST_PROJECT"
 # Create directory structure
 mkdir -p docs/bearpaws/specs
 
-# Create a spec document WITH INTENTIONAL ERRORS for the reviewer to catch
+# Create a spec document WITH INTENTIONAL GAPS for the builder to catch
 cat > docs/bearpaws/specs/test-feature-design.md <<'EOF'
 # Test Feature Design
 
@@ -70,24 +70,19 @@ echo "Created test spec with intentional errors:"
 echo "  - TODO placeholder in Requirements section"
 echo "  - 'specified later' deferral in Architecture section"
 echo ""
-echo "Running spec document reviewer..."
+echo "Running builder check..."
 echo ""
 
 # Run Claude to review the spec
 OUTPUT_FILE="$TEST_PROJECT/claude-output.txt"
 
-PROMPT="You are testing the spec document reviewer.
+PROMPT="You are testing the brainstorming builder check.
 
-Read the spec-document-reviewer-prompt.md template in skills/brainstorming/ to understand the review format.
+Read the builder-check-prompt.md template in skills/brainstorming/ and act as the builder it describes.
 
-Then review the spec at $TEST_PROJECT/docs/bearpaws/specs/test-feature-design.md using the criteria from that template.
+The document is $TEST_PROJECT/docs/bearpaws/specs/test-feature-design.md.
 
-Look for:
-- TODOs, placeholders, 'TBD', incomplete sections
-- Sections saying 'to be defined later' or 'will spec when X is done'
-- Sections noticeably less detailed than others
-
-Output your review in the format specified in the template."
+Output your questions in the format specified in the template."
 
 # Portable timeout: prefer GNU timeout (Linux) → gtimeout (macOS coreutils) → no-op fallback
 portable_timeout() {
@@ -112,7 +107,7 @@ cd "$SCRIPT_DIR/../.." && portable_timeout 120 claude -p "$PROMPT" --plugin-dir 
 echo "================================================================================"
 
 echo ""
-echo "Analyzing reviewer output..."
+echo "Analyzing builder output..."
 echo ""
 
 # Verification tests
@@ -121,45 +116,43 @@ FAILED=0
 echo "=== Verification Tests ==="
 echo ""
 
-# Test 1: Reviewer found the TODO
-echo "Test 1: Reviewer found TODO..."
-if grep -qi "TODO" "$OUTPUT_FILE" && grep -qi "requirements\|Requirements" "$OUTPUT_FILE"; then
-    echo "  [PASS] Reviewer identified TODO in Requirements section"
+# Test 1: Builder asked about the missing requirements (the TODO)
+echo "Test 1: Builder raised the missing requirements..."
+if grep -qi "requirement" "$OUTPUT_FILE"; then
+    echo "  [PASS] Builder raised the missing requirements"
 else
-    echo "  [FAIL] Reviewer did not identify TODO"
+    echo "  [FAIL] Builder did not raise the missing requirements"
     FAILED=$((FAILED + 1))
 fi
 echo ""
 
-# Test 2: Reviewer found the "specified later" deferral
-echo "Test 2: Reviewer found 'specified later' deferral..."
+# Test 2: Builder raised the "specified later" deferral
+echo "Test 2: Builder raised 'specified later' deferral..."
 if grep -qi "specified later\|later\|defer\|incomplete\|error handling" "$OUTPUT_FILE"; then
-    echo "  [PASS] Reviewer identified deferred content"
+    echo "  [PASS] Builder raised the deferred content"
 else
-    echo "  [FAIL] Reviewer did not identify deferred content"
+    echo "  [FAIL] Builder did not raise the deferred content"
     FAILED=$((FAILED + 1))
 fi
 echo ""
 
-# Test 3: Reviewer output includes Issues section
-echo "Test 3: Review output format..."
-if grep -qi "issues\|Issues" "$OUTPUT_FILE"; then
-    echo "  [PASS] Review includes Issues section"
+# Test 3: Builder output uses the template's numbered entries ("1. [question] — [why]")
+echo "Test 3: Builder output format..."
+if grep -Eq '^[[:space:]*]*[0-9]+\.[[:space:]].*\?' "$OUTPUT_FILE"; then
+    echo "  [PASS] Builder lists numbered questions"
 else
-    echo "  [FAIL] Review missing Issues section"
+    echo "  [FAIL] Builder lists no numbered questions"
     FAILED=$((FAILED + 1))
 fi
 echo ""
 
-# Test 4: Reviewer did NOT approve (found issues)
-echo "Test 4: Reviewer verdict..."
-if grep -qi "Issues Found\|❌\|not approved\|issues found" "$OUTPUT_FILE"; then
-    echo "  [PASS] Reviewer correctly found issues (not approved)"
-elif grep -qi "Approved\|✅" "$OUTPUT_FILE" && ! grep -qi "Issues Found\|❌" "$OUTPUT_FILE"; then
-    echo "  [FAIL] Reviewer incorrectly approved spec with errors"
+# Test 4: Builder did NOT clear the spec
+echo "Test 4: Builder verdict..."
+if grep -qi "nothing important left" "$OUTPUT_FILE"; then
+    echo "  [FAIL] Builder said nothing important left for a spec with gaps"
     FAILED=$((FAILED + 1))
 else
-    echo "  [PASS] Reviewer identified problems (ambiguous format but found issues)"
+    echo "  [PASS] Builder did not clear the spec"
 fi
 echo ""
 
@@ -173,11 +166,11 @@ if [ $FAILED -eq 0 ]; then
     echo "STATUS: PASSED"
     echo "All verification tests passed!"
     echo ""
-    echo "The spec document reviewer correctly:"
-    echo "  ✓ Found TODO placeholder"
+    echo "The builder check correctly:"
+    echo "  ✓ Raised the missing requirements"
     echo "  ✓ Found 'specified later' deferral"
-    echo "  ✓ Produced properly formatted review"
-    echo "  ✓ Did not approve spec with errors"
+    echo "  ✓ Listed numbered questions"
+    echo "  ✓ Did not clear a spec with gaps"
     exit 0
 else
     echo "STATUS: FAILED"

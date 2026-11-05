@@ -14,7 +14,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 
 ## Repository layout
 
-- [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
+- [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace. Test scenarios and fixtures stay out of `skills/`: the validator fails any path under it that runs through a `tests/`, `evals/`, `fixtures/` or `scenarios/` directory (any case, also `test-data/`, `eval_cases/`), and any file with a scenario-campaign heading (`## Test Scenarios`, `##### Scenario 2`) or a bold `**Scenario 1:**` line.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
 - [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers); [tests/hooks/](tests/hooks/) pins each payload shape. `risk-gate` (PreToolUse/PostToolUse/Stop) enforces the risk receipt and the elevated-risk review in Claude Code only; [tests/hooks/run-risk-gate-tests.sh](tests/hooks/run-risk-gate-tests.sh) pins each rule. `git-commit-msg` is a git `commit-msg` hook (`install.sh --git`) that requires the same receipt in commit messages for any harness or person; it shares the receipt format with `risk-gate` through `lib-receipt`, and [tests/hooks/run-git-gate-tests.sh](tests/hooks/run-git-gate-tests.sh) pins each rule. `git-pre-push` (same install) flags commit emails that are not GitHub noreply or on the project's `Allowed commit emails:` line, once per remote, branch and commit set. `hooks-cursor.json` is the Cursor hook config. Hook compatibility does not imply support-tier promotion.
@@ -32,9 +32,11 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
 - [tests/benchmark/](tests/benchmark/) — full-session benchmark; primary metric is cost per accepted task, scored by held-out acceptance tests.
-- `tests/*-eval/`, [tests/codex/](tests/codex/) — RED/GREEN behavior evals for skill changes, and the Codex conformance smoke.
+- `tests/*-eval/`, [tests/codex/](tests/codex/) — RED/GREEN behavior evals for skill changes, and the Codex conformance smoke. Each eval has a `run.sh` (model runs, manual) and, where it has a scorer, a model-free `test_score.py` in CI: [tests/review-eval/](tests/review-eval/) (including the scoped re-review fixture), [tests/fixloop-eval/](tests/fixloop-eval/) (SDD fix-loop cap), [tests/builder-eval/](tests/builder-eval/) (brainstorming builder check), [tests/diagnose-eval/](tests/diagnose-eval/) (`diagnosing-bearpaws` citations), plus drift, resume, reuse, risk, verification and context evals. Each new eval records its numbers in an `evidence.md`.
+- [tests/eval-runners/](tests/eval-runners/) — model-free path checks: every eval runner, run from another cwd with a stub `claude`, writes its transcript under a relative out-dir.
 - [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
 - [docs/agent-support.md](docs/agent-support.md) — current support tiers and evidence by agent.
+- [docs/writing-skills/](docs/writing-skills/) — worked test campaigns for `bp:writing-skills`, kept out of `skills/` by the fixture rule.
 - [docs/bearpaws/release-notes/](docs/bearpaws/release-notes/) — release notes, starting with the v1.0.0 public baseline; new positioning changes belong in new release-note files, not retroactive edits to historical notes.
 
 ## Support posture
@@ -58,7 +60,7 @@ The plugin manifest [.claude-plugin/plugin.json](.claude-plugin/plugin.json) reg
 2. Wraps it in a `<warning level="hard">` block (per the current XML-like skill structure convention).
 3. Emits JSON in the platform-appropriate shape — Claude Code: `{ "hookSpecificOutput": { "hookEventName": "SessionStart", "additionalContext": "..." } }`; Devin CLI (`DEVIN_PROJECT_DIR` or `DEVIN_PLUGIN_ROOT`): the same nested `hookSpecificOutput` shape; Cursor: top-level `additional_context`; Copilot CLI and unknown SDK-style callers: top-level `additionalContext`. [tests/hooks/run-hook-tests.sh](tests/hooks/run-hook-tests.sh) pins each shape.
 
-The same `hooks/hooks.json` registers `risk-gate` on `PreToolUse` (Bash only, to baseline the work-tree fingerprint), `PostToolUse` and `Stop`. It keeps a per-session log of edits (and review dispatches) not yet accepted by a receipt under `${CLAUDE_PLUGIN_DATA}` (or `$TMPDIR`); a Stop that allows clears it, except that elevated work marked INCOMPLETE without a review, or with an open finding, stays pending, so a later reply with receipt lines is judged again (one with no Risk or Status line passes). Edits persist across turns, including background-agent report-backs. At Stop, it blocks a reply that edited files without a risk receipt, blocks elevated work marked COMPLETE without a review dispatched after the last edit (test-file edits included) or without an empty `Open:` line, blocks any COMPLETE reply whose `Open:` lists findings (unfixed Critical or Important findings force INCOMPLETE), and blocks a `Verified:` or `Pinned:` line that claims a test run the log does not show (after the last edit, or before the first). `session-start` adds a one-line `systemMessage` when the gate is inactive. It is a no-op outside Claude Code, without `jq`, or with `BEARPAWS_ENFORCE=0`. Edits made through Bash are detected in git repos by a tree fingerprint. Design: [docs/bearpaws/plans/2026-10-11-risk-gate-design.md](docs/bearpaws/plans/2026-10-11-risk-gate-design.md).
+The same `hooks/hooks.json` registers `risk-gate` on `PreToolUse` (Bash only, to baseline the work-tree fingerprint), `PostToolUse`, `PostToolUseFailure` (Bash only) and `Stop`. It keeps a per-session log of edits (and review dispatches) not yet accepted by a receipt under `${CLAUDE_PLUGIN_DATA}` (or `$TMPDIR`); a Stop that allows clears it, except that elevated work marked INCOMPLETE without a review, or with an open finding, stays pending, so a later reply with receipt lines is judged again (one with no Risk or Status line passes). Edits persist across turns, including background-agent report-backs. At Stop, it blocks a reply that edited files without a risk receipt, blocks elevated work marked COMPLETE without a review dispatched after the last edit (test-file edits included) or without an empty `Open:` line, blocks any COMPLETE reply whose `Open:` lists findings (unfixed Critical or Important findings force INCOMPLETE), and blocks a `Verified:` or `Pinned:` line that claims a test run the log does not show (after the last edit, or before the first). A run that exits nonzero (`PostToolUseFailure`, Bash only) is logged as failed, and so is one whose exit a pipe, `;` or `|| true` could hide when its output has a failure summary line; a background launch (`run_in_background` or a trailing `&`) is not a run, and `Pinned:` rests on the last run before any edit. `session-start` adds a one-line `systemMessage` when the gate is inactive. It is a no-op outside Claude Code, without `jq`, or with `BEARPAWS_ENFORCE=0`. Edits made through Bash are detected in git repos by a tree fingerprint. Design: [docs/bearpaws/plans/2026-10-11-risk-gate-design.md](docs/bearpaws/plans/2026-10-11-risk-gate-design.md).
 
 [hooks/run-hook.cmd](hooks/run-hook.cmd) is a bash/cmd polyglot so the same file works on macOS/Linux and Windows. Hook scripts under [hooks/](hooks/) are intentionally **extensionless** — Claude Code's Windows auto-detection prepends `bash` to anything ending in `.sh`, which would double-wrap the call.
 
@@ -98,7 +100,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 ## Tests
 
 ```bash
-tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
+tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, adversarial gates, and no test scenarios under skills/
 tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, --junie, and --git installer
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
 tests/hooks/run-risk-gate-tests.sh                                            # risk-gate decisions per rule (no CLI; needs jq)
@@ -109,9 +111,16 @@ tests/antigravity/run-adapter-tests.sh                                        # 
 tests/token-measurement/measure.sh                                            # bootstrap and skill-body byte counts (JSON)
 python3 tests/codex/test_conformance.py                                       # Codex conformance unit tests (no CLI)
 python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
+python3 tests/benchmark/check_scenarios.py                                    # each risk scenario's hidden attacks discriminate and are satisfiable
+tests/eval-runners/run-path-tests.sh                                          # eval runners keep a relative out-dir under the caller's cwd (stub claude, no model)
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
 python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 python3 tests/drift-eval/test_score.py                                        # drift-eval scorer tests (only the Drift: block counts)
+python3 tests/fixloop-eval/test_score.py                                      # fixloop-eval scorer tests (Status, Open, no round 6)
+python3 tests/builder-eval/test_score.py                                      # builder-eval scorer tests (dispatch, builder prompt, single-use question)
+python3 tests/diagnose-eval/test_score.py                                     # diagnose-eval scorer tests (citations, planted lines, read-only)
+python3 tests/reuse-eval/test_score.py                                        # reuse-eval scorer cost (each session counted once)
+python3 tests/risk-eval/test_score.py                                         # risk-eval scorer cost (each session counted once)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
@@ -127,13 +136,16 @@ tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <l
 tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # elevated-risk floor: pin behavior, narrow diff, assumptions
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
 tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  # finishing flags code that drifted from a checked-off plan (CLEAN=1: no-drift control)
+tests/fixloop-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # controller stops after fix round 5: INCOMPLETE, no round 6
+DESIGN=elevated tests/builder-eval/run.sh skills/brainstorming/SKILL.md <label>  # builder check runs for elevated designs only (DESIGN=routine: none)
+tests/diagnose-eval/run.sh skills/diagnosing-bearpaws/SKILL.md <label>          # diagnosis finds a masked test failure and an ignored finding, cites path:line (none: RED)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, shellcheck (`-S warning` over the hook scripts except `run-hook.cmd`, `install.sh` and `scripts/*.sh`), token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, shellcheck (`-S warning` over the hook scripts except `run-hook.cmd`, `install.sh` and `scripts/*.sh`), token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the eval-runner path checks, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.
 
@@ -166,7 +178,7 @@ Constraints worth knowing before editing frontmatter:
 - Frontmatter total ≤ 1024 chars; `name` is letters/numbers/hyphens only.
 - Heavy reference material (>100 lines) and reusable scripts go in sibling files; keep `SKILL.md` focused on the rule.
 
-See [docs/skill-structure.md](docs/skill-structure.md), [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md), and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a compact XML-like structure — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist, frontmatter spec, and `.agents/skills` layout on every commit.
+See [docs/skill-structure.md](docs/skill-structure.md), [skills/writing-skills/SKILL.md](skills/writing-skills/SKILL.md), and [skills/writing-skills/anthropic-best-practices.md](skills/writing-skills/anthropic-best-practices.md) for the full conventions. All skill bodies use a compact XML-like structure — the validator at [tests/schema-validator/run-validator.sh](tests/schema-validator/run-validator.sh) enforces the tag whitelist, frontmatter spec, `.agents/skills` layout, and the fixture rule (no test scenarios under `skills/`) on every commit.
 
 ## Commit conventions
 

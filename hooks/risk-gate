@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Risk gate for Claude Code. Sends the agent back when pending edits have no risk
 # receipt, or when elevated work is COMPLETE without a review after the last edit.
-# Also blocks a Verified or Pinned line that claims a test run the log doesn't show.
-# Modes: baseline (PreToolUse on Bash), record (PostToolUse), stop (Stop).
+# Also blocks a Verified or Pinned line that claims a test run the log doesn't show, or whose last run failed.
+# Modes: baseline (PreToolUse on Bash), record (PostToolUse, and PostToolUseFailure on Bash), stop (Stop).
 # The log holds edits and test runs not yet accepted by a receipt; an allowing stop clears it,
 # except elevated INCOMPLETE work with no review or with an open finding, which stays
 # pending: a later reply with receipt lines is judged again, one without them passes.
@@ -40,8 +40,8 @@ REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[
 TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]*\.(test|spec)\.(jsx?|tsx?|mjs|cjs)|[^/]*_spec\.rb|[^/]*Test\.java)$'
 # Test run: a runner in command position (start, or after ; & | ( or a backtick), after optional
 # VAR=value and wrappers. A command that only mentions one (echo pytest, cat tests/x.sh) is not a run.
-# ponytail: exit status is not checked, so a failing run counts as a run; newlines become ;, so a
-# heredoc or commit-message line that starts with a runner name also counts.
+# Its outcome is recorded below (test-run or test-fail). Newlines become ;, so a heredoc or
+# commit-message line that starts with a runner name also counts as a run.
 TR_POS='(^|[;&|(`])[[:space:]]*'
 # Prefixes, each then whitespace: VAR=value, run/exec and plain wrappers, docker exec|run <ctr>; or sh -c.
 TR_VAR='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*'
@@ -58,6 +58,20 @@ TR_RAKE='rake([[:space:]]+-[^[:space:]]+)*([[:space:]]+(test|spec)(:[^[:space:];
 TR_SCRIPT='(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py)'
 TR_END='([[:space:];&|)'\''"]|$)'
 TESTRUN="$TR_POS(($TR_VAR|$TR_EXEC|$TR_WRAP|$TR_DOCKER)[[:space:]]+|$TR_SHC)*$TR_DIR($TR_RUN|$TR_PM|$TR_BUILD|$TR_RAKE|$TR_SCRIPT)$TR_END"
+# A failure summary at the start of an output line (ANSI colors removed), for runs whose exit status
+# a pipe, "|| true" or ";" may have hidden. One alternative per runner family: pytest, unittest,
+# jest/vitest, go, cargo, rspec/bats, mocha, phpunit, node --test, ctest, and "N [NAME] TEST(S) FAILED"
+# suites. Counts must be nonzero, so "0 failed", "# fail 0" and "0 TESTS FAILED" still pass.
+TESTFAIL='^[=[:space:]]*([0-9]+ [a-z]+, )*[1-9][0-9]* (failed|errors?)(, [^=]*)? in [0-9.]+ ?(m?s|seconds)( \([0-9:]+\))?[[:space:]=]*$'
+TESTFAIL+='|^FAILED \((failures|errors)=|^FAILED [^[:space:]]+::|^[[:space:]]*(Tests|Test Files):?[[:space:]]+([0-9]+ [a-z]+, )*[1-9][0-9]* failed'
+TESTFAIL+='|^--- FAIL:|^FAIL'$'\t''|^(FAIL|ERROR): [A-Za-z_][A-Za-z0-9_]* \([A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\)[[:space:]]*$|^test result: FAILED|^[0-9]+ (examples?|tests?), [1-9][0-9]* failures?|^[[:space:]]*[1-9][0-9]* failing[[:space:]]*$'
+TESTFAIL+='|^(FAILURES|ERRORS)!|^(#|ℹ) fail [1-9]|^[0-9]+% tests passed, [1-9][0-9]* tests? failed|^[1-9][0-9]* ([A-Z-]+ )?TESTS?(\(S\))? FAILED'
+# TAP: a "not ok" line is a failure unless its directive is # TODO or # SKIP (checked apart: ERE cannot negate).
+TAPFAIL='^not ok [0-9]'
+TAPOK='#[[:space:]]*(todo|skip)'
+HIDES='[|;&]'
+# A trailing lone & (not &&, |&, >& or &>) backgrounds the command: it has no result yet.
+BG='(^|[^&>|])&$'
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -96,13 +110,12 @@ track_tree() { # <cwd> <tool>
   return 0
 }
 
-# Accept the pending work: clear the log, but keep a test run that followed the last edit,
+# Accept the pending work: clear the log, but keep a passing test run that followed the last edit,
 # so the next turn's Pinned can rest on it.
 accept() {
-  local e r
-  e="$(grep -nE '^edit(-test)? ' "$log" | tail -1 | cut -d: -f1)"
-  r="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
-  if [ "${r:-0}" -gt "${e:-0}" ]; then echo test-run >"$log"; else rm -f "$log"; fi
+  # Only a pass that no later edit or failed run superseded.
+  if awk '/^edit(-test)? /{e=NR} /^test-run$/{r=NR} /^test-fail$/{f=NR} END{exit !(r>e && r>f)}' "$log"; then
+    echo test-run >"$log"; else rm -f "$log"; fi
   exit 0
 }
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
@@ -147,10 +160,14 @@ case "$mode" in
         path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
+        # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits:
+        # skip a path under one of those dirs unless the session cwd is inside that dir too. Checked on the
+        # absolute path, before it is made cwd-relative, so a session whose cwd is HOME still skips them.
+        [ -n "${HOME:-}" ] && [ "$path" = "${HOME%/}/.claude.json" ] && exit 0
+        for d in ${HOME:+"${HOME%/}/.claude" "${HOME%/}/.bearpaws"} ${CLAUDE_CONFIG_DIR:+"${CLAUDE_CONFIG_DIR%/}"}; do
+          case "$path" in "$d"/*) case "$cwd/" in "$d"/*) ;; *) exit 0 ;; esac ;; esac
+        done
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
-        # Claude's own config, memory, and plan files are not project edits.
-        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json) exit 0 ;; esac
-        [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
           # Test-file edits are logged apart: Pinned needs a run only before the first non-test edit.
@@ -162,7 +179,26 @@ case "$mode" in
         # Tree first: files the run itself writes land before its test-run line.
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         cmd="$(jq -r '.tool_input.command // empty' <<<"$input")"
-        [[ "${cmd//$'\n'/;}" =~ $TESTRUN ]] && echo test-run >>"$log"
+        if [[ "${cmd//$'\n'/;}" =~ $TESTRUN ]]; then
+          # A nonzero exit arrives as PostToolUseFailure. An exit of 0 is a pass unless the command could
+          # hide the status and its output shows a failure summary. A background launch has no result yet.
+          read -r event bg < <(jq -r '"\(.hook_event_name // "-") \(.tool_input.run_in_background // false)"' <<<"$input")
+          # Trailing whitespace off for the & test; fd redirections (2>&1, &>) and && off for the hide test:
+          # neither can hide a failing runner's exit status.
+          flat="${cmd//$'\n'/;}"; trimmed="${flat%"${flat##*[![:space:];]}"}"; plain="${flat//>&/}"; plain="${plain//&>/}"; plain="${plain//&&/}"
+          outcome=test-run
+          if [ "$event" = PostToolUseFailure ]; then outcome=test-fail
+          elif [ "$bg" = true ] || [[ "$trimmed" =~ $BG ]]; then outcome=""
+          elif [[ "$plain" =~ $HIDES ]]; then
+            # Capture first: grep -q exits at its first match, and under pipefail jq's SIGPIPE would hide it.
+            out="$(jq -r '.tool_response | if type == "object" then [.stdout // "", .stderr // ""] | join("\n")
+                          elif type == "string" then . else "" end | gsub("\u001b\\[[0-9;]*[A-Za-z]"; "")' <<<"$input" 2>/dev/null)"
+            if grep -qE "$TESTFAIL" <<<"$out" || { grep -E "$TAPFAIL" <<<"$out" | grep -viE "$TAPOK" >/dev/null; }; then
+              outcome=test-fail
+            fi
+          fi
+          [ -n "$outcome" ] && echo "$outcome" >>"$log"
+        fi
         ;;
       Agent|Task|SendMessage)
         # Reviewer subagent_type, or a matching description (SendMessage: summary, not to main). Never the prompt.
@@ -176,8 +212,8 @@ case "$mode" in
   stop)
     [ -f "$log" ] && grep -qE '^edit(-test)? ' "$log" || exit 0
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
-    if field Risk elevated; then risk=elevated
-    elif field Risk routine; then risk=routine
+    if field_last Risk elevated; then risk=elevated
+    elif field_last Risk routine; then risk=routine
     # Pending from an earlier INCOMPLETE, nothing since, and no receipt now: an unrelated reply passes.
     elif [ "$(tail -1 "$log")" = pending ] && ! grep -qiE "${LEAD}(Risk|Status)${TRAIL}:" <<<"$msg"; then exit 0
     else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion."
@@ -189,15 +225,26 @@ case "$mode" in
     # Bash edits carry no path and may be the failing test, so they count only when nothing else does.
     first_edit="$(grep -n '^edit ' "$log" | grep -vF ':edit (bash)' | head -1 | cut -d: -f1)"
     [ -n "$first_edit" ] || first_edit="$(grep -nE '^edit(-test)? ' "$log" | head -1 | cut -d: -f1)"
-    first_run="$(grep -n '^test-run$' "$log" | head -1 | cut -d: -f1)"
-    last_run="$(grep -n '^test-run$' "$log" | tail -1 | cut -d: -f1)"
+    # One pass over the log: first and last passing run, last failed run, and whether the last run
+    # before any edit failed (a pass that a later failure superseded does not pin; the failing-first
+    # run after a test edit is expected and does not unpin).
+    read -r first_run last_run last_fail pin_failed < <(awk '
+      /^edit(-test)? / { if (!fa) fa = NR }
+      /^test-run$/  { if (!fr) fr = NR; lr = NR; if (!fa) lb = "run" }
+      /^test-fail$/ { lf = NR; if (!fa) lb = "fail" }
+      END { print fr + 0, lr + 0, lf + 0, (lb == "fail") }' "$log")
+    [ "$first_run" -gt 0 ] || first_run="$first_edit"
     # Verified claims a run when any clause (split on ; , ( ) and ". ") names a runner, says passed next
     # to test/spec or a count, or says "tests ok", "suite green" or "all 41 green", and that clause
     # does not say the run did not happen ("1 skipped" and "skipped=2" are counts, not cancels).
     verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
     # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
-    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "${verified#*:}" && [ "${last_run:-0}" -le "$last_edit" ]; then
-      block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
+    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "${verified#*:}"; then
+      if [ "$last_fail" -gt "$last_edit" ] && [ "$last_fail" -gt "$last_run" ]; then
+        block "Verified: claims a test run, but the last test run after the edit failed (nonzero exit, or a failure summary in its output). Fix and rerun, or say Status: INCOMPLETE."
+      elif [ "$last_run" -le "$last_edit" ]; then
+        block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
+      fi
     fi
     # Pinned (its last line) claims a run unless it starts with none, n/a, no, not, nothing, skipped,
     # "there were no" or a dash, or says one of those anywhere and no pass/ok/green; it must precede
@@ -206,8 +253,8 @@ case "$mode" in
     if [ "$incomplete" = 0 ] && [[ "$pinned" =~ [^*_\`[:space:]] ]] \
        && ! grep -qiE '^[*_`[:space:](]*((none|n/?a|n\.a\.?|no|not|nothing|skip(ped)?|there (were|was|are|is) no)([^[:alnum:]]|$)|(-|—)([[:space:]]|$))' <<<"$pinned" \
        && ! { grep -qiE "(^|[^[:alnum:]])$NEG([^[:alnum:]]|$)" <<<"$pinned" && ! grep -qiE "$OKW" <<<"$pinned"; } \
-       && [ "${first_run:-$first_edit}" -ge "$first_edit" ]; then
-      block "Pinned: claims tests passed before the edit, but no test run was logged before the first edit. Correct the line: Pinned: none, and why."
+       && { [ "$first_run" -ge "$first_edit" ] || [ "$pin_failed" = 1 ]; }; then
+      block "Pinned: claims tests passed before the edit, but no passing test run was logged before the first edit (none ran, or the last one failed). Correct the line: Pinned: none, and why."
     fi
     if [ "$risk" = elevated ]; then
       # The review must follow the last edit of any kind: a test edit can weaken what the review saw.
