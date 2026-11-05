@@ -160,10 +160,14 @@ case "$mode" in
         path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
+        # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits:
+        # skip a path under one of those dirs unless the session cwd is inside that dir too. Checked on the
+        # absolute path, before it is made cwd-relative, so a session whose cwd is HOME still skips them.
+        [ -n "${HOME:-}" ] && [ "$path" = "${HOME%/}/.claude.json" ] && exit 0
+        for d in ${HOME:+"${HOME%/}/.claude" "${HOME%/}/.bearpaws"} ${CLAUDE_CONFIG_DIR:+"${CLAUDE_CONFIG_DIR%/}"}; do
+          case "$path" in "$d"/*) case "$cwd/" in "$d"/*) ;; *) exit 0 ;; esac ;; esac
+        done
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
-        # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits.
-        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json|"${HOME%/}"/.bearpaws/*) exit 0 ;; esac
-        [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
           # Test-file edits are logged apart: Pinned needs a run only before the first non-test edit.

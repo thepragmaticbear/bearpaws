@@ -31,9 +31,10 @@ edit() { # <path> [VAR=value ...]
   gate record "$(jq -cn --arg s "$SID" --arg p "$p" \
     '{session_id:$s,tool_name:"Edit",tool_input:{file_path:$p}}')" "$@"
 }
-editc() { # <cwd> <path>
-  gate record "$(jq -cn --arg s "$SID" --arg c "$1" --arg p "$2" \
-    '{session_id:$s,cwd:$c,tool_name:"Edit",tool_input:{file_path:$p}}')"
+editc() { # <cwd> <path> [VAR=value ...]
+  local c="$1" p="$2"; shift 2
+  gate record "$(jq -cn --arg s "$SID" --arg c "$c" --arg p "$p" \
+    '{session_id:$s,cwd:$c,tool_name:"Edit",tool_input:{file_path:$p}}')" "$@"
 }
 dispatch() { # <tool_name> <subagent_type> <description> [prompt]
   gate record "$(jq -cn --arg s "$SID" --arg t "$1" --arg st "$2" --arg d "$3" --arg p "${4:-}" \
@@ -272,6 +273,13 @@ reset; edit "/cfg/dirx/a.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "
 reset; edit "$H/.bearpaws/diagnosing/x/report.md" HOME="$H"; stop "Saved."; expect "temp HOME: write under ~/.bearpaws is not an edit" allow
 reset; edit "$H/.bearpaws-other/x/main.py" HOME="$H"; stop "Done."; expect "~/.bearpaws-other project is an edit" block "risk receipt"
 reset; edit "$H/project/.bearpaws/x.md" HOME="$H"; stop "Done."; expect ".bearpaws inside a project is an edit" block "risk receipt"
+# Session cwd is HOME: the skip is checked before the path is made cwd-relative.
+reset; editc "$H" "$H/.bearpaws/diagnosing/x/report.md" HOME="$H"; stop "Saved."; expect "cwd HOME: write under ~/.bearpaws is not an edit" allow
+reset; editc "$H" "$H/.claude/plans/p.md" HOME="$H"; stop "Saved."; expect "cwd HOME: write under ~/.claude is not an edit" allow
+reset; editc "$H" "$H/app/src/main.py" HOME="$H"; stop "Done."; expect "cwd HOME: project file is an edit" block "risk receipt"
+# A session working inside ~/.bearpaws or ~/.claude still has its edits recorded.
+reset; editc "$H/.bearpaws/repo" "$H/.bearpaws/repo/src/a.py" HOME="$H"; stop "Done."; expect "cwd inside ~/.bearpaws: edit is recorded" block "risk receipt"
+reset; editc "$H/.claude/repo" "$H/.claude/repo/src/a.py" HOME="$H"; stop "Done."; expect "cwd inside ~/.claude: edit is recorded" block "risk receipt"
 
 # Opt-out and other harnesses: always allow.
 reset; edit src/app.py; stop "Done."; expect "edited log blocks without an opt-out" block "risk receipt"
