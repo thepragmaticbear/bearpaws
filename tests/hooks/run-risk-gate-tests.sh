@@ -679,7 +679,9 @@ done
 # Test outcomes: a run whose exit status was hidden (piped to tail, || true) still shows its failure
 # summary in the output, and a background launch has no result yet. Neither counts as a passing run.
 ranout() { # <command> <stdout> [background]
-  gate record "$(jq -cn --arg s "$SID" --arg c "$1" --arg o "$2" --argjson b "${3:-false}" \
+  # The output goes through a file: Linux caps one argument at 128 KB, and the large-output case is bigger.
+  printf '%s' "$2" >"$TMP_ROOT/stdout"
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" --rawfile o "$TMP_ROOT/stdout" --argjson b "${3:-false}" \
     '{session_id:$s,tool_name:"Bash",tool_input:{command:$c,run_in_background:$b},tool_response:{stdout:$o,stderr:"",interrupted:false,isImage:false}}')"
 }
 while IFS= read -r o; do
