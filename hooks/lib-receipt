@@ -1,9 +1,18 @@
+# shellcheck shell=bash
 # Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
 
 # Path-name heuristic for work that looks elevated-risk.
-SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|migrat|schema|sql'
+SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|pricing|migrat|schema|sql'
+# Ordinary words that contain a SENSITIVE term, removed before matching (tokenizer, schematic, priceless).
+BENIGN='tokeniz|schemati|priceless'
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
+# sensitive_paths: print the stdin lines that look elevated-risk, case-insensitively, after removing BENIGN
+# words, so tokenizer.py passes while tokenstore.go and sessionManager.ts match. Through ENVIRON, not -v,
+# so awk keeps backslashes.
+sensitive_paths() { bn="$BENIGN" ci="$SENSITIVE" LC_ALL=C awk '{ l = tolower($0); gsub(ENVIRON["bn"], "", l) } l ~ ENVIRON["ci"]'; }
+
 # field <key> <value regex>: a receipt line in $msg, tolerating bullets and markdown bold/backticks.
+# shellcheck disable=SC2154 # msg is set by the sourcing hook.
 field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }

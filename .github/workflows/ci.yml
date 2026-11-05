@@ -17,6 +17,15 @@ jobs:
       - uses: actions/checkout@v7
       - run: tests/schema-validator/run-validator.sh
 
+  # shellcheck is preinstalled on ubuntu-latest. run-hook.cmd is a bash/cmd polyglot, so it is left out.
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: shellcheck --version
+      - run: shellcheck -S warning hooks/session-start hooks/risk-gate hooks/lib-receipt hooks/git-commit-msg hooks/git-pre-push install.sh scripts/*.sh
+
   token-measurement:
     name: token-measurement
     runs-on: ubuntu-latest

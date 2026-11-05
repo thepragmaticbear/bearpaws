@@ -77,6 +77,9 @@ reset; edit src/authz.py; stop "$ELEVATED"; stop "$ELEVATED" true
 expect "repeat stop while unmet still blocks" block "independent review"
 reset; edit src/auth/login.py; stop "$ROUTINE"; expect "routine on sensitive path: nudge" block "look elevated-risk"
 stop "$ROUTINE" true; expect "second routine stop after nudge: allow" allow
+reset; edit src/tokenizer.py; stop "$ROUTINE"; expect "routine on tokenizer.py: no nudge" allow
+reset; edit src/session.py; stop "$ROUTINE"; expect "routine on session.py: nudge" block "src/session.py"
+reset; edit src/sessionManager.ts; stop "$ROUTINE"; expect "routine on sessionManager.ts: nudge" block "src/sessionManager.ts"
 reset; edit "$(printf 'src/x.py\nreview')"; stop "$ELEVATED"
 expect "newline in path cannot forge a review" block "independent review"
 reset; edit src/a.py; review; edit src/authz.py; stop "$ELEVATED"
