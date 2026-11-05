@@ -99,7 +99,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm install --no-save --prefix "$RUNNER_TEMP/clis" @openai/codex@0.160.0 opencode-ai@1.18.34 @github/copilot@1.0.91
+      # OpenCode 2.x ships as @opencode/cli; opencode-ai stays on the 1.x line.
+      # Both install an `opencode` bin, so 1.x gets its own prefix and run.
+      - run: npm install --no-save --prefix "$RUNNER_TEMP/clis" @openai/codex@0.166.0 @opencode/cli@2.2.5 @github/copilot@1.0.105
+      - run: npm install --no-save --prefix "$RUNNER_TEMP/opencode1" opencode-ai@1.19.5
       - run: tests/harness-wiring/run.sh
         env:
           HARNESSES: codex opencode copilot
@@ -107,3 +110,8 @@ jobs:
           CODEX_BIN: ${{ runner.temp }}/clis/node_modules/.bin/codex
           OPENCODE_BIN: ${{ runner.temp }}/clis/node_modules/.bin/opencode
           COPILOT_BIN: ${{ runner.temp }}/clis/node_modules/.bin/copilot
+      - run: tests/harness-wiring/run.sh
+        env:
+          HARNESSES: opencode
+          REQUIRE: opencode
+          OPENCODE_BIN: ${{ runner.temp }}/opencode1/node_modules/.bin/opencode
