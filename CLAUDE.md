@@ -113,6 +113,7 @@ tests/eval-runners/run-path-tests.sh                                          # 
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
 python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 python3 tests/drift-eval/test_score.py                                        # drift-eval scorer tests (only the Drift: block counts)
+python3 tests/fixloop-eval/test_score.py                                      # fixloop-eval scorer tests (Status, Open, no round 6)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
