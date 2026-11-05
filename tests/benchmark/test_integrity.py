@@ -738,6 +738,7 @@ class RunnerTests(unittest.TestCase):
                                      "--out", str(pathlib.Path(temp) / "out")], capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn("no scenarios selected", result.stderr + result.stdout)
+            self.assertNotIn("unbound", result.stderr)
 
     def test_relative_out_and_plugin_dir_resolve_from_the_callers_cwd(self):
         # Each session runs inside its work dir: relative --out and label=dir paths must not resolve there.
@@ -761,7 +762,6 @@ class RunnerTests(unittest.TestCase):
             stream = root / "out" / "runs" / "small-bug" / "x" / "1" / "stream.jsonl"
             self.assertTrue(stream.exists(), result.stdout + result.stderr)
             self.assertIn("plugin dir found: True", stream.read_text())
-            self.assertNotIn("unbound", result.stderr)
 
     def test_snapshot_lives_under_out_and_is_removed(self):
         body = ('out = pathlib.Path(os.environ["BENCH_OUT"])\n'
