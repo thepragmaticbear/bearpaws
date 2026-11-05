@@ -128,6 +128,7 @@ tests/verification-eval/run.sh skills/verification-before-completion/SKILL.md <l
 tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # elevated-risk floor: pin behavior, narrow diff, assumptions
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
 tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  # finishing flags code that drifted from a checked-off plan (CLEAN=1: no-drift control)
+tests/fixloop-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # controller stops after fix round 5: INCOMPLETE, no round 6
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)

@@ -45,6 +45,15 @@ description: Use when executing implementation plans with independent tasks in t
     <step>**Final review + finish** — After all tasks: dispatch final reviewer for entire implementation, then invoke bp:finishing-a-development-branch.</step>
   </process>
 
+  ## Fix loop
+
+  A fix round is one fix dispatch plus one scoped re-review. At most 5 rounds per task.
+  - **Rounds 1–3:** resume the original implementer with the open findings verbatim.
+  - **Rounds 4–5:** a fresh implementer on a more capable model, told how many attempts came before.
+  - Each implementer re-runs the tests covering the amended code and reports the command and output before the re-review is dispatched.
+  - **After round 5 with findings open:** stop dispatching. The task is blocked: list its findings in `Open:` and make `Status: INCOMPLETE` the report's last line. Do not propose or offer a sixth round or another implementer; the next move is the human's.
+  - Minor findings never enter the loop; note them for the final review.
+
   ## Model selection
 
   Use the least powerful model that handles each role:
