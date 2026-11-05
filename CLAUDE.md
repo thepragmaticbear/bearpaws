@@ -109,6 +109,7 @@ tests/antigravity/run-adapter-tests.sh                                        # 
 tests/token-measurement/measure.sh                                            # bootstrap and skill-body byte counts (JSON)
 python3 tests/codex/test_conformance.py                                       # Codex conformance unit tests (no CLI)
 python3 tests/benchmark/test_integrity.py                                     # benchmark isolation and scoring tests
+tests/eval-runners/run-path-tests.sh                                          # eval runners keep a relative out-dir under the caller's cwd (stub claude, no model)
 python3 tests/review-eval/test_render.py                                      # review-eval renderer tests
 python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 python3 tests/drift-eval/test_score.py                                        # drift-eval scorer tests (only the Drift: block counts)

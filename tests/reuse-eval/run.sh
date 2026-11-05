@@ -11,6 +11,8 @@ label="$1"; runs="${2:-3}"
 out="${3:-/tmp/bearpaws-tests/reuse-eval/$(date +%Y%m%d-%H%M%S)}"
 root="$(cd "${SKILL_ROOT:-$HERE/../..}" && pwd)"
 mkdir -p "$out"
+# Runs cd into a work dir before writing here: keep the out-dir absolute.
+out="$(cd "$out" && pwd)"
 if [ -n "${PLUGIN_DIR:-}" ]; then PLUGIN_DIR="$(cd "$PLUGIN_DIR" && pwd)"; fi
 for i in $(seq 1 "$runs"); do
   (

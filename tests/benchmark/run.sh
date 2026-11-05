@@ -127,6 +127,8 @@ run_one() {
             *) echo "Unknown arm: $arm" >&2; return 1 ;;
         esac
     fi
+    # The session runs inside $work: a relative plugin dir would resolve there.
+    if [ ${#plugin_args[@]} -gt 0 ]; then plugin_args[1]="$(cd "${plugin_args[1]}" && pwd)" || return 1; fi
 
     # Snapshot before the agent starts; digest stays in the controller's shell.
     # This detects persistent tampering; bypassPermissions is not OS isolation.
@@ -184,6 +186,8 @@ CHECKER_SRC="$(python3 "$SCRIPT_DIR/summarize.py" --checker-source)"
 export SCRIPT_DIR REPO_ROOT OUT MODEL BUDGET SESSION_TIMEOUT SUFFIX CHECKER_ISOLATION CHECKER_SRC
 
 mkdir -p "$OUT"
+# Sessions and checkers cd into their work dirs: keep the output path absolute.
+OUT="$(cd "$OUT" && pwd)"
 echo "Output: $OUT (model=$MODEL runs=$RUNS arms=[$ARMS])"
 
 # Interleave arms within each run index so drift over time affects all arms alike.

@@ -738,6 +738,29 @@ class RunnerTests(unittest.TestCase):
                                      "--out", str(pathlib.Path(temp) / "out")], capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn("no scenarios selected", result.stderr + result.stdout)
+
+    def test_relative_out_and_plugin_dir_resolve_from_the_callers_cwd(self):
+        # Each session runs inside its work dir: relative --out and label=dir paths must not resolve there.
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            bench = root / "tests" / "benchmark"
+            shutil.copytree(pathlib.Path(__file__).parent, bench, ignore=shutil.ignore_patterns("__pycache__"))
+            (root / "plug").mkdir()
+            fake = root / "bin" / "claude"
+            fake.parent.mkdir()
+            fake.write_text("#!/usr/bin/env python3\nimport json,os,sys\n"
+                            "d = sys.argv[sys.argv.index('--plugin-dir') + 1]\n"
+                            "print(json.dumps({'type':'result', 'subtype':'success', 'is_error':False,"
+                            " 'result':'plugin dir found: ' + str(os.path.isdir(d))}))\n")
+            fake.chmod(0o755)
+            env = dict(os.environ, PATH=str(fake.parent) + os.pathsep + os.environ["PATH"])
+            result = subprocess.run(["bash", str(bench / "run.sh"), "--runs", "1", "--jobs", "1", "--arms", "x=plug",
+                                     "--scenarios", "small-bug", "--out", "out", "--allow-unisolated"],
+                                    cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            stream = root / "out" / "runs" / "small-bug" / "x" / "1" / "stream.jsonl"
+            self.assertTrue(stream.exists(), result.stdout + result.stderr)
+            self.assertIn("plugin dir found: True", stream.read_text())
             self.assertNotIn("unbound", result.stderr)
 
     def test_snapshot_lives_under_out_and_is_removed(self):
