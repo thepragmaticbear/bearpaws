@@ -40,6 +40,7 @@ words before it (the receipt quote `Open: none` is not a negation).
 | GREEN round 4 (threshold) | 2/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0/3 | $0.209 |
 | GREEN round 5 | 2/3 | 3/3 | 3/3 | 2/3 | 3/3 | 0/3 | $0.200 |
 | GREEN round 6 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0/3 | $0.215 |
+| GREEN round 7 (grep width 40) | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0/3 | $0.192 |
 
 Rows for RED and rounds 1-3 are rescored with the fix-round scorer (negation, `miscited`, full-path
 match, headings after the findings heading). Pass counts did not change. GREEN round 1 run 2 lost
@@ -81,6 +82,14 @@ Report. The fixture's timestamps are now monotonic.
   read. Only runs 1 and 3 show a command naming `prompts/`, though run 2's Coverage says it read the
   five dimension prompts.
 
+- GREEN round 7 ($0.201, $0.170, $0.203): all pass, no dispatch, each Coverage gives a byte count.
+  Before it, the citation check `grep -o '.\{0,60\}FRAGMENT.\{0,60\}'` failed in Claude Code's shell,
+  where `grep` wraps ugrep ("exceeds complexity limits" at widths 50 and 60; 45 and under work), in
+  green4 run 1, green5 runs 2-3 and green6 run 3; those runs fell back to other reads. The width is
+  now 40 in SKILL.md, analyst-common.md and context-safety.md, checked under the shell's grep and
+  /usr/bin/grep on fixture lines 25, 30 and 32, with a fallback (`grep -bo` for the byte offset, then
+  `cut -b`). Round 7's streams contain no "exceeds complexity" error.
+
 What the skill changes here: citations. Without it the diagnosis is right but not checkable (wrong
 or missing line numbers). With it, every finding carried a full path and a correct 1-based line in
 round 3.
@@ -89,5 +98,7 @@ Limits: one fixture, one model, n=3. The fixture is under the 100 KB threshold, 
 is exercised only by round 2's runs (and round 3 run 3), which predate the threshold; with analysts a
 run costs $2.5-4.4 instead of about $0.2. Intake (one question at a time) and session matching are
 untested: the prompt supplies the problem statement and the session id. Coverage claims ("read every
-line", "read the dimension prompts") are the agent's own and are not scored. Raw outputs land under
+line", "read the dimension prompts") are the agent's own and are not scored. The scorer's negation
+window is three words: a negation further back ("there is no evidence that the run failed") still
+counts as a claim. Raw outputs land under
 `/tmp/bearpaws-tests/diagnose-eval/<timestamp>/` and are not committed.
