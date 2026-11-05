@@ -50,10 +50,16 @@ In Claude Code, a `Stop` hook enforces the floor:
 
 - A reply that leaves file edits pending without a receipt is blocked.
 - Elevated work cannot end `Status: COMPLETE` unless a review was dispatched after the last edit, test-file edits included, and `Open:` says `none`. A finding the review raised and you did not fix keeps the work INCOMPLETE. `Status: INCOMPLETE` is always allowed.
-- A `Verified:` line that claims a test run is blocked when no test command ran after the last edit. A `Pinned:` line that claims tests passed before the edit is blocked when none ran before the first edit.
+- A `Verified:` line that claims a test run is blocked when no test command ran after the last edit, or when the last run after it failed. A run fails when it exits nonzero, or when a pipe, `;` or `|| true` could have hidden its exit status and its output has a failure summary line (`1 failed … in 0.1s`, `FAILED (failures=1)`, `--- FAIL:`, `test result: FAILED`, …). A background launch (`run_in_background`, or a trailing `&`) is not a run, and `Pinned:` needs the last run before any edit to have passed; the failing-first run after a test edit does not count against it. A `Pinned:` line that claims tests passed before the edit is blocked when none ran before the first edit.
 - Routine work that edited sensitive-looking paths (auth, token, payment, migration, sql, …) gets a one-time nudge to reclassify or say why it is routine.
 
-Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later. When it is off or `jq` is missing, the session starts with a one-line notice. Elsewhere, these rules are instructions only. The hook checks the receipt against what the session actually did (edits, test commands, review dispatches). It does not check that a test passed or that every line is true. Known limits: a failing test run still counts as a run, and a heredoc or commit-message line that starts with a runner name (`pytest`, `npm test`, …) counts as one too. So a passing gate is not proof that the tests passed.
+Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later. When it is off or `jq` is missing, the session starts with a one-line notice. Elsewhere, these rules are instructions only. The hook checks the receipt against what the session actually did (edits, test commands, review dispatches). It does not rerun tests or check that every line is true. Known limits:
+
+- A failing run with a hidden exit status still counts as a pass when its output lacks a recognized summary line (cut off by `tail -1`, or a runner the patterns don't know), or when a script hides the status inside itself (`"test": "jest || true"`).
+- A chained command that fails after passing tests (`pytest && git push`) counts as a failed run, and a suite with an unrelated failure never yields a passing run.
+- A heredoc or commit-message line that starts with a runner name (`pytest`, `npm test`, …) counts as a run.
+
+So a passing gate is not proof that the tests passed.
 
 ### Git gate
 

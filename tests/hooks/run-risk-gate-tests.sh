@@ -664,6 +664,163 @@ for c in "echo pytest" "git log --grep 'go test'" "grep -r cargo test src" "vim 
   reset; edit src/ui/button.py; ran "$c"; stop "$R_TESTED"; expect "not a test runner: '$c'" block "Verified"
 done
 
+# Test outcomes: a run whose exit status was hidden (piped to tail, || true) still shows its failure
+# summary in the output, and a background launch has no result yet. Neither counts as a passing run.
+ranout() { # <command> <stdout> [background]
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" --arg o "$2" --argjson b "${3:-false}" \
+    '{session_id:$s,tool_name:"Bash",tool_input:{command:$c,run_in_background:$b},tool_response:{stdout:$o,stderr:"",interrupted:false,isImage:false}}')"
+}
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "pytest 2>&1 | tail -5" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "hidden failure counts as no run: '$o'" block "failed"
+done <<'OUT'
+1 failed, 3 passed in 0.12s
+==== 2 failed, 1 passed, 1 warning in 0.31s ====
+1 error in 0.05s
+...F\n----\nFAILED (failures=1)
+FAILED (errors=2, skipped=1)
+Tests:       1 failed, 4 passed, 5 total
+ Tests  1 failed | 3 passed (4)
+--- FAIL: TestRefund (0.00s)
+FAIL\texample.com/billing\t0.012s
+test result: FAILED. 3 passed; 1 failed; 0 ignored
+3 examples, 1 failure
+  4 passing (12ms)\n  1 failing
+not ok 2 rejects negative amounts
+FAILURES!\nTests: 5, Assertions: 9, Failures: 1.
+# fail 1
+FAIL: refund rejects negative\n1 RISK-GATE TEST(S) FAILED
+OUT
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "pytest 2>&1 | tail -5" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "passing output still counts: '$o'" allow
+done <<'OUT'
+12 passed in 0.40s
+12 passed, 0 failed in 0.40s
+test_failed_login_is_logged PASSED\n1 passed in 0.02s
+Ran 4 tests in 0.001s\n\nOK
+Tests:       5 passed, 5 total
+test result: ok. 3 passed; 0 failed; 0 ignored
+3 examples, 0 failures
+ok  \texample.com/billing\t0.012s
+  4 passing (12ms)
+# fail 0
+ALL RISK-GATE TESTS PASSED
+OUT
+reset; edit src/ui/button.py
+gate record "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"Bash",tool_input:{command:"pytest | tail -1"},tool_response:"1 failed, 2 passed in 0.1s"}')"
+stop "$R_TESTED"; expect "string tool_response with a failure summary: no run" block "failed"
+reset; edit src/ui/button.py; ranout "pytest" "" true; stop "$R_TESTED"
+expect "background test launch is not a run" block "Verified"
+reset; edit src/ui/button.py; ranout "pytest" "" true; ranout "pytest" "3 passed in 0.1s"; stop "$R_TESTED"
+expect "background launch, then a passing foreground run: allow" allow
+reset; edit src/ui/button.py; ranout "pytest | tail -1" "1 failed in 0.1s"; ranout "pytest | tail -1" "2 passed in 0.1s"; stop "$R_TESTED"
+expect "hidden failure, then a passing run: allow" allow
+reset; edit src/ui/button.py; ranout "pytest -k one | tail -1" "1 passed in 0.1s"; ranout "pytest | tail -1" "1 failed, 1 passed in 0.1s"; stop "$R_TESTED"
+expect "a pass, then a later hidden failure: the last run failed" block "failed"
+reset; ranout "pytest | tail -1" "1 failed in 0.1s"; edit src/authz.py; ranout "pytest" "4 passed in 0.1s"; review; stop "$E_TESTED"
+expect "Pinned on a run that failed before the edit: block" block "Pinned"
+reset; edit src/ui/button.py; ranout "pytest | tail -1" "1 failed in 0.1s"; stop "${R_TESTED/Status: COMPLETE/Status: INCOMPLETE}"
+expect "hidden failure with INCOMPLETE: allow" allow
+# Summaries are matched at the start of a line, so log lines and echoed labels in passing output do not count.
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "pytest -v 2>&1 | tail -40" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "passing output with a failure-like line: '$o'" allow
+done <<'OUT'
+test_retry PASSED\nattempt 1 failed in 0.2s\n3 passed in 0.4s
+NO TESTS FAILED
+0 TESTS FAILED\nALL TESTS PASSED
+FAIL count: 0\nok  \texample.com/billing\t0.01s
+not ok 3 # TODO not built yet\n# fail 0
+OK: hidden failure counts as no run: '1 failed, 3 passed in 0.12s'\nALL RISK-GATE TESTS PASSED
+OUT
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "npm test | tail -5" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "hidden failure counts as no run: '$o'" block "failed"
+done <<'OUT'
+ℹ tests 3\nℹ pass 2\nℹ fail 1
+80% tests passed, 1 tests failed out of 5
+Tests: 1 failed, 2 passed, 3 total
+2 TESTS FAILED
+OUT
+# A plain run that exited 0 passed: its output is not scanned.
+reset; edit src/ui/button.py; ranout "pytest" "1 failed in 0.1s"; stop "$R_TESTED"
+expect "unpiped run that exited 0 counts as a pass" allow
+# An early failure followed by a large output is still seen.
+reset; edit src/ui/button.py
+ranout "go test -v ./... | tail -9999" "--- FAIL: TestRefund (0.00s)
+$(for i in $(seq 1 6000); do echo "--- PASS: TestCase$i (0.00s)"; done)"
+stop "$R_TESTED"; expect "early failure in a large output: no run" block "failed"
+# A test command that exits nonzero reaches the hook as PostToolUseFailure.
+failrun() { # <command>
+  gate record "$(jq -cn --arg s "$SID" --arg c "$1" '{session_id:$s,hook_event_name:"PostToolUseFailure",tool_name:"Bash",tool_input:{command:$c},error:"Exit code 1\n1 failed"}')"
+}
+reset; edit src/ui/button.py; ranout "pytest" "3 passed in 0.1s"; failrun "pytest"; stop "$R_TESTED"
+expect "a pass, then a nonzero test run: the last run failed" block "failed"
+reset; edit src/ui/button.py; ranout "pytest" "3 passed in 0.1s"; failrun "npm install"; stop "$R_TESTED"
+expect "a nonzero non-test command is not a run" allow
+# A pass that a later failure superseded does not pin, and is not carried into the next turn.
+reset; ranout "pytest" "4 passed in 0.1s"; ranout "pytest | tail -1" "1 failed in 0.1s"; edit src/authz.py; ranout "pytest" "4 passed in 0.1s"; review; stop "$E_TESTED"
+expect "Pinned on a pass that a later failure superseded: block" block "Pinned"
+reset; edit src/ui/button.py; ranout "pytest" "4 passed in 0.1s"; ranout "pytest | tail -1" "1 failed in 0.1s"; stop "${R_TESTED/Status: COMPLETE/Status: INCOMPLETE}"
+if [ -s "$(logfile)" ] && grep -qx test-run "$(logfile)"; then fail "accept keeps a pass that a later failure superseded"; else echo "OK: accept drops a superseded pass"; fi
+# Failing first: the run after the test edit is meant to fail, and must not unpin the earlier pass.
+reset; ranout "pytest" "4 passed in 0.1s"; edit tests/test_authz.py; failrun "pytest tests/test_authz.py"; edit src/authz.py; ranout "pytest" "5 passed in 0.1s"; review; stop "$E_TESTED"
+expect "TDD: pin, test edit, nonzero failing-first run, fix: Pinned holds" allow
+reset; ranout "pytest" "4 passed in 0.1s"; edit tests/test_authz.py; ranout "pytest | tail -1" "1 failed, 4 passed in 0.1s"; edit src/authz.py; ranout "pytest" "5 passed in 0.1s"; review; stop "$E_TESTED"
+expect "TDD: pin, test edit, hidden failing-first run, fix: Pinned holds" allow
+# A shell & launch has no result yet.
+reset; edit src/ui/button.py; ranout "pytest &" ""; stop "$R_TESTED"
+expect "shell & test launch is not a run" block "Verified"
+reset; edit src/ui/button.py; ranout "pytest > out.log 2>&1 &" ""; stop "$R_TESTED"
+expect "shell & test launch with redirects is not a run" block "Verified"
+reset; edit src/ui/button.py; ranout "cd app && pytest 2>&1 | tail -3" "3 passed in 0.1s"; stop "$R_TESTED"
+expect "&& and 2>&1 are not background launches" allow
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "npm test 2>&1 | tail -40" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "passing output with a failure-like line: '$o'" allow
+done <<'OUT'
+  2 failing over to replica\n  4 passing (12ms)
+1 error in 3ms (retrying)\n3 passed in 0.4s
+FAIL\nretry ok\n3 passed in 0.4s
+not ok 3 # SKIP no network\n# fail 0
+not ok 4 # todo later\nok 5 works
+OUT
+while IFS= read -r o; do
+  reset; edit src/ui/button.py; ranout "bats test | tail -5" "$(printf '%b' "$o")"; stop "$R_TESTED"
+  expect "hidden failure counts as no run: '$o'" block "failed"
+done <<'OUT'
+not ok 2 issue #42 regression
+2 tests, 1 failure
+FAILED tests/test_a.py::test_x - assert 1 == 2
+\033[31m==== 1 failed, 2 passed in 0.12s ====\033[0m
+\033[1m Test Files \033[22m 1 failed | 2 passed (3)
+1 failed, 2 passed in 0.10 seconds
+OUT
+# Only a trailing & backgrounds the test run; other & uses and fd redirections leave a foreground run.
+for c in "python -m http.server & pytest" "npm start & sleep 2 && npm test" "pytest |& tee out.log" \
+         "curl 'h/x?a=1&b=2'; pytest" 'pytest -k "x&y"'; do
+  reset; edit src/ui/button.py; ranout "$c" "3 passed in 0.1s"; stop "$R_TESTED"
+  expect "foreground run with a non-trailing &: '$c'" allow
+done
+# A redirect alone does not hide the exit status, so an exit-0 run is a pass whatever its log lines say.
+reset; edit src/ui/button.py; ranout "pytest 2>&1" "$(printf 'FAIL: flaky upstream log\n3 passed in 0.1s')"; stop "$R_TESTED"
+expect "pytest 2>&1 with a FAIL: log line: pass" allow
+reset; edit src/ui/button.py; ranout "pytest | tail -5" "$(printf 'FAIL: retrying upstream\n3 passed in 0.1s')"; stop "$R_TESTED"
+expect "piped run with a generic FAIL: log line: pass" allow
+reset; edit src/ui/button.py; ranout "python -m unittest | tail -9" "$(printf 'FAIL: test_refund (tests.test_billing.T)\n----\nRan 3 tests')"; stop "$R_TESTED"
+expect "unittest FAIL: header for a test: failed" block "failed"
+# && cannot hide a failing runner's exit, so an exit-0 run chained with && is a pass.
+reset; edit src/ui/button.py; ranout "cd app && python -m unittest" "$(printf 'FAIL: test_x (t.T) retried\nRan 3 tests\n\nOK')"; stop "$R_TESTED"
+expect "cd && runner that exited 0: pass" allow
+# Log lines shaped like a unittest header but not one: a pass.
+for o in 'ERROR: ECONNREFUSED (retrying)' 'FAIL: upstream_check (will retry)'; do
+  reset; edit src/ui/button.py; ranout "npm test 2>&1 | tail -40" "$(printf '%s\n  4 passing (12ms)' "$o")"; stop "$R_TESTED"
+  expect "piped pass with log line '$o'" allow
+done
+reset; edit src/ui/button.py; ranout "python -m unittest | tail -9" "$(printf 'ERROR: test_refund (tests.test_billing.T.test_refund)\nRan 3 tests')"; stop "$R_TESTED"
+expect "unittest 3.11 ERROR: header: failed" block "failed"
+
 bashrun() { # <cwd> <command>
   gate record "$(jq -cn --arg s "$SID" --arg d "$1" --arg c "$2" '{session_id:$s,cwd:$d,tool_name:"Bash",tool_input:{command:$c}}')"
 }
