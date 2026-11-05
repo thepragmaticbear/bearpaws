@@ -32,7 +32,7 @@ log="$dir/$sid.log"
 umask 077
 mkdir -p "$dir" 2>/dev/null && [ -O "$dir" ] && [ ! -L "$dir" ] && [ ! -L "$log" ] || exit 0
 
-# SENSITIVE (one nudge per pending batch), LEAD, TRAIL and field(). Without it, allow.
+# sensitive_paths() (one nudge per pending batch), LEAD, TRAIL and field(). Without it, allow.
 . "$(dirname "${BASH_SOURCE[0]}")/lib-receipt" 2>/dev/null || exit 0
 # Review description: starts with "review" (closed list of prefixes), not followed by a fix word.
 REVIEW_DESC='^\W*((code|spec|final|security|independent|quality|plan|design|re)[\s-]+)*review(ing)?\b(?!\W*(fix|feedback|comment|finding|follow))'
@@ -42,7 +42,22 @@ TESTFILE='(^|/)(tests?|__tests__)/|(^|/)(test_[^/]*\.py|[^/]*_test\.(py|go)|[^/]
 # VAR=value and wrappers. A command that only mentions one (echo pytest, cat tests/x.sh) is not a run.
 # ponytail: exit status is not checked, so a failing run counts as a run; newlines become ;, so a
 # heredoc or commit-message line that starts with a runner name also counts.
-TESTRUN='(^|[;&|(`])[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec|time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?|docker([[:space:]]+compose)?[[:space:]]+(exec|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*)[[:space:]]+|(bash|sh)[[:space:]]+-[a-z]*c[[:space:]]+['\''"]?)*([^[:space:];&|]*/)?(pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|(npm|pnpm|yarn|bun)([[:space:]]+(--prefix|--dir|--cwd|-C)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t|(go|cargo|mix|dotnet|deno|swift|mvn|mvnw|gradle|gradlew|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal)([[:space:]]+-[^[:space:]]+)*[[:space:]]+test|cargo[[:space:]]+nextest|rake([[:space:]]+-[^[:space:]]+)*([[:space:]]+(test|spec)(:[^[:space:];&|]*)?|[[:space:]]*$|[[:space:]]*[;&|)])|(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py))([[:space:];&|)'\''"]|$)'
+TR_POS='(^|[;&|(`])[[:space:]]*'
+# Prefixes, each then whitespace: VAR=value, run/exec and plain wrappers, docker exec|run <ctr>; or sh -c.
+TR_VAR='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*'
+TR_EXEC='(uv|poetry|pipenv|pdm|hatch|rye)[[:space:]]+run|npx|pnpx|bunx|uvx|(npm|pnpm|yarn|bun)[[:space:]]+exec|pnpm|yarn|bun|bundle[[:space:]]+exec'
+TR_WRAP='time|nice|env|xvfb-run|rtk([[:space:]]+(test|proxy))?|timeout[[:space:]]+[0-9]+[smh]?'
+TR_DOCKER='docker([[:space:]]+compose)?[[:space:]]+(exec|run)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*'
+TR_SHC='(bash|sh)[[:space:]]+-[a-z]*c[[:space:]]+['\''"]?'
+TR_DIR='([^[:space:];&|]*/)?'
+# Runners: bare tools, package-manager test, build-tool test, rake, test scripts and modules.
+TR_RUN='pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest'
+TR_PM='(npm|pnpm|yarn|bun)([[:space:]]+(--prefix|--dir|--cwd|-C)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+test(:[^[:space:];&|]*)?|npm[[:space:]]+t'
+TR_BUILD='(go|cargo|mix|dotnet|deno|swift|mvn|mvnw|gradle|gradlew|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal)([[:space:]]+-[^[:space:]]+)*[[:space:]]+test|cargo[[:space:]]+nextest'
+TR_RAKE='rake([[:space:]]+-[^[:space:]]+)*([[:space:]]+(test|spec)(:[^[:space:];&|]*)?|[[:space:]]*$|[[:space:]]*[;&|)])'
+TR_SCRIPT='(scripts?|bin)/tests?|python3?(\.[0-9]+)?[[:space:]]+-m[[:space:]]+(pytest|unittest)|node[[:space:]]+--test|((bash|sh|python3?)[[:space:]]+)?[^[:space:];&|]*tests?/[^[:space:];&|]*\.(sh|py)'
+TR_END='([[:space:];&|)'\''"]|$)'
+TESTRUN="$TR_POS(($TR_VAR|$TR_EXEC|$TR_WRAP|$TR_DOCKER)[[:space:]]+|$TR_SHC)*$TR_DIR($TR_RUN|$TR_PM|$TR_BUILD|$TR_RAKE|$TR_SCRIPT)$TR_END"
 
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
@@ -211,7 +226,7 @@ case "$mode" in
     [ "$incomplete" = 1 ] || { open_state routine || block "$OPEN_LISTED"; }
     [ "$incomplete" = 1 ] && accept
     grep -qx nudged "$log" && accept
-    hits="$(grep -E '^edit(-test)? ' "$log" | sed -E 's/^edit(-test)? //' | grep -iE "$SENSITIVE" | sort -u | head -5 | tr '\n' ' ')"
+    hits="$(grep -E '^edit(-test)? ' "$log" | sed -E 's/^edit(-test)? //' | sensitive_paths | sort -u | head -5 | tr '\n' ' ')"
     [ -n "$hits" ] || accept
     echo nudged >>"$log"
     block "Edited ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt."

@@ -344,6 +344,51 @@ fi
 
 echo "OK: Grok installer (requires --global, skills via ~/.agents/skills, owned rule, idempotent, never clobbers, GROK_HOME)"
 
+# ========== Junie Installer Tests ==========
+JUNIE_HOME_DIR="$TMP_ROOT/junie-home"
+JUNIE_SKILLS="$JUNIE_HOME_DIR/.junie/skills"
+mkdir -p "$JUNIE_SKILLS/beta"
+echo mine > "$JUNIE_SKILLS/beta/mine.txt"
+ln -s "$TMP_ROOT/unrelated-skill" "$JUNIE_SKILLS/unrelated"
+echo "my own guidelines" > "$JUNIE_HOME_DIR/.junie/AGENTS.md"
+
+if ( cd "$WORK" && HOME="$JUNIE_HOME_DIR" ./install.sh --junie ) >/dev/null 2>&1; then
+  echo "FAIL: install should require --global for junie"
+  exit 1
+fi
+test ! -e "$JUNIE_SKILLS/gamma"
+
+( cd "$WORK" && HOME="$JUNIE_HOME_DIR" ./install.sh --junie --global ) >"$TMP_ROOT/bearpaws-install-junie.log" 2>&1
+test -L "$JUNIE_SKILLS/gamma"
+test -f "$JUNIE_SKILLS/using-bearpaws/SKILL.md"
+test -L "$JUNIE_SKILLS/unrelated"      # foreign links survive
+test ! -L "$JUNIE_SKILLS/beta"         # name collisions are skipped, never clobbered
+test -f "$JUNIE_SKILLS/beta/mine.txt"
+test ! -e "$JUNIE_HOME_DIR/.agents"    # Junie wiring does not touch ~/.agents
+grep -qx "my own guidelines" "$JUNIE_HOME_DIR/.junie/AGENTS.md"   # AGENTS.md is never edited
+test "$(wc -l < "$JUNIE_HOME_DIR/.junie/AGENTS.md" | tr -d ' ')" = 1
+grep -qF 'add this line to ~/.junie/AGENTS.md' "$TMP_ROOT/bearpaws-install-junie.log"
+grep -qF 'Before responding to any request, read `~/.junie/skills/using-bearpaws/SKILL.md` and follow it.' "$TMP_ROOT/bearpaws-install-junie.log"
+
+# Idempotency: our own links are refreshed, not skipped
+out_junie="$( cd "$WORK" && HOME="$JUNIE_HOME_DIR" ./install.sh --junie --global 2>&1 )"
+if grep -qE 'Skipping (gamma|using-bearpaws)' <<<"$out_junie"; then
+  echo "FAIL: own Junie links skipped on rerun"
+  exit 1
+fi
+test -f "$JUNIE_SKILLS/gamma/SKILL.md"
+
+# JUNIE_HOME relocates Junie's config root, and the printed line follows it
+JUNIE_RELOC_HOME="$TMP_ROOT/junie-reloc-home"
+mkdir -p "$JUNIE_RELOC_HOME"
+out_reloc="$( cd "$WORK" && HOME="$JUNIE_RELOC_HOME" JUNIE_HOME="$JUNIE_RELOC_HOME/custom-junie" ./install.sh --junie --global 2>&1 )"
+test -f "$JUNIE_RELOC_HOME/custom-junie/skills/using-bearpaws/SKILL.md"
+test ! -e "$JUNIE_RELOC_HOME/.junie"
+test ! -e "$JUNIE_RELOC_HOME/custom-junie/AGENTS.md"
+grep -qF "read \`$JUNIE_RELOC_HOME/custom-junie/skills/using-bearpaws/SKILL.md\` and follow it." <<<"$out_reloc"
+
+echo "OK: Junie installer (requires --global, skills in ~/.junie/skills, never clobbers, idempotent, AGENTS.md untouched, bootstrap line, JUNIE_HOME)"
+
 # ========== Git Gate Installer Tests ==========
 mkdir -p "$WORK/hooks"
 cp "$REPO_ROOT/hooks/git-commit-msg" "$REPO_ROOT/hooks/git-pre-push" "$REPO_ROOT/hooks/lib-receipt" "$WORK/hooks/"

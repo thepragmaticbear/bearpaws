@@ -68,6 +68,21 @@ stage_in b.py; printf '%s\n' "$ROUTINE" >"$TMP_ROOT/msg"; rc=0; (cd "$R2" && bas
 # Run from a subdirectory: paths are still repo-relative.
 reset; stage src/auth/login.py; printf '%s\n' "$ROUTINE" >"$TMP_ROOT/msg"; rc=0; (cd "$R/src" && bash "$GATE" "$TMP_ROOT/msg") 2>"$TMP_ROOT/err" || rc=$?
 [ "$rc" = 0 ] && grep -qF src/auth/login.py "$TMP_ROOT/err" && echo "OK: warning from a subdirectory" || fail "subdir run: rc=$rc err=$(cat "$TMP_ROOT/err")"
+# session, token, schema and price match anywhere in a path, except inside a BENIGN word like tokenizer.
+reset; stage src/tokenizer.py; gate "$ROUTINE"; expect "routine on tokenizer.py does not warn" pass
+reset; stage src/session.py; gate "$ROUTINE"; expect "routine on session.py still warns" warn "src/session.py"
+reset; stage src/sessionManager.ts; gate "$ROUTINE"; expect "routine on sessionManager.ts warns" warn "src/sessionManager.ts"
+for p in src/session.py app/sessions/store.ts lib/userSession.ts auth/accessToken.ts tokens.json db/schema.sql \
+  schemas/user.json pricing/price_list.py prices.csv login.py migrations/001.sql src/auth/x.go a/passwd \
+  CREDENTIALS.md secret.txt crypto.go permission.rb acl.c policy.yml payment.py billing.ts invoice.py money.go query.sql \
+  src/sessionManager.ts auth/TokenStore.ts lib/tokenService.ts db/schemaRegistry.ts src/PriceCalculator.ts pricing.ts \
+  ui/sessionStorage-polyfill.js src/tokenstore.go src/sessionstore.go src/tokenvalidator.go src/pricecalc.go pricelist.py \
+  src/schemaregistry.ts; do
+  [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: sensitive_paths matches $p" || fail "sensitive_paths should match $p"
+done
+for p in src/tokenizer.py src/Tokenizer.ts docs/schematic.svg lib/priceless.md README.md; do
+  [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && fail "sensitive_paths should not match $p" || echo "OK: sensitive_paths does not match $p"
+done
 
 # Skips.
 reset; stage src/x.py; : >"$(git -C "$R" rev-parse --path-format=absolute --git-path MERGE_HEAD)"; gate "Resolve conflicts"; expect "merge in progress skips" pass
@@ -121,7 +136,7 @@ git -C "$R" checkout -qb side; echo s >"$R/side.txt"; git -C "$R" add side.txt; 
   && echo "OK: git merge --no-ff passes without a receipt" || fail "git merge --no-ff was refused: $(cat "$TMP_ROOT/err")"
 
 # Pre-push identity check: commit emails outside *@users.noreply.github.com, noreply@github.com
-# and the project's "Allowed commit emails:" line are flagged once per branch.
+# and the project's "Allowed commit emails:" line are flagged once per remote, branch and commit set.
 PRE="$REPO_ROOT/hooks/git-pre-push"
 P="$TMP_ROOT/push"
 Z=0000000000000000000000000000000000000000
@@ -135,7 +150,7 @@ pc 1+t@users.noreply.github.com 1+t@users.noreply.github.com init
 BASE="$(git -C "$P" rev-parse HEAD)"
 prepush() { # <stdin line> [VAR=value ...]
   local line="$1" rc=0; shift
-  (cd "$P" && printf '%s\n' "$line" | env -u BEARPAWS_ENFORCE "$@" bash "$PRE" origin https://example.invalid/r.git) >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
+  (cd "$P" && printf '%s\n' "$line" | env -u BEARPAWS_ENFORCE "$@" bash "$PRE" "${PR_REMOTE-origin}" https://example.invalid/r.git) >"$TMP_ROOT/out" 2>"$TMP_ROOT/err" || rc=$?
   echo "$rc" >"$TMP_ROOT/rc"
 }
 preset() { git -C "$P" checkout -q --detach "$BASE"; rm -f "$(git -C "$P" rev-parse --path-format=absolute --git-path bearpaws-identity-flagged)" "$P/CLAUDE.md"; }
@@ -146,8 +161,21 @@ prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"
 expect "pre-push: gmail.com author is flagged" block "dana.kowalski82@gmail.com"
 grep -qF "git rebase -r" "$TMP_ROOT/err" && grep -qF -- "--reset-author" "$TMP_ROOT/err" && grep -qF "$(git -C "$P" rev-parse --short HEAD)" "$TMP_ROOT/err" \
   && echo "OK: pre-push: flag names the commit and offers the rewrite" || fail "pre-push flag lacks sha or rewrite command: $(cat "$TMP_ROOT/err")"
+# The cases below, up to the next preset, continue from f1's flag file and tip.
 prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: second push of a flagged branch proceeds" pass
 prepush "refs/heads/f2 $(tip) refs/heads/f2 $Z"; expect "pre-push: flag is per branch" block "dana.kowalski82@gmail.com"
+PR_REMOTE=backup prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: flag is per remote" block "dana.kowalski82@gmail.com"
+pc dana.kowalski82@gmail.com 1+t@users.noreply.github.com "feat: y"
+prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: a new commit on a flagged branch is flagged again" block "$(git -C "$P" rev-parse --short HEAD)"
+prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: the same new commits pushed again proceed" pass
+# A push to a bare URL: git passes the URL as the remote name, so it keys its own flag.
+PR_REMOTE=/srv/git/r.git prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: push to a bare URL is flagged apart from origin" block "dana.kowalski82@gmail.com"
+PR_REMOTE=/srv/git/r.git prepush "refs/heads/f1 $(tip) refs/heads/f1 $Z"; expect "pre-push: same push to a bare URL proceeds" pass
+# A proceed to origin puts the commits on origin's tracking refs; they must still be flagged for another remote.
+git -C "$P" update-ref refs/remotes/origin/f1 "$(tip)"
+PR_REMOTE=backup prepush "refs/heads/f2 $(tip) refs/heads/f2 $Z"; expect "pre-push: commits a proceed sent to origin are flagged again for another remote" block "dana.kowalski82@gmail.com"
+PR_REMOTE=origin prepush "refs/heads/f3 $(tip) refs/heads/f3 $Z"; expect "pre-push: commits already on origin are not flagged again for origin" pass
+git -C "$P" update-ref -d refs/remotes/origin/f1
 preset; pc 1+T@Users.Noreply.GitHub.com noreply@github.com "web merge"
 prepush "refs/heads/ok $(tip) refs/heads/ok $Z"; expect "pre-push: noreply author (any case) and GitHub committer pass" pass
 preset; pc 1+t@users.noreply.github.com dana@corp.example "x"

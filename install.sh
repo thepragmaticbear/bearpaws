@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bearpaws installation script
 # Installs Bearpaws for Antigravity, and experimental ~/.agents/skills wiring for other Agent Skills agents
-# (plus a Grok Build bootstrap rule, and a git commit-msg risk gate for the current repository)
+# (plus a Grok Build bootstrap rule, ~/.junie/skills links for Junie, and a git commit-msg risk gate for the current repository)
 
 set -euo pipefail
 
@@ -96,7 +96,8 @@ create_symlinks() {
     local skills_created=0
     for skill_dir in "$platform_dir"/*/; do
         if [[ -d "$skill_dir" ]]; then
-            local skill_name="$(basename "$skill_dir")"
+            local skill_name
+            skill_name="$(basename "$skill_dir")"
             local dest="$target_dir/$skill_name"
             # Never clobber entries we didn't create; refresh only our own links
             if [[ -e "$dest" || -L "$dest" ]]; then
@@ -149,6 +150,19 @@ install_agents() {
         return 1
     fi
     create_symlinks "$BEARPAWS_ROOT/skills" "$HOME/.agents/skills"
+}
+
+# Install for JetBrains Junie: skills linked into $JUNIE_HOME/skills (default
+# ~/.junie). The bootstrap is a line the user adds to ~/.junie/AGENTS.md; the
+# installer prints it and never edits that file.
+install_junie() {
+    log_info "Setting up experimental Junie wiring..."
+    if [[ "${INSTALL_GLOBAL:-}" != "true" ]]; then
+        log_error "Junie installation currently requires --global"
+        log_info "Use: ./install.sh --junie --global"
+        return 1
+    fi
+    create_symlinks "$BEARPAWS_ROOT/skills" "${JUNIE_HOME:-$HOME/.junie}/skills"
 }
 
 # Install for Grok Build: skills via ~/.agents/skills (scanned at Grok's user
@@ -262,6 +276,7 @@ install_antigravity() {
         log_error "Failed to create staging directory in $plugin_parent"
         return 1
     }
+    # shellcheck disable=SC2064 # expand now: $staging is local and gone when the trap fires.
     trap "rm -rf $(printf %q "$staging")" EXIT
 
     mkdir -p "$staging/rules"
@@ -310,6 +325,10 @@ main() {
                 platforms+=("grok")
                 shift
                 ;;
+            --junie)
+                platforms+=("junie")
+                shift
+                ;;
             --git)
                 platforms+=("git")
                 shift
@@ -321,14 +340,15 @@ main() {
             --help|-h)
                 echo "Bearpaws installation script"
                 echo ""
-                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global | --git"
+                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global | --junie --global | --git"
                 echo ""
                 echo "Options:"
                 echo "  --antigravity Install Bearpaws plugin for Google Antigravity"
                 echo "  --agents      Link skills into ~/.agents/skills (Codex, Devin, OpenCode, Cursor, Copilot, ...)"
                 echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
+                echo "  --junie       Link skills into ~/.junie/skills for JetBrains Junie (\$JUNIE_HOME honored)"
                 echo "  --git         Risk-receipt commit-msg and identity-check pre-push hooks in the current git repository (bypass: --no-verify)"
-                echo "  --global      Required for --antigravity, --agents and --grok"
+                echo "  --global      Required for --antigravity, --agents, --grok and --junie"
                 echo "  --help        Show this help message"
                 exit 0
                 ;;
@@ -352,7 +372,7 @@ main() {
     
     for platform in "${platforms[@]}"; do
         case $platform in
-            antigravity|agents|grok|git)
+            antigravity|agents|grok|junie|git)
                 # bash ignores set -e inside anything run as an if/&&/|| condition,
                 # so run each installer as a plain subshell with errexit on: the
                 # first failing step stops that installer and fails the install.
@@ -394,8 +414,14 @@ main() {
             echo "  • Grok Build (experimental): skills linked into ~/.agents/skills/; bootstrap rule in ${GROK_HOME:-~/.grok}/rules/bearpaws.md"
             echo "  • Run 'grok inspect' to confirm the rule and skills load"
         fi
+        if [[ " ${platforms[*]} " =~ " junie " ]]; then
+            local junie_home="${JUNIE_HOME:-~/.junie}"
+            echo "  • Junie (experimental): skills linked into $junie_home/skills/"
+            echo "  • Junie bootstrap: add this line to $junie_home/AGENTS.md:"
+            echo "      Before responding to any request, read \`$junie_home/skills/using-bearpaws/SKILL.md\` and follow it."
+        fi
         if [[ " ${platforms[*]} " =~ " git " ]]; then
-            echo "  • Git: commits with staged changes now need a risk receipt in the message; pushes flag non-noreply commit emails once per branch (bypass: --no-verify)"
+            echo "  • Git: commits with staged changes now need a risk receipt in the message; pushes flag non-noreply commit emails once per remote, branch and commit set (bypass: --no-verify)"
         fi
     else
         log_error "$failed platform installations failed"

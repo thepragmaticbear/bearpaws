@@ -20,6 +20,7 @@ Current tiers:
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Wiring checked in CI: repo-level and global `.agents/skills` discovery, `instructions` bootstrap resolves; live bootstrap smoke-tested |
 | Grok Build | Experimental | `./install.sh --grok --global`; `grok inspect` lists the bootstrap rule and all skills (1.0.45, built from source); no live session run |
+| Junie | Experimental | `./install.sh --junie --global` links skills into `~/.junie/skills` and prints the `~/.junie/AGENTS.md` bootstrap line (installer tests in CI); in this repo Junie reads `AGENTS.md`; no live conformance run |
 | Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex skills and `AGENTS.md` bootstrap checked in CI, activation smoke-tested; Copilot CLI installs the plugin (CI); Devin and Cursor hook payloads follow their docs, unverified live. Expanded conformance requires completed-action evidence. |
 
 ## Claude Code
@@ -161,6 +162,15 @@ Status: Experimental.
 - Evidence: wiring check 2026-10-02, grok 1.0.45 built from source at commit 2bdd1d6 (`tests/harness-wiring/run.sh`, no model, not in CI because there is no package to pin). After `./install.sh --grok --global`, `grok inspect --json` lists `~/.grok/rules/bearpaws.md` as a `global` instruction (46 tokens), and lists all 15 skills with `user` source from `~/.agents/skills`. Negative control: after `--agents` alone, the rule check fails. No live session was run, because that needs an xAI login.
 - Known limitations: no tool-name mapping (Grok's tools include `run_terminal_command`, `read_file`, `search_replace`, `grep`); no live conformance driver yet; project-level skills and `AGENTS.md` need folder trust. In this repo `AGENTS.md` is a symlink to `CLAUDE.md`, and Grok reads both names.
 
+## Junie
+
+Status: Experimental.
+
+- Install: `./install.sh --junie --global` links skills into `~/.junie/skills/` (`$JUNIE_HOME/skills/` when set) and prints a bootstrap line for `~/.junie/AGENTS.md`. The installer never edits that file, as with Codex and OpenCode.
+- In this repo: Junie reads `AGENTS.md` (a symlink to `CLAUDE.md`) as project guidelines; repo-level skills sit in `.agents/skills`.
+- Evidence: `--junie` installer tests (`tests/install/run-install-tests.sh`, CI): links created, foreign entries kept, `--global` required, `JUNIE_HOME` honored, `AGENTS.md` untouched, bootstrap line printed. No harness-wiring check and no live conformance run.
+- Known limitations: no tool-name mapping; the risk receipt and the elevated-risk review are instructions only, no hook enforces them.
+
 ## Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …)
 
 Status: Experimental.
@@ -213,6 +223,7 @@ Minimum practical tests by tier:
 | Google Antigravity IDE | Real-file plugin install test, static adapter test, and manual promotion gates A–K. |
 | OpenCode | Spec validator + `tests/harness-wiring/` (CI) + manual bootstrap smoke test. |
 | Grok Build | `--grok` installer test + `tests/harness-wiring/` when `grok` is installed + manual activation proof before promotion. |
+| Junie | `--junie` installer test + manual activation proof before promotion. |
 | Other Agent Skills agents | `--agents` installer test, `tests/hooks/` payload shapes, `tests/harness-wiring/` for Codex and Copilot CLI (CI), + manual activation proof before promotion. |
 
 Do not add a full per-agent trigger matrix unless the maintenance cost is explicitly accepted.
@@ -222,7 +233,7 @@ Do not add a full per-agent trigger matrix unless the maintenance cost is explic
 Recommended public posture:
 
 - Claude Code and Google Antigravity IDE are primary supported targets.
-- OpenCode, Grok Build, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless and until validated.
+- OpenCode, Grok Build, Junie, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless and until validated.
 - Bearpaws is an independent skills toolkit that evolves on its own cadence.
 - Attribution and MIT license compliance remain.
 
