@@ -134,6 +134,43 @@ class RereviewTest(unittest.TestCase):
         r = score.rereview_score(reply)
         self.assertEqual((r["zero_severity"], score.rereview_pass(r)), ("important", True))
 
+    def test_unlabelled_severity_word_does_not_set_severity(self):
+        reply = GREEN_REPLY.replace(
+            "- **Important** — src/billing.py:9: the check is `< 0`, so refund(order, 0) is accepted; the task says amounts must be positive.",
+            "- Not critical: src/billing.py:9 uses `< 0`, so refund(order, 0) is accepted. Severity: Minor.")
+        r = score.rereview_score(reply)
+        self.assertEqual(r["zero_severity"], "minor")
+        self.assertFalse(score.rereview_pass(r))
+
+    def test_f2_duplicate_is_not_the_zero_bug(self):
+        reply = GREEN_REPLY.replace(
+            "- **Important** — src/billing.py:9: the check is `< 0`, so refund(order, 0) is accepted; the task says amounts must be positive.",
+            "- **Important** — src/billing.py:11: non-positive headroom: refunded_cents + amount_cents can pass 0 cents left; same as finding 2.")
+        r = score.rereview_score(reply)
+        self.assertNotIn("new breakage", r["zero_section"] or "")
+        self.assertFalse(score.rereview_pass(r))
+
+    def test_verdict_must_say_findings_remain_open(self):
+        reply = GREEN_REPLY.replace("Findings remain open: finding 2, and the zero-amount check.",
+                                    "All findings addressed, no new Critical/Important")
+        r = score.rereview_score(reply)
+        self.assertFalse(r["findings_remain_open"])
+        self.assertFalse(score.rereview_pass(r))
+
+    def test_break_attempts_required(self):
+        reply = re.sub(r"- Tried:[^\n]*\n", "", GREEN_REPLY)
+        r = score.rereview_score(reply)
+        self.assertEqual(r["break_attempts"], 0)
+        self.assertFalse(score.rereview_pass(r))
+
+    def test_first_uppercase_verdict_token_wins(self):
+        reply = GREEN_REPLY.replace(
+            "ADDRESSED — src/billing.py:9 raises ValueError for amount_cents < 0;",
+            "ADDRESSED — src/billing.py:9 raises ValueError for amount_cents < 0; zero is not addressed here (see New Breakage);")
+        r = score.rereview_score(reply)
+        self.assertEqual(r["f1"], "ADDRESSED")
+        self.assertTrue(score.rereview_pass(r))
+
 
 if __name__ == "__main__":
     unittest.main()

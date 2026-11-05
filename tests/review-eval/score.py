@@ -64,7 +64,8 @@ REREVIEW_SECTION = (r"finding verdict|new breakage|break attempt|didn'?t check|o
                     r"|issues|strengths|recommendation|assessment|failure mode|have to be true|summary")
 REREVIEW_F1 = r"negative|-500|< ?0\b"
 REREVIEW_F2 = r"cumulative|running total|refunded_cents \+|1200|twice|already refunded|prior refunds"
-REREVIEW_ZERO = r"\bzero\b|refund\([^)]*,\s*0\)|<= ?0\b|non-?positive|amount_cents == 0|0 cents|\b0 is accepted"
+# The zero item must name the zero case itself; "non-positive" or "0 cents" alone also fits an F2 duplicate.
+REREVIEW_ZERO = r"refund\([^)]*,\s*0\)|\bzero\b|<= ?0|< ?0"
 REREVIEW_SQL = r"\bSQL\b|injection|concatenat"
 SEVERITIES = ("minor", "important", "critical")
 
@@ -74,7 +75,8 @@ def rereview_items(text):
 
     A heading that names a known section opens it; any other heading or bold-only line opens an item
     (and sets the severity when it names one). Bullets and numbered lines open items too. An item's
-    severity is the first severity word in it, else the enclosing severity heading's.
+    severity is its leading label ("- **Important** — ..."), else an explicit "Severity: X", else the
+    enclosing severity heading's. A severity word elsewhere ("Not critical") does not count.
     """
     items, section, heading_sev = [], "", None
     current = None
@@ -99,7 +101,9 @@ def rereview_items(text):
         else:
             current["text"] += "\n" + line
     for item in items:
-        sev = re.search(r"\b(critical|important|minor)\b", item["text"], re.I)
+        first = re.sub(r"^\s*(?:[-*]|\d+\.|#{1,6})\s*", "", item["text"])
+        sev = (re.match(r"\W*(critical|important|minor)\b", first, re.I)
+               or re.search(r"\bseverity\W*(critical|important|minor)\b", item["text"], re.I))
         item["severity"] = sev.group(1).lower() if sev else item["heading_sev"]
     return items
 
@@ -111,16 +115,18 @@ def finding_verdict(items, pattern, other):
             continue
         mine, theirs = re.search(pattern, item["text"], re.I), re.search(other, item["text"], re.I)
         if mine and (not theirs or mine.start() < theirs.start()):
-            if re.search(r"NOT\s+ADDRESSED", item["text"], re.I):
-                return "NOT ADDRESSED"
-            if re.search(r"\bADDRESSED\b", item["text"], re.I):
-                return "ADDRESSED"
+            # The first verdict token, uppercase first: "ADDRESSED ... zero is not addressed here" is ADDRESSED.
+            verdict = (re.search(r"\b(NOT\s+ADDRESSED|ADDRESSED)\b", item["text"])
+                       or re.search(r"\b(NOT\s+ADDRESSED|ADDRESSED)\b", item["text"], re.I))
+            if verdict:
+                return "NOT ADDRESSED" if verdict.group(1).upper().startswith("NOT") else "ADDRESSED"
     return None
 
 
 def rereview_score(text):
     items = rereview_items(text)
-    zero = [i for i in items if re.search(REREVIEW_ZERO, i["text"], re.I) and "finding verdict" not in i["section"]
+    zero = [i for i in items if re.search(REREVIEW_ZERO, i["text"], re.I) and not re.search(REREVIEW_F2, i["text"], re.I)
+            and "finding verdict" not in i["section"]
             and "break attempt" not in i["section"] and "didn" not in i["section"]]
     zero.sort(key=lambda i: ("new breakage" in i["section"], SEVERITIES.index(i["severity"]) if i["severity"] else -1),
               reverse=True)
@@ -133,7 +139,7 @@ def rereview_score(text):
         return any(re.search(pattern, i["text"], re.I) and i["severity"] in ("important", "critical")
                    and not re.search(r"out[- ]of[- ]scope|break attempt|didn'?t check|finding verdict|strengths", i["section"])
                    for i in items)
-    verdict = next((i["text"] for i in items if re.match(r"verdict|assessment", i["section"])), "")
+    verdict = "\n".join(i["text"] for i in items if re.match(r"verdict", i["section"]))
     return {
         "f1": finding_verdict(items, REREVIEW_F1, REREVIEW_F2),
         "f2": finding_verdict(items, REREVIEW_F2, REREVIEW_F1),
@@ -143,14 +149,16 @@ def rereview_score(text):
         "sql_mentioned": bool(sql),
         "sql_only_out_of_scope": bool(sql) and any("scope" in s for s in scoped) and scoped == sql_sections,
         "sql_blocking": blocking(REREVIEW_SQL),
-        "findings_remain_open": bool(re.search(r"remain open", verdict, re.I)) or verdict_reject(text),
+        "findings_remain_open": bool(re.search(r"remain open", verdict, re.I)),
+        "break_attempts": sum("Tried:" in i["text"] for i in items if "break attempt" in i["section"]),
     }
 
 
 def rereview_pass(r):
     return (r["f1"] == "ADDRESSED" and r["f2"] == "NOT ADDRESSED" and bool(r["zero_section"])
             and "new breakage" in r["zero_section"] and r["zero_severity"] in ("important", "critical")
-            and r["sql_only_out_of_scope"] and not r["sql_blocking"])
+            and r["sql_only_out_of_scope"] and not r["sql_blocking"]
+            and r["findings_remain_open"] and r["break_attempts"] >= 1)
 
 
 def score(path, label, run):

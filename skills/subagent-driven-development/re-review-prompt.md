@@ -2,13 +2,13 @@
 
 Use this template after a fix round, instead of a second full review. The final whole-branch review stays full.
 
-**Inputs:** the open Critical and Important findings verbatim, the full task text, and `FIX_BASE_SHA`, the head the previous review saw. Minor findings are not re-reviewed.
+**Inputs:** the open Critical and Important findings, pasted verbatim, one per bullet; the full task text; and `FIX_BASE_SHA`, the head the previous review saw. Minor findings are not re-reviewed.
 
-**Dispatch:** the description must start with `Re-review` so the risk gate counts it as a review. Use the cheapest model that handles review: the fix diff is small.
+**Dispatch:** the description must be `Re-review Task N` or `Re-review Task N fix round K` so the risk gate counts it as a review. Never follow `Re-review` with fix, finding, feedback, comment or follow: the gate does not count that as a review. Use the cheapest model that handles review: the fix diff is small.
 
 ```
 Agent tool (general-purpose):
-  description: "Re-review Task N fix round"
+  description: "Re-review Task N fix round K"
   prompt: |
     You are re-reviewing a fix round. A full review already ran; do not repeat it.
 
