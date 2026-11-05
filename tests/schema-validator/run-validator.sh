@@ -177,14 +177,21 @@ fi
 echo "OK: .agents/skills mirrors skills/ with per-skill links"
 
 # Fixture check: test scenarios live outside skills/ so agents never mistake them for real tasks.
-# A file under skills/ fails when its path runs through a test-like directory, or when it
-# holds a scenario-campaign heading ("## Test Scenarios", "### Scenario 1: ..."). A single
-# teaching example inside a skill document is fine.
+# A file under skills/ fails when its path runs through a test-like directory (any case, with
+# an optional -suffix or _suffix: Fixtures/, test-data/, eval_cases/; dotfiles included), or
+# when it holds a scenario-campaign line: a heading that starts with "Scenario" or "Test
+# Scenario" ("## Test Scenarios", "##### Scenario 2") or a bold "**Scenario 1:**" line.
+# A single teaching example inside a skill document is fine.
 fixture_violations=0
 while IFS= read -r f; do
+  path_lc="$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$path_lc" =~ (^|/)(tests?|evals?|fixtures?|scenarios?)([-_][a-z]+)?/ ]]; then
+    echo "FIXTURE VIOLATION: ${f}"
+    fixture_violations=$((fixture_violations + 1))
+    continue
+  fi
   [[ "$(basename "$f")" == .* ]] && continue
-  if [[ "$f" =~ (^|/)(tests?|evals?|fixtures?|scenarios?)/ ]] \
-     || grep -qE '^#{1,4} (Test )?Scenarios?( [0-9]+)?\b' "$f" 2>/dev/null; then
+  if grep -qE '^#{1,6} (Test )?Scenarios?( [0-9]+)?\b|^[[:space:]]*\*\*(Test )?Scenarios?( [0-9]+)?:\*\*' "$f" 2>/dev/null; then
     echo "FIXTURE VIOLATION: ${f}"
     fixture_violations=$((fixture_violations + 1))
   fi
