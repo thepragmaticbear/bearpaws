@@ -75,9 +75,10 @@ if [[ ! -f "agents/code-reviewer.md" ]]; then
 fi
 echo "OK: agents/code-reviewer.md exists"
 
-# 4. Validate 15 source skills
+# 4. Validate 16 source skills
 EXPECTED_SKILLS=(
   "brainstorming"
+  "diagnosing-bearpaws"
   "dispatching-parallel-agents"
   "executing-plans"
   "finishing-a-development-branch"
@@ -103,11 +104,11 @@ for skill in "${EXPECTED_SKILLS[@]}"; do
   fi
   ((++skill_count))
 done
-if [[ "$skill_count" -ne 15 ]]; then
-  echo "FAIL: Expected 15 skills, found $skill_count"
+if [[ "$skill_count" -ne 16 ]]; then
+  echo "FAIL: Expected 16 skills, found $skill_count"
   exit 1
 fi
-echo "OK: All 15 source skills exist with SKILL.md"
+echo "OK: All 16 source skills exist with SKILL.md"
 
 # 5. Validate using-bearpaws bootstrap content
 bootstrap="skills/using-bearpaws/SKILL.md"

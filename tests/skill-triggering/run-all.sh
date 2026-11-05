@@ -21,6 +21,7 @@ SKILLS=(
     "receiving-code-review"
     "using-git-worktrees"
     "verification-before-completion"
+    "diagnosing-bearpaws"
 )
 
 echo "=== Running Skill Triggering Tests ==="

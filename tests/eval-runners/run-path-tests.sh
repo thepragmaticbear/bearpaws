@@ -26,6 +26,7 @@ check() {
 skill="$ROOT/skills/using-bearpaws/SKILL.md"
 check builder-eval      lbl-elevated-1.jsonl "$ROOT/tests/builder-eval/run.sh" "$ROOT/skills/brainstorming/SKILL.md" lbl 1 out
 check context-eval      lbl-1.json      "$ROOT/tests/context-eval/run.sh" lbl 1 out
+check diagnose-eval    lbl-1.jsonl     "$ROOT/tests/diagnose-eval/run.sh" none lbl 1 out
 check drift-eval        lbl-1.json      "$ROOT/tests/drift-eval/run.sh" "$skill" lbl 1 out
 check resume-eval       lbl-1.json      "$ROOT/tests/resume-eval/run.sh" "$skill" lbl 1 out
 check reuse-eval        lbl-1.jsonl     "$ROOT/tests/reuse-eval/run.sh" lbl 1 out
