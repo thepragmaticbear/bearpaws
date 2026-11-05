@@ -30,7 +30,8 @@ check() {
   # Unset caller env that changes runner behaviour, so only the defaults are checked.
   (unset PLUGIN_DIR SKILL_ROOT FIXTURE AGENT_PROMPT PRESSURE SUMMARY CLEAN DESIGN BENCH_MODEL
    cd "$cwd" && PATH="$TMP_ROOT/bin:$PATH" VARIANTS=skip "$@" >"$cwd/log" 2>&1)
-  if [ -s "$cwd/out/$want" ]; then echo "PASS: $name writes out/$want under the caller's cwd"
+  # The stub's reply in the transcript proves the runner called claude and kept its output there.
+  if grep -q '"result":"stub"' "$cwd/out/$want" 2>/dev/null; then echo "PASS: $name writes out/$want under the caller's cwd"
   else echo "FAIL: $name did not write out/$want under the caller's cwd"; tail -3 "$cwd/log" | sed 's/^/    /'; failed=$((failed + 1)); fi
 }
 

@@ -20,7 +20,7 @@ Every finding cites `path:line`: the full absolute transcript path, written out 
 return a finding, print the evidence on that line with
 `sed -n "${n}p" "$file" | grep -o '.\{0,40\}FRAGMENT.\{0,40\}'` (FRAGMENT: a few words of your quote)
 and confirm it is there; `cut -c1-300` alone shows only the line's metadata.
-If grep errors, find the offset with `grep -bo 'FRAGMENT'` and print around that byte offset with `cut -b START-END`. A finding without a checked citation is dropped. An absence claim ("ran once", "no later run") cites the lines it counted. Every number you state comes from the
+If grep errors, find the offset on that line alone with `sed -n "${n}p" "$file" | grep -bo 'FRAGMENT'` (not on the whole file, whose offsets `cut -b` cannot use) and print around it with `sed -n "${n}p" "$file" | cut -b START-END`. A finding without a checked citation is dropped. An absence claim ("ran once", "no later run") cites the lines it counted. Every number you state comes from the
 transcript or from a command you ran.
 
 ## Output

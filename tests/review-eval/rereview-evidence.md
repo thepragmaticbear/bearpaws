@@ -50,7 +50,7 @@ What RED did not give:
 - Each run added a third Important "missing tests" item. Most of it is in scope: tests for F2 and for zero. It also flags that `test_over_total_raises` does not assert that the order is unchanged. That is a real task requirement ("before the order changes"), not unrelated code. Runs 1 and 2 also ask for an exact-total boundary test; run 3 does not. Blocking bullet lines (Critical plus Important, sub-bullets included): 13, 15, 8.
 - It costs a full review: all four gates, failure-mode enumeration, strengths and recommendations.
 
-RED's 0/3 on `rereview_pass` is partly by construction: the full template has no Finding Verdicts or Out-of-Scope section and no "Findings remain open" verdict, so those criteria cannot pass. The real deltas are three. GREEN gives per-finding verdicts. It costs 37% less. It raises no extra test items.
+RED's 0/3 on `rereview_pass` is partly by construction: the full template has no Finding Verdicts or Out-of-Scope section and no "Findings remain open" verdict, so those criteria cannot pass. The real deltas are three. GREEN gives per-finding verdicts. It costs 37% less. It raised no extra test items in round 1 (one `rereview-green2` run did; see below).
 
 ## GREEN round 1: `re-review-prompt.md` (2026-11-05)
 

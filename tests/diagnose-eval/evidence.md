@@ -89,11 +89,12 @@ Report. The fixture's timestamps are now monotonic.
 
 - GREEN round 7 ($0.201, $0.170, $0.203): all pass, no dispatch, each Coverage gives a byte count.
   Before it, the citation check `grep -o '.\{0,60\}FRAGMENT.\{0,60\}'` failed in Claude Code's shell,
-  where `grep` wraps ugrep ("exceeds complexity limits" at widths 50 and 60; 45 and under work), in
-  green4 run 1, green5 runs 2-3 and green6 run 3; those runs fell back to other reads. The width is
-  now 40 in SKILL.md, analyst-common.md and context-safety.md, checked under the shell's grep and
-  /usr/bin/grep on fixture lines 25, 30 and 32, with a fallback (`grep -bo` for the byte offset, then
-  `cut -b`). Round 7's streams contain no "exceeds complexity" error.
+  where `grep` wraps ugrep ("exceeds complexity limits" at widths 50 and 60; the measured ceiling is
+  41, and width 42 fails), in green4 run 1, green5 runs 2-3 and green6 run 3; those runs fell back to
+  other reads. The width is now 40 in SKILL.md, analyst-common.md and context-safety.md, checked
+  under the shell's grep and /usr/bin/grep on fixture lines 25, 30 and 32, with a fallback: `grep -bo`
+  on the `sed -n "${n}p"` line for the byte offset, then `cut -b` on that line (a file-wide offset
+  does not fit `cut -b`). Round 7's streams contain no "exceeds complexity" error.
 
 What the skill changes here: citations. Without it the diagnosis is right but not checkable (wrong
 or missing line numbers). With it, every finding carried a full path and a correct 1-based line in
