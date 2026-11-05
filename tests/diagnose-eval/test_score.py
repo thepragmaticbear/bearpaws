@@ -177,6 +177,38 @@ class Score(unittest.TestCase):
         self.assertEqual(blocks, ["the run failed"])
 
 
+class Parse(unittest.TestCase):
+    def parse_events(self, events):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write("\n".join(json.dumps(e) for e in events) + "\n")
+        try:
+            return parse(f.name)
+        finally:
+            os.unlink(f.name)
+
+    def test_cost_is_cumulative_per_session(self):
+        # total_cost_usd is the session's running total: a session that ends several turns
+        # (replies while background analysts run) repeats it. Count it once; other sessions add.
+        final, _, cost = self.parse_events([
+            {"type": "result", "session_id": "s1", "result": "dispatched", "total_cost_usd": 0.10},
+            {"type": "result", "session_id": "s1", "result": "waiting", "total_cost_usd": 0.30},
+            {"type": "result", "session_id": "s1", "result": "done", "total_cost_usd": 0.45},
+            {"type": "result", "session_id": "s2", "result": "done", "total_cost_usd": 0.05},
+        ])
+        self.assertEqual(final, "done")
+        self.assertAlmostEqual(cost, 0.50)
+
+    def test_dispatches_count_top_level_agent_calls_only(self):
+        def use(name, parent=None):
+            return {"type": "assistant", "parent_tool_use_id": parent,
+                    "message": {"content": [{"type": "tool_use", "name": name, "input": {}}]}}
+        _, dispatches, _ = self.parse_events([
+            use("Agent"), use("Task"), use("Read"), use("Agent", parent="toolu_1"),
+            {"type": "result", "session_id": "s1", "result": "done", "total_cost_usd": 0.1},
+        ])
+        self.assertEqual(dispatches, 2)
+
+
 class EndToEnd(unittest.TestCase):
     """setup.sh fixture + main(): a report citing the planted lines passes; editing the transcript fails."""
 

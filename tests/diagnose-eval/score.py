@@ -19,6 +19,7 @@ not a negation.
   file's name under another directory, or only paths that do not exist.
 - read_only: every fixture transcript's sha256 is unchanged.
 pass = report written, masked_failure, shipped_finding, uncited == 0, miscited == 0, read_only.
+dispatches (not scored) counts the top-level Agent/Task calls; cost counts each session once.
 A run with no result event (crash, budget stop) is an error, not a scored reply.
 """
 import hashlib
@@ -45,6 +46,7 @@ RECEIPT_NONE = re.compile(r"\bOpen:\s*none\b", re.I)
 NEG_WORDS = 3
 IMPORTANT = re.compile(r"\bimportant\b|\bnegative\b", re.I)
 MAX_SPAN = 5
+DISPATCH_TOOLS = {"Agent", "Task"}
 
 
 def findings(text):
@@ -177,8 +179,13 @@ def sha256s(paths):
 
 
 def parse(path):
-    """Final result text (None without a result event) and total cost."""
-    final, cost = None, 0.0
+    """Final result text (None without a result event), top-level dispatches, and total cost.
+
+    dispatches counts the top-level agent's Agent/Task tool calls (the analysts it sent out).
+    total_cost_usd is cumulative per session: a session that ends several turns (replies while
+    background analysts run) repeats its running total. Take the max per session.
+    """
+    final, dispatches, costs = None, 0, {}
     try:
         with open(path, errors="replace") as f:
             lines = f.readlines()
@@ -189,10 +196,15 @@ def parse(path):
             ev = json.loads(line)
         except ValueError:
             continue
-        if ev.get("type") == "result":
+        if ev.get("type") == "assistant" and not ev.get("parent_tool_use_id"):
+            for b in ev.get("message", {}).get("content", []) or []:
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in DISPATCH_TOOLS:
+                    dispatches += 1
+        elif ev.get("type") == "result":
             final = ev.get("result") or ""
-            cost += ev.get("total_cost_usd") or 0
-    return final, cost
+            sid = ev.get("session_id")
+            costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+    return final, dispatches, sum(costs.values())
 
 
 def main(argv):
@@ -209,11 +221,11 @@ def main(argv):
             for r in sorted(rows, key=lambda r: r["run"]):
                 print(f"  run {r['run']}: {'PASS' if r.get('pass') else 'FAIL'} ${r.get('cost', 0):.3f}",
                       {k: r.get(k) for k in ("report", "masked_failure", "shipped_finding", "uncited",
-                                             "miscited", "read_only", "findings")}, r.get("error", ""))
+                                             "miscited", "read_only", "findings", "dispatches")}, r.get("error", ""))
         return
     stream, label, run, work = argv[1:5]
-    final, cost = parse(stream)
-    row = {"label": label, "run": int(run), "cost": round(cost, 4)}
+    final, dispatches, cost = parse(stream)
+    row = {"label": label, "run": int(run), "cost": round(cost, 4), "dispatches": dispatches}
     if final is None:
         row.update({"error": "no result event", "pass": False})
         print(json.dumps(row))

@@ -120,8 +120,11 @@ def score(final_text, tool_uses=()):
 
 
 def parse(path):
-    """Final result text (None without a result event), tool-use names, and total cost."""
-    final, uses, cost = None, [], 0.0
+    """Final result text (None without a result event), tool-use names, and total cost.
+
+    total_cost_usd is cumulative per session and repeats on each result event: take the max per session.
+    """
+    final, uses, costs = None, [], {}
     try:
         lines = open(path, errors="replace").readlines()
     except OSError:
@@ -137,8 +140,9 @@ def parse(path):
                     uses.append(b.get("name"))
         elif ev.get("type") == "result":
             final = ev.get("result") or ""
-            cost += ev.get("total_cost_usd") or 0
-    return final, uses, cost
+            sid = ev.get("session_id")
+            costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+    return final, uses, sum(costs.values())
 
 
 def main(argv):

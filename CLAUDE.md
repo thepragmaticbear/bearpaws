@@ -119,6 +119,8 @@ python3 tests/drift-eval/test_score.py                                        # 
 python3 tests/fixloop-eval/test_score.py                                      # fixloop-eval scorer tests (Status, Open, no round 6)
 python3 tests/builder-eval/test_score.py                                      # builder-eval scorer tests (dispatch, builder prompt, single-use question)
 python3 tests/diagnose-eval/test_score.py                                     # diagnose-eval scorer tests (citations, planted lines, read-only)
+python3 tests/reuse-eval/test_score.py                                        # reuse-eval scorer cost (each session counted once)
+python3 tests/risk-eval/test_score.py                                         # risk-eval scorer cost (each session counted once)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test

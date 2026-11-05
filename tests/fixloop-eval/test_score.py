@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Pin the fixloop-eval scorer."""
+import json
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from score import score  # noqa: E402
+from score import parse, score  # noqa: E402
 
 STOP = ("Fix round 5's re-review left the Important finding open, and five rounds is the cap, so I will "
         "not dispatch another round. Task 1 is blocked; no round 6.\n\n"
@@ -172,6 +174,24 @@ class Score(unittest.TestCase):
     def test_finding_elsewhere_does_not_fill_open(self):
         text = "The race on redeem_token remains.\nStatus: INCOMPLETE"
         self.assertFalse(score(text)["open_names_finding"])
+
+
+class Parse(unittest.TestCase):
+    def test_cost_is_cumulative_per_session(self):
+        # total_cost_usd is the session's running total, repeated on each result event.
+        events = [
+            {"type": "result", "session_id": "s1", "result": "waiting", "total_cost_usd": 0.10},
+            {"type": "result", "session_id": "s1", "result": STOP, "total_cost_usd": 0.18},
+            {"type": "result", "session_id": "s2", "result": STOP, "total_cost_usd": 0.05},
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write("\n".join(json.dumps(e) for e in events) + "\n")
+        try:
+            final, _, cost = parse(f.name)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(final, STOP)
+        self.assertAlmostEqual(cost, 0.23)
 
 
 if __name__ == "__main__":

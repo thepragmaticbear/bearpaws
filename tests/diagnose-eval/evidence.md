@@ -35,8 +35,8 @@ words before it (the receipt quote `Open: none` is not a negation).
 |---|---:|---:|---:|---:|---:|---:|---:|
 | RED (no skill) | 0/3 | 0/3 | 0/3 | 0/3 | 3/3 | 0/3 | $0.116 |
 | GREEN round 1 | 0/3 | 1/3 | 1/3 | 0/3 | 3/3 | 0/3 | $0.198 |
-| GREEN round 2 | 2/3 | 3/3 | 3/3 | 2/3 | 3/3 | 3/3 | $3.073 |
-| GREEN round 3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/3 | $1.631 |
+| GREEN round 2 | 2/3 | 3/3 | 3/3 | 2/3 | 3/3 | 3/3 | $0.547 |
+| GREEN round 3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 1/3 | $0.420 |
 | GREEN round 4 (threshold) | 2/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0/3 | $0.209 |
 | GREEN round 5 | 2/3 | 3/3 | 3/3 | 2/3 | 3/3 | 0/3 | $0.200 |
 | GREEN round 6 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0/3 | $0.215 |
@@ -45,6 +45,11 @@ words before it (the receipt quote `Open: none` is not a negation).
 Rows for RED and rounds 1-3 are rescored with the fix-round scorer (negation, `miscited`, full-path
 match, headings after the findings heading). Pass counts did not change. GREEN round 1 run 2 lost
 `shipped_finding` and shows 12 miscited (it was already failing); RED run 1 shows 1 miscited.
+"Analysts dispatched" is `score.py`'s `dispatches` (top-level `Agent`/`Task` calls), counting runs
+with at least one. All rounds were rescored after the cost fix: `total_cost_usd` is a session's
+running total, repeated on every `result` event, and the scorer had summed them. It now takes the
+maximum per session. Only runs that dispatched analysts had more than one `result` event; their
+costs were overstated 5-6x (round 2 mean $3.073, round 3 $1.631 before the fix).
 
 Per run:
 - RED 1-3 ($0.089, $0.132, $0.127): every run found both problems in prose. Run 1 cited `L23-24` and
@@ -56,10 +61,10 @@ Per run:
   only 35 lines"). Fix: full absolute path in every citation and table row, no aliases; Red Flag rows
   for the alias and for skipping analysts on a small session. (This round ran before `'<n>p'` in the
   skill text became `"${n}p"` for the tag validator.)
-- GREEN round 2 ($2.662, $4.025, $2.531): five analysts each. Runs 1-2 pass; run 3 had one uncited
+- GREEN round 2 ($0.454, $0.767, $0.422): five analysts each. Runs 1-2 pass; run 3 had one uncited
   bullet, "No repeated work: pytest ran once; no file was re-read." Fix: an absence claim cites the
   lines it counted; an uncitable note goes in Coverage as prose.
-- GREEN round 3 ($0.206, $0.246, $4.443): all pass. Runs 1 and 2 read the transcript themselves and
+- GREEN round 3 ($0.206, $0.246, $0.808): all pass. Runs 1 and 2 read the transcript themselves and
   said so ("The transcripts total 39 lines, so I read all of them myself"); run 3 dispatched five.
 
 Fix round (after review of b8ae379). Analyst threshold, a controller decision: when the main and
@@ -96,7 +101,7 @@ round 3.
 
 Limits: one fixture, one model, n=3. The fixture is under the 100 KB threshold, so dispatch above it
 is exercised only by round 2's runs (and round 3 run 3), which predate the threshold; with analysts a
-run costs $2.5-4.4 instead of about $0.2. Intake (one question at a time) and session matching are
+run cost $0.42-0.81 instead of about $0.2. Intake (one question at a time) and session matching are
 untested: the prompt supplies the problem statement and the session id. Coverage claims ("read every
 line", "read the dimension prompts") are the agent's own and are not scored. The scorer's negation
 window is three words: a negation further back ("there is no evidence that the run failed") still
