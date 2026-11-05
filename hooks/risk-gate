@@ -161,8 +161,8 @@ case "$mode" in
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
-        # Claude's own config, memory, and plan files are not project edits.
-        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json) exit 0 ;; esac
+        # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits.
+        [ -n "${HOME:-}" ] && case "$path" in "${HOME%/}"/.claude/*|"${HOME%/}"/.claude.json|"${HOME%/}"/.bearpaws/*) exit 0 ;; esac
         [ -n "${CLAUDE_CONFIG_DIR:-}" ] && case "$path" in "${CLAUDE_CONFIG_DIR%/}"/*) exit 0 ;; esac
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then

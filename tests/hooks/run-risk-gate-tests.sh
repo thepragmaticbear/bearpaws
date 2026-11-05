@@ -268,6 +268,10 @@ reset; edit "$H/.claude-team/projects/x/m.md" HOME="$H"; stop "Done."; expect "~
 reset; edit "/cfg/dir/plans/p.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "write under CLAUDE_CONFIG_DIR is not an edit" allow
 reset; edit "$HOME/notes/.claude.md"; stop "Saved."; expect "other path under HOME is still an edit" block "risk receipt"
 reset; edit "/cfg/dirx/a.md" CLAUDE_CONFIG_DIR=/cfg/dir; stop "Saved."; expect "CLAUDE_CONFIG_DIR prefix needs the slash" block "risk receipt"
+# diagnosing-bearpaws writes its report under ~/.bearpaws; that is not a project edit.
+reset; edit "$H/.bearpaws/diagnosing/x/report.md" HOME="$H"; stop "Saved."; expect "temp HOME: write under ~/.bearpaws is not an edit" allow
+reset; edit "$H/.bearpaws-other/x/main.py" HOME="$H"; stop "Done."; expect "~/.bearpaws-other project is an edit" block "risk receipt"
+reset; edit "$H/project/.bearpaws/x.md" HOME="$H"; stop "Done."; expect ".bearpaws inside a project is an edit" block "risk receipt"
 
 # Opt-out and other harnesses: always allow.
 reset; edit src/app.py; stop "Done."; expect "edited log blocks without an opt-out" block "risk receipt"
