@@ -16,9 +16,17 @@ Both arms ran on the same model (`BENCH_MODEL` default, sonnet), so the cost dif
 Scorer: `score.py` adds a `rereview` key when `FIXTURE=rereview`. It is pinned by `test_score.py` (`RereviewTest`). A pass requires all of the following:
 
 - F1 is ADDRESSED and F2 is NOT ADDRESSED, read from the first verdict token.
-- The zero item sits under New Breakage at Important or higher. Its severity comes from its leading label or an explicit `Severity:`, else from its heading. It names the zero case and is not an F2 duplicate.
+- The zero item sits under New Breakage at Important or higher, and it names a zero amount.
+  - Zero-amount wording that counts: `refund(…, 0)`, an amount of zero, or the `< 0`/`<= 0` check on the amount.
+  - Wording that does not count: "below zero" or "total - 600 - 600 < 0".
+  - Severity, in order of preference:
+    1. An explicit `Severity: X`.
+    2. A leading label.
+    3. A label after a `file:line` prefix, either parenthesised or after a dash or colon.
+    4. A closing severity word, unless "not" precedes it.
+    5. The heading.
 - The SQL issue appears only under Out-of-Scope.
-- The Verdict says findings remain open.
+- The Verdict says a finding remains open, or findings remain open. The Verdict text can sit on the `### Verdict` heading line or on a `**Verdict:**` line.
 - There is at least one `Tried:` line under Break Attempts.
 
 ## RED: full review as re-review (2026-11-05)
@@ -85,3 +93,39 @@ The six saved transcripts were re-scored with the new scorer:
 
 - RED: 0/3 pass, unchanged. The zero bug is in Issues at Important, the SQL issue is not blocking, and 5, 6 and 6 `Tried:` lines sit under Break Attempts.
 - GREEN: 3/3 pass, unchanged. 4, 3 and 4 `Tried:` lines sit under Break Attempts, and every Verdict reads "Findings remain open".
+
+## Scorer fix round 2 (2026-11-05)
+
+The review of fix round 1 found three problems:
+
+- Severity read only from a leading label. Three legitimate forms false-failed: "file:line (Important):", "**file:line** — Important:", and a closing "Important.".
+- The verdict check missed three forms: "### Verdict: Findings remain open", "**Verdict:** …", and "remains open".
+- The zero pattern still matched F2 duplicates worded "below zero" or "total - 600 - 600 < 0".
+
+Fixes:
+
+- The scorer accepts those forms, and all are pinned as passing.
+- The F2 duplicates are pinned as failing.
+- A real zero item that also mentions "cumulative" still counts.
+- The earlier failing vectors still fail.
+
+`re-review-prompt.md` now tells the reviewer to start each New Breakage item with its severity ("- Important: file:line — what breaks").
+
+Re-scoring the six saved transcripts gave the same numbers: RED 0/3, GREEN round 1 3/3.
+
+Because the prompt changed, GREEN was re-run as `rereview-green2` (3 runs):
+
+| Run | F1 / F2 | Zero bug | SQL | Pass | Cost |
+|---|---|---|---|---|---|
+| 1 | ADDRESSED / NOT ADDRESSED | New Breakage, Important | Out-of-Scope only | yes | $0.0507 |
+| 2 | ADDRESSED / NOT ADDRESSED | New Breakage, Important | Out-of-Scope only | yes | $0.0501 |
+| 3 | ADDRESSED / NOT ADDRESSED | New Breakage, Important | Out-of-Scope only | yes | $0.0495 |
+
+Mean cost: **$0.0501**. Every New Breakage item opened with "Important:" or "Minor:".
+
+Two runs added a second item:
+
+- Run 1 restated the open F2 as an Important item.
+- Run 2 flagged missing tests for zero and the cumulative cap as Important. Both cases are in the task, so the item is in scope.
+
+No run executed code.

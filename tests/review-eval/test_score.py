@@ -171,6 +171,53 @@ class RereviewTest(unittest.TestCase):
         self.assertEqual(r["f1"], "ADDRESSED")
         self.assertTrue(score.rereview_pass(r))
 
+    ZERO_LINE = ("- **Important** — src/billing.py:9: the check is `< 0`, so refund(order, 0) is accepted; "
+                 "the task says amounts must be positive.")
+
+    def with_zero_line(self, line):
+        self.assertIn(self.ZERO_LINE, GREEN_REPLY)
+        return score.rereview_score(GREEN_REPLY.replace(self.ZERO_LINE, line))
+
+    def test_severity_label_forms_pass(self):
+        for line in ("- src/billing.py:9 (Important): `< 0` accepts refund(order, 0); the task says amounts must be positive.",
+                     "- **src/billing.py:9** — Important: `< 0` accepts refund(order, 0); amounts must be positive.",
+                     "- src/billing.py:9: `< 0` accepts refund(order, 0), but amounts must be positive. Important.",
+                     "- Important: src/billing.py:9 — `< 0` accepts refund(order, 0).",
+                     "- src/billing.py:9: refund(order, 0) is accepted though the running total check is cumulative. Severity: Important."):
+            with self.subTest(line=line):
+                r = self.with_zero_line(line)
+                self.assertEqual(r["zero_severity"], "important")
+                self.assertTrue(score.rereview_pass(r))
+
+    def test_closing_not_critical_is_not_a_label(self):
+        r = self.with_zero_line("- src/billing.py:9: `< 0` accepts refund(order, 0), which is not critical.")
+        self.assertIsNone(r["zero_severity"])
+        self.assertFalse(score.rereview_pass(r))
+
+    def test_f2_duplicates_worded_with_zero_are_not_the_zero_bug(self):
+        for line in ("- **Important** — src/billing.py:11: two refunds let the remaining balance go below zero.",
+                     "- **Important** — src/billing.py:11: total - 600 - 600 < 0 is never checked."):
+            with self.subTest(line=line):
+                r = self.with_zero_line(line)
+                self.assertNotIn("new breakage", r["zero_section"] or "")
+                self.assertFalse(score.rereview_pass(r))
+
+    def test_verdict_forms_pass(self):
+        verdict = "### Verdict\nFindings remain open: finding 2, and the zero-amount check.\n"
+        self.assertIn(verdict, GREEN_REPLY)
+        for form in ("### Verdict: Findings remain open: finding 2, and the zero-amount check.\n",
+                     "**Verdict:** Findings remain open: finding 2, and the zero-amount check.\n",
+                     "### Verdict\nFinding 2 remains open, and zero is accepted.\n"):
+            with self.subTest(form=form):
+                r = score.rereview_score(GREEN_REPLY.replace(verdict, form))
+                self.assertTrue(r["findings_remain_open"])
+                self.assertTrue(score.rereview_pass(r))
+
+    def test_inline_verdict_label_inside_finding_verdicts_stays_there(self):
+        reply = GREEN_REPLY.replace("- Finding 2 (running total): NOT ADDRESSED",
+                                    "**Verdict:** see below\n- Finding 2 (running total): NOT ADDRESSED")
+        self.assertEqual(score.rereview_score(reply)["f2"], "NOT ADDRESSED")
+
 
 if __name__ == "__main__":
     unittest.main()

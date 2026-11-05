@@ -64,8 +64,12 @@ REREVIEW_SECTION = (r"finding verdict|new breakage|break attempt|didn'?t check|o
                     r"|issues|strengths|recommendation|assessment|failure mode|have to be true|summary")
 REREVIEW_F1 = r"negative|-500|< ?0\b"
 REREVIEW_F2 = r"cumulative|running total|refunded_cents \+|1200|twice|already refunded|prior refunds"
-# The zero item must name the zero case itself; "non-positive" or "0 cents" alone also fits an F2 duplicate.
-REREVIEW_ZERO = r"refund\([^)]*,\s*0\)|\bzero\b|<= ?0|< ?0"
+# The zero item must name a zero amount: refund(..., 0), an amount of zero, or the `< 0` vs `<= 0` check on
+# the amount. "Below zero" or "total - 600 - 600 < 0" is an F2 duplicate, not the zero bug.
+REREVIEW_ZERO = (r"refund\([^)]*,\s*0\)|\bamount(?:_cents)?\s*(?:of|=|==|is)\s*(?:0|zero)\b|\bzero[- ](?:amount|refund|cents?)"
+                 r"|(?:amount|refund)s? of (?:0|zero)\b|accepts? (?:a )?(?:0|zero)\b|\b(?:0|zero)(?: amounts?)? (?:is|are) (?:still )?accepted"
+                 r"|amount_cents\s*<=?\s*0\b|`<=? ?0`|<= ?0\b[^\n]{0,40}\bamount|\b0-cent")
+SEV = r"(critical|important|minor)"
 REREVIEW_SQL = r"\bSQL\b|injection|concatenat"
 SEVERITIES = ("minor", "important", "critical")
 
@@ -74,17 +78,32 @@ def rereview_items(text):
     """Split a reply into items, each tagged with its section and severity.
 
     A heading that names a known section opens it; any other heading or bold-only line opens an item
-    (and sets the severity when it names one). Bullets and numbered lines open items too. An item's
-    severity is its leading label ("- **Important** — ..."), else an explicit "Severity: X", else the
-    enclosing severity heading's. A severity word elsewhere ("Not critical") does not count.
+    (and sets the severity when it names one). Bullets and numbered lines open items too. A Verdict
+    heading's own text ("### Verdict: Findings remain open") and an inline "**Verdict:** ..." line are
+    kept as verdict items. An item's severity, in order of preference: an explicit "Severity: X"; a
+    leading label ("- Important: ...", "- **Important** — ..."); a label after a file:line prefix
+    ("- src/a.py:9 (Important): ...", "- **src/a.py:9** — Important: ..."); a closing severity word on
+    the first line ("... Important."), unless preceded by "not"; else the enclosing severity heading's.
+    A severity word elsewhere ("Not critical: ...") does not count.
     """
     items, section, heading_sev = [], "", None
     current = None
     for line in text.splitlines():
         h = re.match(r"\s*(?:#{1,6}\s+(.*)|\*\*([^*]+)\*\*:?\s*$)", line)
         title = h and (h.group(1) or h.group(2)).strip(" *:#")
+        inline = not h and re.match(r"\s*\*\*\s*(verdict)\s*:?\s*\*\*:?\s*(.*)$", line, re.I)
+        if inline and "finding verdict" not in section:
+            section, heading_sev, current = "verdict", None, None
+            if inline.group(2).strip():
+                current = {"section": section, "text": inline.group(2), "heading_sev": None}
+                items.append(current)
+            continue
         if title and re.search(REREVIEW_SECTION, title, re.I):
             section, heading_sev, current = title.lower(), None, None
+            rest = re.match(r"verdict\W*(.+)", title, re.I)
+            if rest:
+                current = {"section": section, "text": rest.group(1), "heading_sev": None}
+                items.append(current)
             continue
         if title:
             sev = re.search(r"\b(critical|important|minor)\b", title, re.I)
@@ -101,10 +120,13 @@ def rereview_items(text):
         else:
             current["text"] += "\n" + line
     for item in items:
-        first = re.sub(r"^\s*(?:[-*]|\d+\.|#{1,6})\s*", "", item["text"])
-        sev = (re.match(r"\W*(critical|important|minor)\b", first, re.I)
-               or re.search(r"\bseverity\W*(critical|important|minor)\b", item["text"], re.I))
-        item["severity"] = sev.group(1).lower() if sev else item["heading_sev"]
+        first = re.sub(r"^\s*(?:[-*]|\d+\.|#{1,6})\s*", "", item["text"]).split("\n", 1)[0]
+        sev = (re.search(r"\bseverity\W*" + SEV + r"\b", item["text"], re.I)
+               or re.match(r"\W*" + SEV + r"\b", first, re.I)
+               or re.match(r"[*`\s]*[\w./-]+:\d+(?:-\d+)?[*`]*\s*(?:\(\W*" + SEV + r"\W*\)|[—–:-]+\s*[*_]*" + SEV + r"\b)",
+                           first, re.I)
+               or re.search(r"(?<!not )\b" + SEV + r"\W*$", first, re.I))
+        item["severity"] = next(g for g in sev.groups() if g).lower() if sev else item["heading_sev"]
     return items
 
 
@@ -125,8 +147,7 @@ def finding_verdict(items, pattern, other):
 
 def rereview_score(text):
     items = rereview_items(text)
-    zero = [i for i in items if re.search(REREVIEW_ZERO, i["text"], re.I) and not re.search(REREVIEW_F2, i["text"], re.I)
-            and "finding verdict" not in i["section"]
+    zero = [i for i in items if re.search(REREVIEW_ZERO, i["text"], re.I) and "finding verdict" not in i["section"]
             and "break attempt" not in i["section"] and "didn" not in i["section"]]
     zero.sort(key=lambda i: ("new breakage" in i["section"], SEVERITIES.index(i["severity"]) if i["severity"] else -1),
               reverse=True)
@@ -149,7 +170,7 @@ def rereview_score(text):
         "sql_mentioned": bool(sql),
         "sql_only_out_of_scope": bool(sql) and any("scope" in s for s in scoped) and scoped == sql_sections,
         "sql_blocking": blocking(REREVIEW_SQL),
-        "findings_remain_open": bool(re.search(r"remain open", verdict, re.I)),
+        "findings_remain_open": bool(re.search(r"remains? open", verdict, re.I)),
         "break_attempts": sum("Tried:" in i["text"] for i in items if "break attempt" in i["section"]),
     }
 

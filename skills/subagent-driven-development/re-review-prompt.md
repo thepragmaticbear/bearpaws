@@ -40,7 +40,8 @@ Agent tool (general-purpose):
 
     ### New Breakage in the Fix Diff
     Defects in the lines the fix diff adds or changes, including a changed line that still falls
-    short of the task text. Give each a severity (Critical, Important or Minor) by the rules in
+    short of the task text. Start each item with its severity, as "- Important: file:line — what
+    breaks". Severity is Critical, Important or Minor, by the rules in
     requesting-code-review/code-reviewer.md: a task requirement unmet or misread, or a failure mode
     a caller or a user's input can reach, is Important or higher; hardening the task did not ask
     for is Minor. Write "None" if there is none.
