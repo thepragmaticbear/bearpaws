@@ -72,10 +72,10 @@ The [escaped-defect benchmark](docs/benchmarks/2026-10-12-escaped-defects.md) wa
 - **Escaped defects:** Bearpaws 9/30, no plugin 12/30, Superpowers 6.4.2 12/30. The difference is **not statistically significant** (Fisher exact p = 0.59). Counting one run that ended INCOMPLETE with the defect still present, Bearpaws' figure is 10/30.
 - Bearpaws eliminated the negative-refund defect (0/5 against 5/5 in each other arm). That comparison is post hoc and uncorrected, and rests on one attack. It was no better on reset tokens and slightly worse, within noise, on SQL sort injection and tenant authorization.
 - In 7 of 9 Bearpaws escapes, its own reviewer flagged the defect and the agent still shipped `Status: COMPLETE`. That motivated the review-findings rule: a same-risk defect the review finds in the code you changed is part of the fix.
-- **After that rule** (a same-arm before/after on the same frozen scenarios, not pre-registered): Bearpaws escapes fell from 9/30 to 3/30 (p = 0.10). SQL sort and tenant authorization went to 0, mostly through broader first fixes rather than fixes after review. All 3 remaining escapes are the reset-token single-use attack, which the agents' reviewers flagged and the agents left as outside the request. Cost rose about 33% per task. [Results](docs/bearpaws/plans/2026-10-12-review-findings.md#results-2026-10-12).
-- **Over-building:** a [diff-size measurement](docs/benchmarks/2026-10-21-diff-size-baseline.md) on the same six tasks found Bearpaws writing about 1.9× the code lines of a careful reference fix (no plugin 0.8×, with 15 of 32 escapes). The extra lines were NaN, bool and type guards that reviewers filed as Important and agents fixed under the same-class rule. After the reviewer templates and the bootstrap's definition of a defect were changed, the ratio fell to 1.4× with escapes unchanged at 5 of 30 and cost down about 13%. One intermediate wording let a negative-refund check be dropped; the final wording and a review fixture pin that case.
+- **After that rule** (a same-arm before/after on the same frozen scenarios, not pre-registered): Bearpaws escapes fell from 9/30 to 3/30 (p = 0.10). SQL sort and tenant authorization went to 0, mostly through broader first fixes rather than fixes after review. All 3 remaining escapes are the reset-token single-use attack, which the agents' reviewers flagged: two runs ended COMPLETE calling it outside the request, and one marked it INCOMPLETE, but a later reply dropped the Status line. Cost rose about 33% per task. [Results](docs/bearpaws/plans/2026-10-12-review-findings.md#results-2026-10-12).
+- **Over-building:** a [diff-size measurement](docs/benchmarks/2026-10-21-diff-size-baseline.md) on the same six tasks found Bearpaws writing about 1.9× the code lines of a careful reference fix (no plugin 0.8×, with 15 of 32 escapes). The extra lines were NaN, bool and type guards that reviewers filed as Important and agents fixed under the same-class rule. After the reviewer templates and the bootstrap's definition of a defect were changed, the ratio fell to 1.4× with escapes unchanged at 5 (5 of 30, against 5 of 32 before) and cost down about 13%. One intermediate wording let a negative-refund check be dropped; the final wording and a review fixture pin that case.
 - **Reuse first:** a [follow-up run](docs/benchmarks/2026-11-04-diff-size-reuse.md) against a concurrent `main` control arm did not reduce over-building. Code-only bloat was 1.44×, against 1.46× for the control and a 1.1× target. Escapes held at 5 of 30 (control 4), with negative refunds still at 0, but routine cost rose from $0.109 to $0.126 per task. A reuse-first TDD wording was reverted after it did not move its eval. A reviewer finding for reimplementing an existing function raised detection on its fixture from 3 of 9 to 7 of 9 runs. It was also reverted, because it fired in 1 of 57 benchmark runs while transcripts with `grep -rn` roughly doubled (13 to 24 on the risk tasks, 7 to 13 on routine). The candidate arm's numbers above were measured with it in place. No skill or template change ships; the code-only metric, the control-arm method and the two eval fixtures do. The reuse-first and scoped-simplification ideas were inspired by Ponytail and the Code Simplifier agent; the wording here is our own.
-- **Cost:** on these risky tasks, Bearpaws cost about 2.4× Superpowers per task (and 4.7× no plugin); that includes a review on every run. On routine tasks it is about level with Superpowers: $0.098 against $0.096 per task in the [2026-09-30 run](docs/benchmarks/2026-09-30-three-way.md).
+- **Cost:** on these risky tasks, Bearpaws cost about 2.4× Superpowers 6.4.2 per task (and 4.7× no plugin); that includes a review on every run. In the [2026-09-30 run](docs/benchmarks/2026-09-30-three-way.md) across all nine scenarios, Bearpaws cost $0.113 per accepted task against $0.098 for Superpowers 6.4.2 (15% more). Leaving out the two security scenarios, where it dispatched most of its reviews, the seven routine scenarios were about level: $0.098 against $0.096.
 
 Small samples, Python stdlib scenarios, one model. Read the write-ups' limits before quoting these numbers.
 
@@ -117,7 +117,7 @@ flowchart TD
     Verify --> Gate{{Claude Code Stop hook<br/>checks receipt and review}}
 ```
 
-A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 4.9 KB, 4,989 bytes) and is the only thing loaded every session; every other skill loads on demand.
+A fully specified small fix goes straight to TDD and verification; plans are for non-trivial work. The bootstrap is small (about 5.3 KB, 5,285 bytes) and is the only thing loaded every session; every other skill loads on demand.
 
 ## Skills
 
@@ -143,15 +143,15 @@ A fully specified small fix goes straight to TDD and verification; plans are for
 
 Bearpaws began as a fork of [Superpowers](https://github.com/obra/superpowers), and the core discipline is shared: brainstorm, plan, test first, debug systematically, review, verify. The main differences are how much process a change gets and how the end of a change is checked. The table lists those and a few smaller ones.
 
-| | Superpowers 6.4.2 | Bearpaws |
+| | Superpowers 7.0.2 | Bearpaws |
 |---|---|---|
-| What sets the amount of process | Scope: the agent classifies a request as spike, bounded, or architectural and says so, so the human can override | Scope and blast radius, as two separate axes |
+| What sets the amount of process | Size: the agent sizes the work as a quick task, a small change, or a project and says so, so the human can override. Spikes are opt-in | Scope and blast radius, as two separate axes |
 | Small but risky changes | No separate risk tier. Risk is one input to choosing the reviewer's model, and a security-sensitive action stops execution to ask the human | A fixed floor for [elevated-risk changes](#difficulty-is-not-danger): pinned behavior, failing test first, narrow diff, stated assumptions, independent review |
 | Finishing a change | Verify before claiming done | Verify, then end every reply that changed files with a risk receipt (`Risk`, `Verified`, `Not checked`, `Status`) |
 | Findings from review | Critical and Important findings go through a fix loop with re-review. Minor ones are logged for the final review | The same, plus: a same-risk defect found in the changed code is part of the fix even if it falls outside the request, or the work ends `INCOMPLETE` |
 | How the rules are applied | Instructions to the agent | Instructions, plus a Claude Code hook (see [Show me](#show-me)) |
-| Getting to know a project | Part of brainstorming | A separate onboarding step that runs first |
-| Trade-off | No added process for risk, so no added cost for it | Similar cost on routine work in the 2026-09-30 run; more time and cost on elevated work, for pinned tests, failing-first tests and reviews |
+| Getting to know a project | Part of brainstorming, which reads the code before asking | A separate onboarding step that runs first |
+| Trade-off | No added process for risk, so no added cost for it | About level on the routine scenarios of the 2026-09-30 run (against 6.4.2), 15% more across all of them; more time and cost on elevated work, for pinned tests, failing-first tests and reviews |
 
 Measured results, including where Bearpaws did no better, are in [Evidence](#evidence).
 
