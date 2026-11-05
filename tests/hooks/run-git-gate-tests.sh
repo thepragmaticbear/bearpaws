@@ -99,6 +99,8 @@ reset; stage src/x.py; gate $'Fix\n\nrisk: ROUTINE\nstatus: complete'; expect "c
 reset; stage src/x.py; gate $'Fix\n\n- `Risk:` `routine`\n- `Status:` COMPLETE'; expect "backticked bullet receipt passes" pass
 reset; stage src/authz.py; gate $'Fix\n\n**Risk:** elevated (authz)\n**review:** bp:code-reviewer — Yes\n**Status:** COMPLETE'; expect "bold elevated with bold Review passes" pass
 reset; stage src/x.py; gate $'Fix\n\nNo Risk: routine here'; expect "mid-line Risk does not count" block "Risk:"
+reset; stage docs/report.md; gate $'Diagnosis\n\n> Risk: elevated (payments)\n> Status: COMPLETE\n\nRisk: routine\nVerified: none — report only\nStatus: COMPLETE'; expect "quoted elevated receipt before the commit's own routine one: routine" pass
+reset; stage src/authz.py; gate $'Fix\n\nRisk: routine\nRisk: elevated (authz)\nStatus: COMPLETE'; expect "last Risk line wins: elevated without Review blocks" block "Review"
 
 # Comment lines and the verbose diff are not the message.
 reset; stage src/x.py; gate $'Fix\n# Risk: routine'; expect "commented receipt does not count" block "Risk:"

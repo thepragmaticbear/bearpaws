@@ -212,8 +212,8 @@ case "$mode" in
   stop)
     [ -f "$log" ] && grep -qE '^edit(-test)? ' "$log" || exit 0
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
-    if field Risk elevated; then risk=elevated
-    elif field Risk routine; then risk=routine
+    if field_last Risk elevated; then risk=elevated
+    elif field_last Risk routine; then risk=routine
     # Pending from an earlier INCOMPLETE, nothing since, and no receipt now: an unrelated reply passes.
     elif [ "$(tail -1 "$log")" = pending ] && ! grep -qiE "${LEAD}(Risk|Status)${TRAIL}:" <<<"$msg"; then exit 0
     else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion."

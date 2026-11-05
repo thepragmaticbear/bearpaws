@@ -16,3 +16,7 @@ sensitive_paths() { bn="$BENIGN" ci="$SENSITIVE" LC_ALL=C awk '{ l = tolower($0)
 # field <key> <value regex>: a receipt line in $msg, tolerating bullets and markdown bold/backticks.
 # shellcheck disable=SC2154 # msg is set by the sourcing hook.
 field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
+# field_last <key> <value regex>: the same, but only the last <key> line counts. Risk uses it, as
+# Status does: a receipt quoted earlier in the message (a diagnosis report, a review of another
+# reply) must not reclassify this reply's own work.
+field_last() { grep -iE "${LEAD}$1${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2"; }

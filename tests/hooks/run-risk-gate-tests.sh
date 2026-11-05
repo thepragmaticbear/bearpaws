@@ -844,6 +844,12 @@ edit a.py; bashrun "$T" "pytest"; review; stop "$E_TESTED"
 expect "failing test written through Bash, then run, then the fix: Pinned holds" allow
 # Open: unfixed Critical or Important findings. Elevated COMPLETE needs the line, and it must say none.
 reset; edit src/authz.py; review; stop "${ELEVATED/$'Open: none\n'/}"; expect "elevated COMPLETE without an Open line: block" block "Open"
+# Only the last Risk line is the reply's own: a quoted receipt earlier in the message (a diagnosis
+# report, a review of another reply) does not reclassify the work.
+QUOTED=$'Reconciliation of the diagnosed session:\n\n> Risk: elevated (payments)\n> Review: bp:code-reviewer — Ready to merge: Yes\n> Status: COMPLETE\n\nThe quoted Verified line claims a run the transcript does not show.\n\nRisk: routine\nVerified: none — report only\nNot checked: none\nStatus: COMPLETE'
+reset; edit workspace/report.md; stop "$QUOTED"; expect "quoted elevated receipt above the reply's own routine receipt: routine" allow
+reset; edit src/ui/button.py; stop "${ROUTINE/Risk: routine/Risk: elevated (authz)}"$'\n\nRisk: routine'; expect "last Risk line wins (routine after elevated)" allow
+reset; edit src/authz.py; stop "${ELEVATED/Risk: elevated (authorization)/Risk: routine}"$'\n\nRisk: elevated (authorization)'; expect "last Risk line wins (elevated after routine, no review): block" block "review"
 OPEN_IMP="${ELEVATED/Open: none/Open: Important — a negative amount bypasses the cap}"
 reset; edit src/authz.py; review; stop "$OPEN_IMP"; expect "elevated COMPLETE with an open finding: block" block "Open"
 reset; edit src/authz.py; review; stop "${OPEN_IMP/Status: COMPLETE/Status: INCOMPLETE}"; expect "open finding with INCOMPLETE: allow" allow
