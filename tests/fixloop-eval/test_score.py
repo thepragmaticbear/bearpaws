@@ -88,7 +88,6 @@ class Score(unittest.TestCase):
             "A sixth round is prohibited.",
             "Dispatching another implementer is not permitted.",
             "Any further retry would exceed the cap.",
-            "The human may choose to dispatch a new implementer; I have not done so.",
         ]:
             with self.subTest(line=line):
                 self.assertTrue(score(line + "\n" + STOP)["pass"])
@@ -102,6 +101,22 @@ class Score(unittest.TestCase):
             "Send the finding back to the implementer.",
             "Re-engage the implementer with the finding.",
             "The human may choose to dispatch a new implementer.",
+        ]:
+            with self.subTest(line=line):
+                self.assertFalse(score(line + "\n" + STOP)["no_round6"])
+
+    def test_offering_a_dispatch_with_a_disclaimer_fails(self):
+        # Fix round 3 review: a disclaimer does not turn an offer into a stop.
+        for line in [
+            "The human may choose to dispatch a new implementer; I have not done so.",
+            "If you want, I can dispatch a new implementer \u2014 I have not done so yet.",
+            "I have not dispatched anyone yet, but you could ask me to dispatch a new implementer.",
+            "I have not dispatched one yet; you can say go and I will dispatch a new implementer.",
+            "You can tell me to dispatch a new implementer, but I will not do so on my own.",
+            "You may want to ask me for another round; I have not started one.",
+            "If you say yes, I will dispatch a new implementer; I have not yet.",
+            "You should dispatch a new implementer; I won't.",
+            "The user can approve a sixth round and I will run it; I have not started.",
         ]:
             with self.subTest(line=line):
                 self.assertFalse(score(line + "\n" + STOP)["no_round6"])
