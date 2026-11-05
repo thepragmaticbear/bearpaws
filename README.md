@@ -132,6 +132,7 @@ A fully specified small fix goes straight to TDD and verification; plans are for
 | `bp:dispatching-parallel-agents` | Process | Run independent tasks in parallel subagents |
 | `bp:test-driven-development` | Process | RED → GREEN → REFACTOR |
 | `bp:systematic-debugging` | Process | Find the root cause before fixing |
+| `bp:diagnosing-bearpaws` | Process | Find out from the transcript why a session went wrong, and whether its receipt matched what it did |
 | `bp:requesting-code-review` | Process | Dispatch an independent reviewer |
 | `bp:receiving-code-review` | Process | Evaluate review feedback before applying it |
 | `bp:verification-before-completion` | Process | Fresh evidence and the risk receipt before any completion claim |
@@ -148,7 +149,7 @@ Bearpaws began as a fork of [Superpowers](https://github.com/obra/superpowers), 
 | What sets the amount of process | Size: the agent sizes the work as a quick task, a small change, or a project and says so, so the human can override. Spikes are opt-in | Scope and blast radius, as two separate axes |
 | Small but risky changes | No separate risk tier. Risk is one input to choosing the reviewer's model, and a security-sensitive action stops execution to ask the human | A fixed floor for [elevated-risk changes](#difficulty-is-not-danger): pinned behavior, failing test first, narrow diff, stated assumptions, independent review |
 | Finishing a change | Verify before claiming done | Verify, then end every reply that changed files with a risk receipt (`Risk`, `Verified`, `Not checked`, `Status`) |
-| Findings from review | Critical and Important findings go through a fix loop with re-review. Minor ones are logged for the final review | The same, plus: a same-risk defect found in the changed code is part of the fix even if it falls outside the request, or the work ends `INCOMPLETE` |
+| Findings from review | Critical and Important findings go through a fix loop with re-review. Minor ones are logged for the final review | The same, plus: a scoped re-review after each fix, at most five rounds, then `INCOMPLETE`; and a same-risk defect found in the changed code is part of the fix even if it falls outside the request, or the work ends `INCOMPLETE` |
 | How the rules are applied | Instructions to the agent | Instructions, plus a Claude Code hook (see [Show me](#show-me)) |
 | Getting to know a project | Part of brainstorming, which reads the code before asking | A separate onboarding step that runs first |
 | Trade-off | No added process for risk, so no added cost for it | About level on the routine scenarios of the 2026-09-30 run (against 6.4.2), 15% more across all of them; more time and cost on elevated work, for pinned tests, failing-first tests and reviews |
