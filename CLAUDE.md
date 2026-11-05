@@ -114,6 +114,7 @@ python3 tests/review-eval/test_render.py                                      # 
 python3 tests/review-eval/test_score.py                                       # review-eval scorer tests (blocking sections, verdict line)
 python3 tests/drift-eval/test_score.py                                        # drift-eval scorer tests (only the Drift: block counts)
 python3 tests/fixloop-eval/test_score.py                                      # fixloop-eval scorer tests (Status, Open, no round 6)
+python3 tests/builder-eval/test_score.py                                      # builder-eval scorer tests (dispatch, builder prompt, single-use question)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
 tests/claude-code/run-skill-tests.sh --integration                            # full subagent-driven-dev run (10–30 min)
 tests/claude-code/run-skill-tests.sh -t test-subagent-driven-development.sh   # single test
@@ -130,6 +131,7 @@ tests/risk-eval/run.sh skills/using-bearpaws/SKILL.md <label>                 # 
 tests/resume-eval/run.sh skills/executing-plans/SKILL.md <label>              # resume reconciles plan checkboxes with git
 tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  # finishing flags code that drifted from a checked-off plan (CLEAN=1: no-drift control)
 tests/fixloop-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # controller stops after fix round 5: INCOMPLETE, no round 6
+DESIGN=elevated tests/builder-eval/run.sh skills/brainstorming/SKILL.md <label>  # builder check runs for elevated designs only (DESIGN=routine: none)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)

@@ -94,7 +94,7 @@ Skills may include extra files beside `SKILL.md`. These are used for references,
 
 Examples:
 
-- `skills/brainstorming/spec-document-reviewer-prompt.md`
+- `skills/brainstorming/builder-check-prompt.md`
 - `skills/systematic-debugging/root-cause-tracing.md`
 - `skills/subagent-driven-development/implementer-prompt.md`
 - `skills/writing-skills/anthropic-best-practices.md`
