@@ -3,9 +3,11 @@
 
 score.py --label L --run N transcript.jsonl   -> one JSON row
 score.py --summary scores.jsonl               -> table per label
+FIXTURE=rereview adds a "rereview" key: per-finding verdicts, where the zero-amount bug and the SQL issue land.
 """
 import argparse
 import json
+import os
 import re
 from collections import defaultdict
 
@@ -56,6 +58,100 @@ def verdict_reject(text):
         return not re.match(r"\W*yes\W*$", m.group(1), re.I)
     return bool(re.search(r"(not ready|with fixes|❌|issues found)", text[-1500:], re.I))
 
+# rereview (FIXTURE=rereview): F1 negative amount, F2 cumulative cap, Z zero amount accepted by the
+# fix's `< 0`, SQL the pre-existing report() concatenation outside the fix diff.
+REREVIEW_SECTION = (r"finding verdict|new breakage|break attempt|didn'?t check|out[- ]of[- ]scope|^verdict"
+                    r"|issues|strengths|recommendation|assessment|failure mode|have to be true|summary")
+REREVIEW_F1 = r"negative|-500|< ?0\b"
+REREVIEW_F2 = r"cumulative|running total|refunded_cents \+|1200|twice|already refunded|prior refunds"
+REREVIEW_ZERO = r"\bzero\b|refund\([^)]*,\s*0\)|<= ?0\b|non-?positive|amount_cents == 0|0 cents|\b0 is accepted"
+REREVIEW_SQL = r"\bSQL\b|injection|concatenat"
+SEVERITIES = ("minor", "important", "critical")
+
+
+def rereview_items(text):
+    """Split a reply into items, each tagged with its section and severity.
+
+    A heading that names a known section opens it; any other heading or bold-only line opens an item
+    (and sets the severity when it names one). Bullets and numbered lines open items too. An item's
+    severity is the first severity word in it, else the enclosing severity heading's.
+    """
+    items, section, heading_sev = [], "", None
+    current = None
+    for line in text.splitlines():
+        h = re.match(r"\s*(?:#{1,6}\s+(.*)|\*\*([^*]+)\*\*:?\s*$)", line)
+        title = h and (h.group(1) or h.group(2)).strip(" *:#")
+        if title and re.search(REREVIEW_SECTION, title, re.I):
+            section, heading_sev, current = title.lower(), None, None
+            continue
+        if title:
+            sev = re.search(r"\b(critical|important|minor)\b", title, re.I)
+            if sev:
+                heading_sev = sev.group(1).lower()
+            current = {"section": section, "text": line, "heading_sev": heading_sev}
+            items.append(current)
+            continue
+        if re.match(r"\s*(?:[-*]|\d+\.)\s+\S", line) or current is None:
+            if not line.strip():
+                continue
+            current = {"section": section, "text": line, "heading_sev": heading_sev}
+            items.append(current)
+        else:
+            current["text"] += "\n" + line
+    for item in items:
+        sev = re.search(r"\b(critical|important|minor)\b", item["text"], re.I)
+        item["severity"] = sev.group(1).lower() if sev else item["heading_sev"]
+    return items
+
+
+def finding_verdict(items, pattern, other):
+    """ADDRESSED / NOT ADDRESSED for the Finding Verdicts item about one finding, else None."""
+    for item in items:
+        if "finding verdict" not in item["section"]:
+            continue
+        mine, theirs = re.search(pattern, item["text"], re.I), re.search(other, item["text"], re.I)
+        if mine and (not theirs or mine.start() < theirs.start()):
+            if re.search(r"NOT\s+ADDRESSED", item["text"], re.I):
+                return "NOT ADDRESSED"
+            if re.search(r"\bADDRESSED\b", item["text"], re.I):
+                return "ADDRESSED"
+    return None
+
+
+def rereview_score(text):
+    items = rereview_items(text)
+    zero = [i for i in items if re.search(REREVIEW_ZERO, i["text"], re.I) and "finding verdict" not in i["section"]
+            and "break attempt" not in i["section"] and "didn" not in i["section"]]
+    zero.sort(key=lambda i: ("new breakage" in i["section"], SEVERITIES.index(i["severity"]) if i["severity"] else -1),
+              reverse=True)
+    sql = [i for i in items if re.search(REREVIEW_SQL, i["text"], re.I)]
+    sql_sections = {i["section"] for i in sql}
+    scoped = {s for s in sql_sections if re.search(r"out[- ]of[- ]scope|break attempt|didn'?t check", s)}
+
+    def blocking(pattern):
+        """An item at Important or Critical, outside the sections that never block."""
+        return any(re.search(pattern, i["text"], re.I) and i["severity"] in ("important", "critical")
+                   and not re.search(r"out[- ]of[- ]scope|break attempt|didn'?t check|finding verdict|strengths", i["section"])
+                   for i in items)
+    verdict = next((i["text"] for i in items if re.match(r"verdict|assessment", i["section"])), "")
+    return {
+        "f1": finding_verdict(items, REREVIEW_F1, REREVIEW_F2),
+        "f2": finding_verdict(items, REREVIEW_F2, REREVIEW_F1),
+        "f2_blocking": blocking(REREVIEW_F2),
+        "zero_section": zero[0]["section"] if zero else None,
+        "zero_severity": zero[0]["severity"] if zero else None,
+        "sql_mentioned": bool(sql),
+        "sql_only_out_of_scope": bool(sql) and any("scope" in s for s in scoped) and scoped == sql_sections,
+        "sql_blocking": blocking(REREVIEW_SQL),
+        "findings_remain_open": bool(re.search(r"remain open", verdict, re.I)) or verdict_reject(text),
+    }
+
+
+def rereview_pass(r):
+    return (r["f1"] == "ADDRESSED" and r["f2"] == "NOT ADDRESSED" and bool(r["zero_section"])
+            and "new breakage" in r["zero_section"] and r["zero_severity"] in ("important", "critical")
+            and r["sql_only_out_of_scope"] and not r["sql_blocking"])
+
 
 def score(path, label, run):
     text, cost, bash_runs = "", 0.0, 0
@@ -91,6 +187,9 @@ def score(path, label, run):
         "code_executions": bash_runs,
         "verdict_reject": verdict_reject(text),
     }
+    if os.environ.get("FIXTURE") == "rereview":
+        row["rereview"] = rereview_score(text)
+        row["rereview"]["pass"] = rereview_pass(row["rereview"])
     return row
 
 
@@ -112,6 +211,14 @@ def summary(path):
         print(f"  blocking items (Crit+Imp)    {[r.get('blocking_items', 0) for r in g]}")
         print(f"  flags over-building          {sum(r.get('flags_overbuild', False) for r in g)}/{n}")
         print(f"  demands over-building        {sum(r.get('demands_overbuild', False) for r in g)}/{n}")
+        rr = [r["rereview"] for r in g if "rereview" in r]
+        if rr:
+            print(f"  rereview F1 / F2 verdicts    {[(x['f1'], x['f2']) for x in rr]}")
+            print(f"  rereview F2 blocking         {sum(x['f2_blocking'] for x in rr)}/{len(rr)}")
+            print(f"  rereview zero bug            {[(x['zero_section'], x['zero_severity']) for x in rr]}")
+            print(f"  rereview SQL only out-of-scope / blocking  "
+                  f"{sum(x['sql_only_out_of_scope'] for x in rr)}/{len(rr)} / {sum(x['sql_blocking'] for x in rr)}/{len(rr)}")
+            print(f"  rereview pass                {sum(x['pass'] for x in rr)}/{len(rr)}")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Render a reviewer prompt template for the review fixture.
 
-Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
+Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope|rereview] [AGENT_PROMPT=agents/code-reviewer.md] render.py <template.md> <repo-dir>
 Supports requesting-code-review/code-reviewer.md style {PLACEHOLDERS} and the
 subagent-driven-development prompt files (the fenced prompt block, [FULL TEXT ...]
-and [From implementer's report] markers).
+and [From implementer's report] markers), and re-review-prompt.md's [TASK_TEXT], [FINDINGS],
+[FIX_BASE_SHA] and [HEAD_SHA].
+rereview: the task spans two commits (the reviewed head, then the fix), so BASE_SHA is HEAD~2 and
+FIX_BASE_SHA, the head the previous review saw, is HEAD~1. FINDINGS are the report's bullet lines.
 """
 import os
 import re
@@ -20,7 +23,10 @@ task = open(task_file if os.path.exists(task_file) else os.path.join(here, "task
 report_file = os.path.join(here, f"report-{fixture}.txt")
 report = open(report_file if os.path.exists(report_file) else os.path.join(here, "report.txt")).read().strip()
 head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
-base = subprocess.check_output(["git", "rev-parse", "HEAD~1"], cwd=repo, text=True).strip()
+fix_base = subprocess.check_output(["git", "rev-parse", "HEAD~1"], cwd=repo, text=True).strip()
+base = (subprocess.check_output(["git", "rev-parse", "HEAD~2"], cwd=repo, text=True).strip()
+        if fixture == "rereview" else fix_base)
+findings = "\n".join(l for l in report.splitlines() if l.startswith("- "))
 
 # Package the fixture's current state, including changes outside the head commit.
 diff = subprocess.check_output(["git", "diff", base, "--", "src", "tests",
@@ -71,5 +77,11 @@ for key, value in values.items():
     text = text.replace("{" + key + "}", value)
 text = text.replace("[FULL TEXT of task requirements]", task)
 text = text.replace("[From implementer's report]", report)
+scoped = "[FIX_BASE_SHA]" in text
+for key, value in {"TASK_TEXT": task, "FINDINGS": findings, "FIX_BASE_SHA": fix_base, "HEAD_SHA": head}.items():
+    text = text.replace("[" + key + "]", value)
 print(text)
-print(f"\nThe repository under review is the current directory. Base {base}, head {head}.")
+if scoped:
+    print(f"\nThe repository under review is the current directory. Fix base {fix_base}, head {head}.")
+else:
+    print(f"\nThe repository under review is the current directory. Base {base}, head {head}.")

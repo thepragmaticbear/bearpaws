@@ -55,6 +55,26 @@ class RenderPackage(unittest.TestCase):
             for required in ["exit 1", "Ran 3 tests", "FAILED (failures=1)", "empty input still accepted"]:
                 self.assertTrue(required in text, f"missing failed-check evidence: {required}")
 
+    def test_rereview_fills_findings_and_fix_range(self):
+        with tempfile.TemporaryDirectory() as repo:
+            env = dict(os.environ, FIXTURE="rereview")
+            subprocess.run([str(HERE / "setup.sh"), repo], env=env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            sha = lambda rev: subprocess.check_output(["git", "rev-parse", rev], cwd=repo, text=True).strip()
+            text = subprocess.check_output([sys.executable, str(HERE / "render.py"),
+                                            str(ROOT / "skills/subagent-driven-development/re-review-prompt.md"), repo],
+                                           env=env, text=True)
+            for placeholder in ["[TASK_TEXT]", "[FINDINGS]", "[FIX_BASE_SHA]", "[HEAD_SHA]"]:
+                self.assertNotIn(placeholder, text)
+            self.assertIn(f"{sha('HEAD~1')}..{sha('HEAD')}", text)
+            self.assertNotIn(sha("HEAD~2"), text)
+            self.assertIn("cumulative refunds", text)
+            findings = [l for l in (HERE / "report-rereview.txt").read_text().splitlines() if l.startswith("- ")]
+            self.assertEqual(len(findings), 2)
+            for finding in findings:
+                self.assertIn(finding, text)
+            self.assertNotIn("reports DONE", text)
+
 
 if __name__ == "__main__":
     unittest.main()

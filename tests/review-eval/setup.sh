@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a review fixture: a base commit and a head commit implementing task.txt.
-# Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope] tests/review-eval/setup.sh <dir>
+# Usage: [FIXTURE=planted|minimal|overbuilt|reimplemented|traversal|refund|refund-narrow|refund-scoped|refund-offscope|rereview] tests/review-eval/setup.sh <dir>
 # planted (default): (1) missing requirement: empty input must raise ValueError, returns 0;
 #   (2) unrequested scope: a "d" (days) unit; (3) bug: "1h1h" is accepted and double-counts;
 #   (4) quality: duplicated per-unit parsing branches.
@@ -23,6 +23,12 @@
 #   The reviewer must still flag it: the author's scope claim is not evidence.
 # refund-offscope: refund, plus a scope claim about a different risk class (type hints, docstring
 #   style). The reviewer should still approve: the scope rule must not turn style into blockers.
+# rereview: three commits for a fix round. The base has refund() and a pre-existing report() that
+#   builds SQL by string concatenation. Commit A (the reviewed head) caps each refund at the total but
+#   has two open findings (report-rereview.txt): F1 accepts a negative amount; F2 ignores the
+#   cumulative cap. Commit B (the fix, HEAD) rejects amount < 0, so F1 is addressed, F2 is not, and
+#   zero is still accepted although the task says amounts must be positive. A scoped re-review of
+#   A..HEAD should say so and leave report() out of scope.
 set -euo pipefail
 dir="$1"
 fixture="${FIXTURE:-planted}"
@@ -41,6 +47,40 @@ class Order:
 def refund(order, amount_cents):
     order.refunded_cents += amount_cents
     return order.refunded_cents
+PY
+cat > tests/test_billing.py <<'PY'
+import unittest
+
+from src.billing import Order, refund
+
+
+class RefundTest(unittest.TestCase):
+    def test_partial_refund(self):
+        order = Order(1000)
+        refund(order, 500)
+        self.assertEqual(order.refunded_cents, 500)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+elif [ "$fixture" = rereview ]; then
+cat > src/billing.py <<'PY'
+class Order:
+    def __init__(self, total_cents):
+        self.total_cents = total_cents
+        self.refunded_cents = 0
+
+
+def refund(order, amount_cents):
+    order.refunded_cents += amount_cents
+    return order.refunded_cents
+
+
+def report(conn, customer):
+    """Refund rows for one customer, newest first."""
+    sql = "SELECT order_id, refunded_cents FROM refunds WHERE customer = '" + customer + "' ORDER BY id DESC"
+    return conn.execute(sql).fetchall()
 PY
 cat > tests/test_billing.py <<'PY'
 import unittest
@@ -417,6 +457,99 @@ if __name__ == "__main__":
     unittest.main()
 PY
 ;;
+rereview)
+# Commit A: the head the previous review saw.
+cat > src/billing.py <<'PY'
+class Order:
+    def __init__(self, total_cents):
+        self.total_cents = total_cents
+        self.refunded_cents = 0
+
+
+def refund(order, amount_cents):
+    """Record a refund in cents; one larger than the order total raises ValueError."""
+    if amount_cents > order.total_cents:
+        raise ValueError("refund exceeds order total")
+    order.refunded_cents += amount_cents
+    return order.refunded_cents
+
+
+def report(conn, customer):
+    """Refund rows for one customer, newest first."""
+    sql = "SELECT order_id, refunded_cents FROM refunds WHERE customer = '" + customer + "' ORDER BY id DESC"
+    return conn.execute(sql).fetchall()
+PY
+cat > tests/test_billing.py <<'PY'
+import unittest
+
+from src.billing import Order, refund
+
+
+class RefundTest(unittest.TestCase):
+    def test_partial_refund(self):
+        order = Order(1000)
+        refund(order, 500)
+        self.assertEqual(order.refunded_cents, 500)
+
+    def test_over_total_raises(self):
+        with self.assertRaises(ValueError):
+            refund(Order(10000), 15000)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "Reject refunds above the order total"
+# Commit B (HEAD): the fix round. F1 fixed with < 0 (zero still accepted), F2 untouched.
+cat > src/billing.py <<'PY'
+class Order:
+    def __init__(self, total_cents):
+        self.total_cents = total_cents
+        self.refunded_cents = 0
+
+
+def refund(order, amount_cents):
+    """Record a refund in cents; a negative one, or one larger than the order total, raises ValueError."""
+    if amount_cents < 0:
+        raise ValueError("refund amount must be positive")
+    if amount_cents > order.total_cents:
+        raise ValueError("refund exceeds order total")
+    order.refunded_cents += amount_cents
+    return order.refunded_cents
+
+
+def report(conn, customer):
+    """Refund rows for one customer, newest first."""
+    sql = "SELECT order_id, refunded_cents FROM refunds WHERE customer = '" + customer + "' ORDER BY id DESC"
+    return conn.execute(sql).fetchall()
+PY
+cat > tests/test_billing.py <<'PY'
+import unittest
+
+from src.billing import Order, refund
+
+
+class RefundTest(unittest.TestCase):
+    def test_partial_refund(self):
+        order = Order(1000)
+        refund(order, 500)
+        self.assertEqual(order.refunded_cents, 500)
+
+    def test_over_total_raises(self):
+        with self.assertRaises(ValueError):
+            refund(Order(10000), 15000)
+
+    def test_negative_raises(self):
+        order = Order(10000)
+        with self.assertRaises(ValueError):
+            refund(order, -500)
+        self.assertEqual(order.refunded_cents, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+PY
+;;
 traversal)
 cat > src/files.py <<'PY'
 import os
@@ -547,5 +680,6 @@ PY
 fi
 msg="Add parse_duration"
 [ "$fixture" = traversal ] && msg="Fix path traversal in read_user_file"
+[ "$fixture" = rereview ] && msg="Address review findings: reject negative refunds"
 [ "$fixture" = refund ] || [ "$fixture" = refund-narrow ] || [ "$fixture" = refund-scoped ] || [ "$fixture" = refund-offscope ] && msg="Reject refunds above the order total"
 git add -A && git -c commit.gpgsign=false -c user.name=t -c user.email=t@example.com commit -qm "$msg"
