@@ -119,7 +119,7 @@ def attachment(ts, kind, **kw):
 attachment("2026-11-04T15:02:11.520Z", "skill_listing", content="(skill names and descriptions)")
 attachment("2026-11-04T15:02:11.524Z", "todo_reminder", content="")
 s.meta("mode", mode="normal")
-s.assistant("2026-11-04T15:02:14.020Z", [{"type": "text", "text": "I'll read the current module first."}],
+s.assistant("2026-11-04T15:02:12.640Z", [{"type": "text", "text": "I'll read the current module first."}],
             stop="end_turn")
 t = s.tool("2026-11-04T15:02:13.050Z", "toolu_00a", "Glob", {"pattern": "**/*.py"})
 s.result("2026-11-04T15:02:13.090Z", t, "src/__init__.py\nsrc/orders.py\nsrc/refund.py\ntests/__init__.py",

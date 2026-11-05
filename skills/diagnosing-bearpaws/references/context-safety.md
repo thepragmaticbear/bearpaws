@@ -22,5 +22,7 @@ whole line.
    `enumerate(f, 1)`.
 5. **Read one line by number:** `sed -n "${n}p" <file> | cut -c1-400`, or
    `sed -n "${n}p" <file> | jq -c '.message.content'` and truncate that.
-6. **Check every citation** this way before it goes in a report.
+6. **Check every citation** before it goes in a report. The evidence is often hundreds of columns into
+   the line, past the metadata, so `cut -c1-300` will not show it. Grep for it on that line:
+   `sed -n "${n}p" <file> | grep -o '.\{0,60\}FRAGMENT.\{0,60\}'`.
 7. **Read only.** No redirect into a transcript, no `jq -i`/`sed -i`, no moves.

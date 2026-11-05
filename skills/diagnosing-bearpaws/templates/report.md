@@ -34,8 +34,9 @@ contradicts it.
 
 ## Coverage
 
-What was not read or could not be checked (subagent transcripts skipped, lines truncated, the
-project itself not run).
+Transcript size (`wc -c`, main plus subagents) and whether the five analysts ran; under 100 KB without
+them, say you read every line. Then what was not read or could not be checked (subagent transcripts
+skipped, lines truncated, the project itself not run).
 
 ## Verdict
 

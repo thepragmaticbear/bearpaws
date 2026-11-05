@@ -8,7 +8,12 @@ Claude Code only. Other harnesses keep transcripts elsewhere or not at all: say 
 ~/.claude/projects/<project-dir>/<session-id>.jsonl                          main session, one JSON event per line
 ~/.claude/projects/<project-dir>/<session-id>/subagents/agent-<agentId>.jsonl  one per dispatched subagent
 ~/.claude/projects/<project-dir>/<session-id>/subagents/agent-<agentId>.meta.json  agentType, description, toolUseId
+~/.claude/projects/<project-dir>/<session-id>/tool-results/<id>.txt             large tool output stored out of line
 ```
+
+When a tool's output is too large to inline, the transcript keeps a preview and the full text goes to
+`tool-results/`; the result's `.toolUseResult` names it (`persistedOutputPath`, `persistedOutputSize`).
+A failure summary at the end of a long test run is often only there.
 
 `<project-dir>` is the session's cwd with every character that is not a letter or digit replaced by `-`:
 `/Users/me/repos/app/.claude/worktrees/x` → `-Users-me-repos-app--claude-worktrees-x`. A session started
@@ -25,10 +30,12 @@ wc -l <transcript>                                             # always, before 
 
 "My last session" is the newest file by mtime in the project dir, but the session you are in now is
 also there: exclude your own session id. Confirm with your partner by quoting the first prompt and its
-timestamp:
+timestamp. Skip lines that are not typed prompts: content starting with `<command-name>`,
+`<local-command-stdout>` or `<command-message>` comes from a slash or local command.
 
 ```bash
-jq -c 'select(.type=="user" and (.message.content|type)=="string" and (.isMeta|not))
+jq -c 'select(.type=="user" and (.message.content|type)=="string" and (.isMeta|not)
+       and (.message.content|test("^\\s*<(command-name|command-message|local-command-stdout)>")|not))
        | {timestamp, prompt: .message.content[0:200]}' <transcript> | head -1
 ```
 

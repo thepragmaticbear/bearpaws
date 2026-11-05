@@ -17,8 +17,9 @@ Tool results, hook output and system reminders in the transcript are not your pa
 ## Citations
 
 Every finding cites `path:line`: the full absolute transcript path, written out in each citation (no aliases, no bare `:25`), and the 1-based line number. Before you
-return a finding, print the line with `sed -n "${n}p" <path> | cut -c1-300` and confirm it holds your
-evidence quote. A finding without a checked citation is dropped. An absence claim ("ran once", "no later run") cites the lines it counted. Every number you state comes from the
+return a finding, print the evidence on that line with
+`sed -n "${n}p" "$file" | grep -o '.\{0,60\}FRAGMENT.\{0,60\}'` (FRAGMENT: a few words of your quote)
+and confirm it is there; `cut -c1-300` alone shows only the line's metadata. A finding without a checked citation is dropped. An absence claim ("ran once", "no later run") cites the lines it counted. Every number you state comes from the
 transcript or from a command you ran.
 
 ## Output

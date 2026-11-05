@@ -10,6 +10,9 @@ transcript is. These checks cover what the hook cannot see.
    the output text. A pipe (`| tail`, `| head`, `| grep`), `;` or `|| true` reports the last stage's
    exit, so a run can show `is_error: false` while its output says `N failed`, `FAILED`, `error`.
    The output decides. No run after the last edit, or counts that differ from the claim, is a finding.
+   When the result's output was stored out of line (`.toolUseResult.persistedOutputPath`, a file under
+   `<session-id>/tool-results/`), read that file: `wc -l` first, then `grep -n 'failed\|FAILED\|error'`,
+   never `cat`. Cite the file's own `path:line` for what you find there.
 2. **`Pinned:`** Find a run of the named tests before the first edit, and its outcome.
 3. **Review.** For elevated work, find a review dispatch (`Agent`/`Task` with a reviewer
    `subagent_type` or prompt) after the last edit.
