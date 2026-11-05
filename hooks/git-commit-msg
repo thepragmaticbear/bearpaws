@@ -42,6 +42,6 @@ if [ "$risk" = elevated ]; then
   }
   exit 0
 fi
-hits="$(grep -iE "$SENSITIVE" <<<"$staged" | head -5 | tr '\n' ' ')"
+hits="$(sensitive_paths <<<"$staged" | head -5 | tr '\n' ' ')"
 [ -z "$hits" ] || echo "bearpaws: staged ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt." >&2
 exit 0

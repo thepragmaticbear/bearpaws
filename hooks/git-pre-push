@@ -2,7 +2,8 @@
 # Git pre-push hook: flags commits whose author, committer or Co-authored-by email is not a
 # GitHub noreply address or on the project's allowed list, before they become public.
 # Allowed list: an "Allowed commit emails: <glob>, <glob>" line in CLAUDE.md, AGENTS.md or CONTRIBUTING.md.
-# Flags once per branch: pushing the same branch again proceeds. Install: ./install.sh --git.
+# Flags once per remote, branch and commit set: pushing the same commits again proceeds. Commits flagged for one
+# remote are flagged again for any other until that remote has them. Install: ./install.sh --git.
 # Bypass: git push --no-verify, or BEARPAWS_ENFORCE=0.
 # tests/hooks/run-git-gate-tests.sh pins every rule.
 
@@ -28,30 +29,45 @@ ok() { # <email>
   return 1
 }
 
+# Git passes the remote name, or the URL for a push to a bare URL.
+remote="${1-}"
 out=""
-while read -r lref lsha rref rsha; do
+while read -r _lref lsha rref rsha; do
   [[ "$lsha" =~ ^0+$ ]] && continue
-  grep -qxF -- "$rref" "$flagged" 2>/dev/null && continue
+  # A flag covers only this remote, ref and tip: new commits or another remote are checked again.
+  key="$remote"$'\t'"$rref"$'\t'"$lsha"
+  awk -F'\t' -v k="$key" '$1"\t"$2"\t"$3 == k { f = 1 } END { exit !f }' "$flagged" 2>/dev/null && continue
   # Only commits no remote has yet: a teammate's commit merged in from main is not this push's to check.
   range=("$lsha" --not --remotes); base="<base>"
   if ! [[ "$rsha" =~ ^0+$ ]] && git cat-file -e "$rsha^{commit}" 2>/dev/null; then
     range+=("$rsha"); git merge-base --is-ancestor "$rsha" "$lsha" 2>/dev/null && base="$rsha"
   fi
+  fmt='%H%x09%h%x09%ae%x09%ce%x09%(trailers:key=Co-authored-by,valueonly,separator=%x20)'
   # Fail loudly: a log that cannot be read must not pass the push.
-  log="$(git log --format='%h%x09%ae%x09%ce%x09%(trailers:key=Co-authored-by,valueonly,separator=%x20)' "${range[@]}" 2>/dev/null)" || {
+  log="$(git log --format="$fmt" "${range[@]}" 2>/dev/null)" || {
     echo "bearpaws: could not list commits for $rref; push with --no-verify to skip the identity check" >&2; exit 1; }
-  hits=""
-  while IFS=$'\t' read -r h ae ce co; do
+  # Commits flagged for another remote stay flagged here, even after a proceed put them on that remote,
+  # until this remote's tracking refs contain them.
+  while read -r c; do
+    git merge-base --is-ancestor "$c" "$lsha" 2>/dev/null || continue
+    [ -n "$(git for-each-ref --count=1 --contains "$c" "refs/remotes/$remote/" 2>/dev/null)" ] && continue
+    log+=$'\n'"$(git log -1 --format="$fmt" "$c" 2>/dev/null)"
+  done < <(awk -F'\t' -v r="$remote" '$1 != r { for (i = 4; i <= NF; i++) print $i }' "$flagged" 2>/dev/null | sort -u)
+  log="$(awk '!seen[$0]++' <<<"$log")"
+  hits=""; bad=""
+  while IFS=$'\t' read -r full h ae ce co; do
     [ -n "$h" ] || continue
+    before="$hits"
     ok "$ae" || hits+="  $h author $ae"$'\n'
     ok "$ce" || hits+="  $h committer $ce"$'\n'
     while read -r c; do
       [ -n "$c" ] && { ok "$c" || hits+="  $h co-author $c"$'\n'; }
     done < <(grep -oE '[^<>[:space:]]+@[^<>[:space:]]+' <<<"$co")
+    [ "$hits" = "$before" ] || bad+=$'\t'"$full"
   done <<<"$log"
   [ -n "$hits" ] || continue
   out+="${rref#refs/heads/} (rewrite: git rebase -r $base --exec 'git commit --amend --no-edit --reset-author'):"$'\n'"$hits"
-  printf '%s\n' "$rref" >>"$flagged"
+  printf '%s%s\n' "$key" "$bad" >>"$flagged"
 done
 
 [ -n "$out" ] || exit 0
@@ -60,7 +76,7 @@ done
   printf '%s' "$out"
   echo "Choose one:"
   echo "  rewrite: set user.email, then run the rebase shown for each branch (edit Co-authored-by trailers by hand)"
-  echo "  proceed: push again; each branch is flagged once"
+  echo "  proceed: push the same commits again; new commits or another remote are flagged again"
   echo "  stop:    leave it unpushed"
 } >&2
 exit 1

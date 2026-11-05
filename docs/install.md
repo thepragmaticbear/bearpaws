@@ -31,7 +31,7 @@ cd /path/to/your/repo
 /path/to/bearpaws/install.sh --git
 ```
 
-It writes a `commit-msg` hook (in `.git/hooks/`, or `core.hooksPath` if set) that runs the checkout's `hooks/git-commit-msg`, so updating the checkout updates the gate. Commits with staged changes then need the risk receipt in the message. It refuses to replace a `commit-msg` hook it did not write and prints the line to chain it instead. Bypass with `git commit --no-verify` or `BEARPAWS_ENFORCE=0`; remove it by deleting the hook. It also writes a `pre-push` hook running `hooks/git-pre-push`: a push whose new commits carry an author, committer or `Co-authored-by` email that is neither `*@users.noreply.github.com`, `noreply@github.com`, nor matched by the project's `Allowed commit emails: <glob>, <glob>` line (CLAUDE.md, AGENTS.md or CONTRIBUTING.md) is stopped once per branch, with the rewrite command; pushing again proceeds. A foreign `pre-push` is left alone, like `commit-msg`. It needs only bash and git 2.31 or later. A clean cherry-pick or revert does not run `commit-msg`, so the gate does not see it; one that stops on a conflict carries the original message, so for a pre-gate commit finish it with `git commit --no-verify` (or `BEARPAWS_ENFORCE=0`).
+It writes a `commit-msg` hook (in `.git/hooks/`, or `core.hooksPath` if set) that runs the checkout's `hooks/git-commit-msg`, so updating the checkout updates the gate. Commits with staged changes then need the risk receipt in the message. It refuses to replace a `commit-msg` hook it did not write and prints the line to chain it instead. Bypass with `git commit --no-verify` or `BEARPAWS_ENFORCE=0`; remove it by deleting the hook. It also writes a `pre-push` hook running `hooks/git-pre-push`: a push whose new commits carry an author, committer or `Co-authored-by` email that is neither `*@users.noreply.github.com`, `noreply@github.com`, nor matched by the project's `Allowed commit emails: <glob>, <glob>` line (CLAUDE.md, AGENTS.md or CONTRIBUTING.md) is stopped once per remote, branch and commit set, with the rewrite command; pushing the same commits again proceeds. A foreign `pre-push` is left alone, like `commit-msg`. It needs only bash and git 2.31 or later. A clean cherry-pick or revert does not run `commit-msg`, so the gate does not see it; one that stops on a conflict carries the original message, so for a pre-gate commit finish it with `git commit --no-verify` (or `BEARPAWS_ENFORCE=0`).
 
 ### Recommended Claude Code setup
 
@@ -86,7 +86,7 @@ rm -rf ~/.gemini/config/plugins/bearpaws
 
 Bearpaws uses native Antigravity plugin packaging, rules, skills, and subagents — not Gemini CLI compatibility mode.
 
-## Experimental: OpenCode, Codex, Grok Build, Devin, Cursor, Copilot, …
+## Experimental: OpenCode, Codex, Grok Build, Junie, Devin, Cursor, Copilot, …
 
 Codex, Devin, OpenCode, and other Agent Skills agents read `~/.agents/skills/`. One command links every Bearpaws skill there without touching unrelated skills:
 
@@ -119,6 +119,20 @@ grok inspect                      # confirm the rule and skills are listed
 
 The installer only writes a `bearpaws.md` it owns, and it refuses to overwrite one you wrote.
 
+**Junie:** link the skills into Junie's user skills directory, then add the bootstrap line yourself:
+
+```bash
+./install.sh --junie --global     # links into ~/.junie/skills ($JUNIE_HOME/skills if set)
+```
+
+Add this line to `~/.junie/AGENTS.md` (the installer prints it and never edits that file):
+
+```text
+Before responding to any request, read `~/.junie/skills/using-bearpaws/SKILL.md` and follow it.
+```
+
+Inside this repo, Junie also reads `AGENTS.md` as project guidelines.
+
 **Copilot CLI:** installs from the same plugin marketplace as Claude Code, with skills plus a SessionStart hook:
 
 ```bash
@@ -146,4 +160,4 @@ done
 rm -f "$roots"
 ```
 
-Then remove the `instructions` entry from your OpenCode config, the bootstrap line from `~/.codex/AGENTS.md`, and `~/.grok/rules/bearpaws.md`.
+Then remove the `instructions` entry from your OpenCode config, the bootstrap line from `~/.codex/AGENTS.md`, and `~/.grok/rules/bearpaws.md`. For Junie, run the same loop with `~/.junie/skills` in place of `~/.agents/skills`, and remove the bootstrap line from `~/.junie/AGENTS.md`.

@@ -53,11 +53,11 @@ In Claude Code, a `Stop` hook enforces the floor:
 - A `Verified:` line that claims a test run is blocked when no test command ran after the last edit. A `Pinned:` line that claims tests passed before the edit is blocked when none ran before the first edit.
 - Routine work that edited sensitive-looking paths (auth, token, payment, migration, sql, …) gets a one-time nudge to reclassify or say why it is routine.
 
-Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later. When it is off or `jq` is missing, the session starts with a one-line notice. Elsewhere, these rules are instructions only. The hook checks the receipt against what the session actually did (edits, test commands, review dispatches). It does not check that a test passed or that every line is true.
+Set `BEARPAWS_ENFORCE=0` to turn it off. It needs `jq` and Claude Code 2.1.163 or later. When it is off or `jq` is missing, the session starts with a one-line notice. Elsewhere, these rules are instructions only. The hook checks the receipt against what the session actually did (edits, test commands, review dispatches). It does not check that a test passed or that every line is true. Known limits: a failing test run still counts as a run, and a heredoc or commit-message line that starts with a runner name (`pytest`, `npm test`, …) counts as one too. So a passing gate is not proof that the tests passed.
 
 ### Git gate
 
-The same receipt can be required in commit messages, as trailers or in the body, for any agent or person that commits through git. Run `./install.sh --git` inside a repository to add a `commit-msg` hook: a commit with staged changes and no `Risk:` line is refused, an elevated commit needs a `Review:` line or `Status: INCOMPLETE`, and a routine commit touching sensitive-looking paths gets a warning. `git commit --no-verify` or `BEARPAWS_ENFORCE=0` bypasses it; a cherry-pick or revert of a pre-gate commit that stops on a conflict needs one of these to finish, and a clean cherry-pick or revert never runs `commit-msg`, so the gate does not see it. Git sees a claimed review, not a dispatched one: only the Claude Code hook can check that a review actually ran. The same install adds a `pre-push` hook that flags commits whose author, committer or `Co-authored-by` email is neither a GitHub noreply address nor on the project's `Allowed commit emails:` line (in CLAUDE.md, AGENTS.md or CONTRIBUTING.md), once per branch: push again to proceed.
+The same receipt can be required in commit messages, as trailers or in the body, for any agent or person that commits through git. Run `./install.sh --git` inside a repository to add a `commit-msg` hook: a commit with staged changes and no `Risk:` line is refused, an elevated commit needs a `Review:` line or `Status: INCOMPLETE`, and a routine commit touching sensitive-looking paths gets a warning. `git commit --no-verify` or `BEARPAWS_ENFORCE=0` bypasses it; a cherry-pick or revert of a pre-gate commit that stops on a conflict needs one of these to finish, and a clean cherry-pick or revert never runs `commit-msg`, so the gate does not see it. Git sees a claimed review, not a dispatched one: only the Claude Code hook can check that a review actually ran. The same install adds a `pre-push` hook that flags commits whose author, committer or `Co-authored-by` email is neither a GitHub noreply address nor on the project's `Allowed commit emails:` line (in CLAUDE.md, AGENTS.md or CONTRIBUTING.md), once per remote, branch and commit set: pushing the same commits again proceeds.
 
 ## Evidence
 
@@ -91,7 +91,7 @@ git clone https://github.com/thepragmaticbear/bearpaws.git && cd bearpaws
 ./install.sh --antigravity --global
 ```
 
-Codex, OpenCode, Grok Build, Copilot CLI, Cursor, Devin (experimental): see [docs/install.md](docs/install.md).
+Codex, OpenCode, Grok Build, Junie, Copilot CLI, Cursor, Devin (experimental): see [docs/install.md](docs/install.md).
 
 ## How it works
 
@@ -157,6 +157,7 @@ Measured results, including where Bearpaws did no better, are in [Evidence](#evi
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Wiring checked in CI: repo-level and global `.agents/skills` discovery, `instructions` bootstrap resolves; live bootstrap smoke-tested |
 | Grok Build | Experimental | `./install.sh --grok --global`; `grok inspect` lists the bootstrap rule and all skills (1.0.45, built from source); no live session run |
+| Junie | Experimental | `./install.sh --junie --global` links skills into `~/.junie/skills` and prints the `~/.junie/AGENTS.md` bootstrap line (installer tests in CI); in this repo Junie reads `AGENTS.md`; no live conformance run |
 | Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex skills and `AGENTS.md` bootstrap checked in CI, activation smoke-tested; Copilot CLI installs the plugin (CI); Devin and Cursor hook payloads follow their docs, unverified live. Expanded conformance requires completed-action evidence. |
 
 See [docs/agent-support.md](docs/agent-support.md) for the support policy and the evidence behind each status.

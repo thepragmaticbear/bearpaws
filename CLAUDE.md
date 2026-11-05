@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bearpaws is an independent, low-token skills toolkit for AI coding agents, with a focus on portability, simplicity, and practical agent support.
 
-Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode, Grok Build, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, upstream behavioral parity, or guaranteed support across every agent.
+Claude Code and Google Antigravity IDE are the primary supported targets. OpenCode, Grok Build, Junie, and other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) are experimental unless a specific workflow has been validated. Avoid adding language that implies ongoing upstream tracking, upstream behavioral parity, or guaranteed support across every agent.
 
 Skills cover TDD, debugging, planning, code review, and parallel execution, plus a stack-agnostic onboarding skill. The plugin's job is to get the `using-bearpaws` bootstrap into the agent context so the agent learns to discover and invoke the rest of the skills.
 
@@ -17,7 +17,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [skills/](skills/) — one directory per skill, each with a `SKILL.md` and optional `references/`, `examples/`, `scripts/`. Flat namespace.
 - [commands/](commands/) — slash commands. The current files are deprecation shims pointing users at the equivalent skills.
 - [agents/](agents/) — subagent definitions (e.g. `code-reviewer`).
-- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers); [tests/hooks/](tests/hooks/) pins each payload shape. `risk-gate` (PreToolUse/PostToolUse/Stop) enforces the risk receipt and the elevated-risk review in Claude Code only; [tests/hooks/run-risk-gate-tests.sh](tests/hooks/run-risk-gate-tests.sh) pins each rule. `git-commit-msg` is a git `commit-msg` hook (`install.sh --git`) that requires the same receipt in commit messages for any harness or person; it shares the receipt format with `risk-gate` through `lib-receipt`, and [tests/hooks/run-git-gate-tests.sh](tests/hooks/run-git-gate-tests.sh) pins each rule. `git-pre-push` (same install) flags commit emails that are not GitHub noreply or on the project's `Allowed commit emails:` line, once per branch. `hooks-cursor.json` is the Cursor hook config. Hook compatibility does not imply support-tier promotion.
+- [hooks/](hooks/) — `SessionStart` hook that injects the bootstrap for Claude Code plus detected SDK-style contexts (Cursor, Devin CLI, Copilot CLI, or unknown SDK callers); [tests/hooks/](tests/hooks/) pins each payload shape. `risk-gate` (PreToolUse/PostToolUse/Stop) enforces the risk receipt and the elevated-risk review in Claude Code only; [tests/hooks/run-risk-gate-tests.sh](tests/hooks/run-risk-gate-tests.sh) pins each rule. `git-commit-msg` is a git `commit-msg` hook (`install.sh --git`) that requires the same receipt in commit messages for any harness or person; it shares the receipt format with `risk-gate` through `lib-receipt`, and [tests/hooks/run-git-gate-tests.sh](tests/hooks/run-git-gate-tests.sh) pins each rule. `git-pre-push` (same install) flags commit emails that are not GitHub noreply or on the project's `Allowed commit emails:` line, once per remote, branch and commit set. `hooks-cursor.json` is the Cursor hook config. Hook compatibility does not imply support-tier promotion.
 - [.claude-plugin/](.claude-plugin/) — Claude Code plugin manifest and dev marketplace. Copilot CLI installs from the same marketplace; Devin falls back to this manifest.
 - [.cursor-plugin/](.cursor-plugin/) — Cursor plugin manifest (skills + `hooks/hooks-cursor.json`).
 - [.antigravity/](.antigravity/) — Google Antigravity IDE plugin manifest (`plugin.json`) and rules (`bearpaws.md`).
@@ -25,7 +25,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [.agents/skills](.agents/skills) — repo-level Agent Skills discovery: a real directory of per-skill links into `skills/` (Codex ignores a symlinked skills directory, so per-skill links; verified with Codex in a plain repo). The validator keeps it in sync; a new skill needs `ln -s ../../skills/<name> .agents/skills/<name>`. `install.sh --agents --global` links skills into `~/.agents/skills/` for Codex, Devin, OpenCode, Cursor, Copilot, and others; `install.sh --grok --global` adds a Grok Build bootstrap rule in `~/.grok/rules/`.
 - [scripts/](scripts/) — version-bump tooling.
 - [tests/antigravity/](tests/antigravity/) — static adapter tests for Antigravity plugin integrity.
-- [tests/install/](tests/install/) — installer tests for Antigravity, Agent Skills (`--agents`), and Grok (`--grok`).
+- [tests/install/](tests/install/) — installer tests for Antigravity, Agent Skills (`--agents`), Grok (`--grok`), Junie (`--junie`), and the git gate (`--git`).
 - [tests/bump-version/](tests/bump-version/) — version-bump tooling tests (version validation, declared fields only).
 - [tests/hooks/](tests/hooks/) — SessionStart payload shape per harness, escaping, and loud failure; risk-gate and git-gate decisions per rule.
 - [tests/harness-wiring/](tests/harness-wiring/) — model-free checks that Codex, OpenCode, Copilot CLI, and Grok Build load the installed skills and bootstrap.
@@ -45,6 +45,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 | Google Antigravity IDE | Primary | Native plugin, skills, subagents, and capability adapter |
 | OpenCode | Experimental | Wiring checked in CI: repo-level and global `.agents/skills` discovery, `instructions` bootstrap resolves; live bootstrap smoke-tested |
 | Grok Build | Experimental | `./install.sh --grok --global`; `grok inspect` lists the bootstrap rule and all skills (1.0.45, built from source); no live session run |
+| Junie | Experimental | `./install.sh --junie --global` links skills into `~/.junie/skills` and prints the `~/.junie/AGENTS.md` bootstrap line (installer tests in CI); in this repo Junie reads `AGENTS.md`; no live conformance run |
 | Other Agent Skills agents (Codex, Devin, Cursor, Copilot, …) | Experimental | Codex skills and `AGENTS.md` bootstrap checked in CI, activation smoke-tested; Copilot CLI installs the plugin (CI); Devin and Cursor hook payloads follow their docs, unverified live. Expanded conformance requires completed-action evidence. |
 
 ## How the bootstrap works
@@ -77,6 +78,7 @@ Antigravity discovers skills natively from `skills/`, loads them on demand, maps
 
 - **Codex, OpenCode:** skills from `.agents/skills`; the bootstrap is a line the user adds (`~/.codex/AGENTS.md`, or `instructions` in `opencode.json`). The installer prints both and never edits agent config.
 - **Grok Build:** ignores SessionStart hook output, so `install.sh --grok --global` writes an owned rule, `~/.grok/rules/bearpaws.md`, that Grok loads in every project. It refuses to overwrite a `bearpaws.md` it did not create.
+- **Junie:** `install.sh --junie --global` links skills into `~/.junie/skills` (`$JUNIE_HOME` honored) and prints the bootstrap line for `~/.junie/AGENTS.md`; it never edits that file. In this repo Junie reads `AGENTS.md` as project guidelines.
 - **Copilot CLI, Cursor, Devin CLI:** run `hooks/session-start` from their plugin or hook config and get the payload shape each documents (see the table in `tests/hooks/run-hook-tests.sh`).
 
 `tests/harness-wiring/run.sh` proves discovery and bootstrap wiring without a model; behavior still needs live conformance (`tests/codex/run-conformance.sh`).
@@ -97,7 +99,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ```bash
 tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, and adversarial gates
-tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, and --git installer
+tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, --junie, and --git installer
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
 tests/hooks/run-risk-gate-tests.sh                                            # risk-gate decisions per rule (no CLI; needs jq)
 tests/hooks/run-git-gate-tests.sh                                             # git commit-msg and pre-push gate decisions per rule (no CLI, no jq)
@@ -131,7 +133,7 @@ tests/codex/run-conformance.sh                                                # 
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, shellcheck (`-S warning` over the hook scripts except `run-hook.cmd`, `install.sh` and `scripts/*.sh`), token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.
 
