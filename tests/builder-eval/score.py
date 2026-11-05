@@ -59,8 +59,12 @@ def score(design, final_text, dispatches=()):
 
 
 def parse(path):
-    """Final result text (None without a result event), top-level dispatches, and total cost."""
-    final, dispatches, cost = None, [], 0.0
+    """Final result text (None without a result event), top-level dispatches, and total cost.
+
+    total_cost_usd is cumulative per session: a session that ends two turns (e.g. a reply sent
+    while a background subagent runs) reports the running total twice. Take the max per session.
+    """
+    final, dispatches, costs = None, [], {}
     try:
         with open(path, errors="replace") as f:
             lines = f.readlines()
@@ -79,8 +83,9 @@ def parse(path):
                                        "prompt": inp.get("prompt", "")})
         elif ev.get("type") == "result":
             final = ev.get("result") or ""
-            cost += ev.get("total_cost_usd") or 0
-    return final, dispatches, cost
+            sid = ev.get("session_id")
+            costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+    return final, dispatches, sum(costs.values())
 
 
 def main(argv):

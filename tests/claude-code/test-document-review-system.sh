@@ -28,7 +28,7 @@ cd "$TEST_PROJECT"
 # Create directory structure
 mkdir -p docs/bearpaws/specs
 
-# Create a spec document WITH INTENTIONAL ERRORS for the reviewer to catch
+# Create a spec document WITH INTENTIONAL GAPS for the builder to catch
 cat > docs/bearpaws/specs/test-feature-design.md <<'EOF'
 # Test Feature Design
 
@@ -107,7 +107,7 @@ cd "$SCRIPT_DIR/../.." && portable_timeout 120 claude -p "$PROMPT" --plugin-dir 
 echo "================================================================================"
 
 echo ""
-echo "Analyzing reviewer output..."
+echo "Analyzing builder output..."
 echo ""
 
 # Verification tests
@@ -116,32 +116,32 @@ FAILED=0
 echo "=== Verification Tests ==="
 echo ""
 
-# Test 1: Reviewer found the TODO
-echo "Test 1: Reviewer found TODO..."
-if grep -qi "TODO" "$OUTPUT_FILE" && grep -qi "requirements\|Requirements" "$OUTPUT_FILE"; then
-    echo "  [PASS] Reviewer identified TODO in Requirements section"
+# Test 1: Builder asked about the missing requirements (the TODO)
+echo "Test 1: Builder raised the missing requirements..."
+if grep -qi "requirement" "$OUTPUT_FILE"; then
+    echo "  [PASS] Builder raised the missing requirements"
 else
-    echo "  [FAIL] Reviewer did not identify TODO"
+    echo "  [FAIL] Builder did not raise the missing requirements"
     FAILED=$((FAILED + 1))
 fi
 echo ""
 
-# Test 2: Reviewer found the "specified later" deferral
-echo "Test 2: Reviewer found 'specified later' deferral..."
+# Test 2: Builder raised the "specified later" deferral
+echo "Test 2: Builder raised 'specified later' deferral..."
 if grep -qi "specified later\|later\|defer\|incomplete\|error handling" "$OUTPUT_FILE"; then
-    echo "  [PASS] Reviewer identified deferred content"
+    echo "  [PASS] Builder raised the deferred content"
 else
-    echo "  [FAIL] Reviewer did not identify deferred content"
+    echo "  [FAIL] Builder did not raise the deferred content"
     FAILED=$((FAILED + 1))
 fi
 echo ""
 
-# Test 3: Builder output lists questions
+# Test 3: Builder output uses the template's numbered entries ("1. [question] — [why]")
 echo "Test 3: Builder output format..."
-if grep -q "?" "$OUTPUT_FILE"; then
-    echo "  [PASS] Builder lists questions"
+if grep -Eq '^[[:space:]*]*[0-9]+\.[[:space:]].*\?' "$OUTPUT_FILE"; then
+    echo "  [PASS] Builder lists numbered questions"
 else
-    echo "  [FAIL] Builder lists no questions"
+    echo "  [FAIL] Builder lists no numbered questions"
     FAILED=$((FAILED + 1))
 fi
 echo ""
@@ -167,9 +167,9 @@ if [ $FAILED -eq 0 ]; then
     echo "All verification tests passed!"
     echo ""
     echo "The builder check correctly:"
-    echo "  ✓ Found TODO placeholder"
+    echo "  ✓ Raised the missing requirements"
     echo "  ✓ Found 'specified later' deferral"
-    echo "  ✓ Listed questions"
+    echo "  ✓ Listed numbered questions"
     echo "  ✓ Did not clear a spec with gaps"
     exit 0
 else

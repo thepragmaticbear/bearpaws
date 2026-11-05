@@ -20,15 +20,19 @@ Scoring (`score.py`, pinned by `test_score.py`). Only the top-level agent's `Age
   template's wording), and the final reply surfaces the single-use question: one sentence naming a token
   or link and single-use, one-time, reuse, replay, use more than once or twice, or invalidation after use.
 - A run with no `result` event (crash or budget stop) is an error, not scored.
+- Cost is cumulative within a session: the largest `total_cost_usd` per `session_id`, summed over
+  sessions (as in `tests/benchmark`). A reply sent while a background subagent runs ends a turn and
+  repeats the running total; the first scorer added both and double-counted.
 
 | Run | Design | Pass | Builder check dispatched | Single-use surfaced | Mean cost |
 |---|---|---:|---:|---:|---:|
 | RED (SKILL.md at fc673da) | routine | 3/3 | 0/3 | 0/3 | $0.056 |
 | RED (SKILL.md at fc673da) | elevated | 0/3 | 0/3 | 3/3 | $0.063 |
 | GREEN round 1 | routine | 3/3 | 0/3 | 0/3 | $0.054 |
-| GREEN round 1 | elevated | 3/3 | 3/3 | 3/3 | $0.352 |
+| GREEN round 1 | elevated | 3/3 | 3/3 | 3/3 | $0.176 |
+| GREEN round 2 (wait for the result) | elevated | 3/3 | 3/3 | 3/3 | $0.187 |
 
-Per run:
+All rows are rescored with the final scorer. Per run:
 - RED routine 1–3 ($0.056, $0.057, $0.055): no dispatch; self-review only. An earlier RED routine round
   ($0.065, $0.067, $0.068, also no dispatch) ran on a fixture whose doc named a button `id` the HTML
   lacks; every run flagged it, so the fixture was fixed and routine RED rerun.
@@ -36,15 +40,22 @@ Per run:
   decided it unasked: "A token is now single-use. Its row is deleted on success" (run 1), "each link
   works once" (runs 2, 3). Run 1 also closed the second-request gap.
 - GREEN routine 1–3 ($0.057, $0.056, $0.048): no dispatch.
-- GREEN elevated 1–3 ($0.363, $0.398, $0.295): one "Builder check of design" dispatch each, prompt
+- GREEN round 1 elevated 1–3 ($0.182, $0.199, $0.148): one "Builder check of design" dispatch each, prompt
   rendered from the template with a filled-in domain ("backend/security", "authentication/backend").
   The builder returned 7, 5 and 8 questions; each reply listed single use first among the decisions
   folded into a "Decisions from builder check" section, and asked the user to check them.
+  Every run dispatched the builder in the background and first ended a turn with a non-answer ("The
+  builder check is running. I'll wait for its result").
+- GREEN round 2 elevated 1–3 ($0.205, $0.150, $0.205), after the step gained "wait for its result":
+  one builder dispatch each, single use surfaced each time. Runs 1 and 3 dispatched in the foreground
+  and sent one reply; run 2 still dispatched in the background and first replied "The builder check is
+  still running" (1 of 3, down from 3 of 3). Routine was not rerun: the change sits inside the
+  elevated-only clause, and routine runs dispatch nothing either way.
 
 RED behavior: the current skill never dispatched the old spec reviewer, on either design. On this
 fixture the self-review alone already finds the single-use gap, so the "surfaced" criterion does not
 separate RED from GREEN; only the dispatch does. What the builder check adds here is breadth (one live
-token per user, storage, clock, email failure, out-of-scope pages), at about $0.29 more per elevated
+token per user, storage, clock, email failure, out-of-scope pages), at about $0.11–0.12 more per elevated
 design. Routine designs cost the same as before.
 
 Limits: one fixture per design, one model, n=3. The builder raised 5–8 questions, not only the few that

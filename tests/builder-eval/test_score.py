@@ -93,6 +93,24 @@ class Parse(unittest.TestCase):
         self.assertEqual(dispatches, [BUILDER])
         self.assertAlmostEqual(cost, 0.12)
 
+    def test_cost_is_cumulative_per_session(self):
+        # GREEN elevated: a "builder check is running" reply ends a turn, then the final reply
+        # repeats the session's running total. Count it once; other sessions still add.
+        events = [
+            {"type": "result", "session_id": "s1", "result": "running", "total_cost_usd": 0.10},
+            {"type": "result", "session_id": "s1", "result": ASKS, "total_cost_usd": 0.18},
+            {"type": "result", "session_id": "s1", "result": ASKS, "total_cost_usd": 0.18},
+            {"type": "result", "session_id": "s2", "result": ASKS, "total_cost_usd": 0.05},
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write("\n".join(json.dumps(e) for e in events) + "\n")
+        try:
+            final, _, cost = parse(f.name)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(final, ASKS)
+        self.assertAlmostEqual(cost, 0.23)
+
     def test_no_result_event_is_none(self):
         with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
             f.write("{}\n")
