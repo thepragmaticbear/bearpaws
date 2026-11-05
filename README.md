@@ -129,7 +129,7 @@ A fully specified small fix goes straight to TDD and verification; plans are for
 | `bp:requesting-code-review` | Process | Dispatch an independent reviewer |
 | `bp:receiving-code-review` | Process | Evaluate review feedback before applying it |
 | `bp:verification-before-completion` | Process | Fresh evidence and the risk receipt before any completion claim |
-| `bp:finishing-a-development-branch` | Process | Merge, PR, keep, or discard finished work |
+| `bp:finishing-a-development-branch` | Process | Check code against the plan, then merge, PR, keep, or discard finished work |
 | `bp:using-git-worktrees` | Process | Isolate feature work in git worktrees |
 | `bp:writing-skills` | Process | Write and test skills with RED/GREEN evals |
 
