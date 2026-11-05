@@ -176,6 +176,28 @@ fi
 
 echo "OK: .agents/skills mirrors skills/ with per-skill links"
 
+# Fixture check: test scenarios live outside skills/ so agents never mistake them for real tasks.
+# A file under skills/ fails when its path runs through a test-like directory, or when it
+# holds a scenario-campaign heading ("## Test Scenarios", "### Scenario 1: ..."). A single
+# teaching example inside a skill document is fine.
+fixture_violations=0
+while IFS= read -r f; do
+  [[ "$(basename "$f")" == .* ]] && continue
+  if [[ "$f" =~ (^|/)(tests?|evals?|fixtures?|scenarios?)/ ]] \
+     || grep -qE '^#{1,4} (Test )?Scenarios?( [0-9]+)?\b' "$f" 2>/dev/null; then
+    echo "FIXTURE VIOLATION: ${f}"
+    fixture_violations=$((fixture_violations + 1))
+  fi
+done < <(find skills -type f | sort)
+
+if [[ $fixture_violations -gt 0 ]]; then
+  echo ""
+  echo "FAIL: ${fixture_violations} test scenario(s) inside skills/ (move them under docs/ or tests/)"
+  exit 1
+fi
+
+echo "OK: no test scenarios inside skills/"
+
 # Adversarial gate check: ensure code-reviewer agent and dispatching skill stay aligned.
 # Both files must reference the same four gate names. A reformat that strips a gate
 # marker, or a rename in one file without the other, fails here.
