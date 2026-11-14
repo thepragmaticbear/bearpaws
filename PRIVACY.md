@@ -1,6 +1,6 @@
 # Privacy
 
-Bearpaws is a set of skills, one subagent, slash commands, and local hooks. It has no server, no account, no telemetry, and no MCP servers or connectors.
+Bearpaws is a set of skills, one subagent, and local hooks. It has no server, no account, no telemetry, and no MCP servers or connectors.
 
 ## What it sends
 
