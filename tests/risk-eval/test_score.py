@@ -100,7 +100,7 @@ class ReviewDispatchedTest(unittest.TestCase):
         self.assertFalse(self._run(events))
 
     def test_explore_or_plan_agent_with_review_description_fails(self):
-        for st in ("Explore", "Plan", "explore", "plan"):
+        for st in ("Explore", "Plan", "explore", "plan", "claude-code-guide", "fork", "Fork", "statusline-setup"):
             with self.subTest(subagent_type=st):
                 events = [
                     _tool_use("a1", "Agent", {"subagent_type": st, "description": "Review src/authz.py"}),
@@ -186,6 +186,40 @@ class PinsExistingTest(unittest.TestCase):
         ]
         self.assertFalse(self._run(events))
 
+    def test_or_fallback_quoted_and_info_flags_do_not_pin(self):
+        for cmd in (
+            "true || pytest",
+            'echo "done; pytest"',
+            "echo 'done; pytest'",
+            "bash -c 'true || pytest'",
+            "pytest --version",
+            "pytest --collect-only",
+            "vitest list",
+            "cargo nextest list",
+            "make -n test",
+            "go test -list . ./...",
+            "ctest -N",
+        ):
+            with self.subTest(cmd=cmd):
+                events = [
+                    self.PIN_WRITE, _tool_result("w1", "wrote"),
+                    _tool_use("b1", "Bash", {"command": cmd}),
+                    _tool_result("b1", "ok"),
+                    self.SRC_EDIT,
+                ]
+                self.assertFalse(self._run(events))
+
+    def test_sh_c_and_real_runner_with_non_info_flags_pin(self):
+        for cmd in ("bash -c 'pytest'", "pytest -n 4", "go test -v ./...", "ctest -V"):
+            with self.subTest(cmd=cmd):
+                events = [
+                    self.PIN_WRITE, _tool_result("w1", "wrote"),
+                    _tool_use("b1", "Bash", {"command": cmd}),
+                    _tool_result("b1", "ok"),
+                    self.SRC_EDIT,
+                ]
+                self.assertTrue(self._run(events))
+
 
 class StatesAssumptionsTest(unittest.TestCase):
     def _run(self, text):
@@ -212,6 +246,24 @@ class ReceiptTest(unittest.TestCase):
         self.assertTrue(self._run(VALID_RECEIPT))
         self.assertTrue(self._run(VALID_RECEIPT.replace("Status: COMPLETE", "**Status:** INCOMPLETE")))
 
+    def test_status_trailing_text_and_multiline_fields_pass(self):
+        for status in ("Status: INCOMPLETE — waiting on CI", "Status: COMPLETE.", "Status: **INCOMPLETE** (review pending)"):
+            with self.subTest(status=status):
+                self.assertTrue(self._run(VALID_RECEIPT.replace("Status: COMPLETE", status)))
+        multiline = VALID_RECEIPT.replace(
+            "Pinned: test_owner_allowed passed before the edit",
+            "Pinned:\n- test_owner_allowed passed before the edit",
+        ).replace(
+            "Assumptions: org_id is always an int and never None",
+            "Assumptions:\n- org_id is always an int",
+        )
+        self.assertTrue(self._run(multiline))
+
+    def test_quoted_receipt_lines_ignored(self):
+        quoted = "\n".join(f"> {line}" for line in VALID_RECEIPT.splitlines())
+        self.assertFalse(self._run(quoted))
+        self.assertTrue(self._run(VALID_RECEIPT + "\n\n> Status: BOGUS"))
+
     def test_empty_field_value_fails(self):
         for line in ("Pinned: test_owner_allowed passed before the edit", "Open: none", "Verified: python3 -m unittest discover -s tests -t . — 3 tests OK"):
             key = line.split(":")[0]
@@ -222,7 +274,7 @@ class ReceiptTest(unittest.TestCase):
         self.assertFalse(self._run(VALID_RECEIPT.replace("Pinned: test_owner_allowed passed before the edit\n", "")))
 
     def test_invalid_status_fails(self):
-        for bad in ("DONE", "PENDING", "COMPLETE | INCOMPLETE", "", "OK"):
+        for bad in ("DONE", "PENDING", "COMPLETE | INCOMPLETE", "INCOMPLETE — COMPLETE later", "", "OK"):
             with self.subTest(status=bad):
                 self.assertFalse(self._run(VALID_RECEIPT.replace("Status: COMPLETE", f"Status: {bad}")))
 

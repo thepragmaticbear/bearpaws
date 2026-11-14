@@ -353,18 +353,36 @@ clause_runners() { # <clause>: extract runner names explicitly mentioned in a cl
     [[ "$tok" != *[\*\?]* ]] && echo "script:${tok##*/}"
   fi
 }
+verified_clauses() { # <Verified value>: split into clauses; drop (...) unless it has a pass/fail result word
+  LC_ALL=C awk '
+    { src = (NR > 1 ? src "\n" $0 : $0) }
+    END {
+      while (match(src, /\([^()]*\)/)) {
+        pre = substr(src, 1, RSTART - 1)
+        inner = substr(src, RSTART + 1, RLENGTH - 2)
+        post = substr(src, RSTART + RLENGTH)
+        if (tolower(inner) ~ /(^|[^[:alnum:]])(passed|passing|failed|ok|green|[0-9]+[[:space:]]+tests?)([^[:alnum:]]|$)/) {
+          src = pre "\n" inner "\n" post
+        } else {
+          src = pre " " post
+        }
+      }
+      gsub(/\. |;|,/, "\n", src)
+      print src
+    }' <<<"$1"
+}
 run_claim() { # <Verified value>: does any clause claim a test run?
   local c
   while IFS= read -r c; do
     claim_clause "$c" && return 0
-  done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}")
+  done < <(verified_clauses "$1")
   return 1
 }
 verified_runners() { # <Verified value>: unique runners named in claiming clauses
   local c
   while IFS= read -r c; do
     claim_clause "$c" && clause_runners "$c"
-  done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}") | awk '!seen[$0]++'
+  done < <(verified_clauses "$1") | awk '!seen[$0]++'
 }
 
 norm_drive() { # <path>: set _nd with any leading Windows drive letter lowercased (0 forks, bash 3.2)
@@ -450,12 +468,12 @@ case "$mode" in
         fi
         ;;
       Agent|Task)
-        # Reviewer subagent_type ((code-)?reviewer), or a matching description on a non-Explore/Plan/guide agent.
+        # Reviewer subagent_type ((code-)?reviewer), or a matching description on a non-Explore/Plan/guide/fork agent.
         # Require a returned non-error result with non-empty text (not run_in_background:true, async-launch
         # acknowledgement, error status, or empty tool_response).
         if jq -e --arg re "$REVIEW_DESC" '
           def is_reviewer_type: test("(^|[:/_-])(code-)?reviewer($|[^[:alnum:]])"; "i");
-          def is_non_review_type: test("^(explore|plan|claude-code-guide|statusline-setup)$"; "i");
+          def is_non_review_type: test("^(explore|plan|claude-code-guide|statusline-setup|fork)$"; "i");
           def text_present:
             if type == "string" then test("\\S")
             elif type == "array" then any(.[]; text_present)
@@ -518,11 +536,11 @@ case "$mode" in
       /^test-fail( |$)/ { lf = NR; if (!fa) lb = "fail" }
       END { print fr + 0, lr + 0, lf + 0, (lb == "fail") }' "$log")
     [ "$first_run" -gt 0 ] || first_run="$first_edit"
-    # Verified claims a run when any clause (split on ; , ( ) and ". ") names a runner, says passed next
+    # Verified claims a run when any clause (split on ; , ". ", and (...) with a result word) names a runner, says passed next
     # to test/spec or a count, or says "tests ok", "suite green" or "all 41 green", and that clause
     # does not say the run did not happen ("1 skipped" and "skipped=2" are counts, not cancels).
     verified="$(field_raw Verified || true)"
-    # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
+    # INCOMPLETE is never blocked for unfinished review, unrun/failing tests, or open findings (receipt fields are still required above), so both claim checks apply only to COMPLETE.
     if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "$verified"; then
       if [ "$last_fail" -gt "$last_edit" ] && [ "$last_fail" -gt "$last_run" ]; then
         block "Verified: claims a test run, but the last test run after the edit failed (nonzero exit, or a failure summary in its output). Fix and rerun, or say Status: INCOMPLETE."
@@ -551,7 +569,7 @@ case "$mode" in
               if (c == "") continue
               r_run = rr[c] + 0
               r_fail = rf[c] + 0
-              if (r_fail > le && r_fail > r_run && r_fail > lw) {
+              if (r_fail > le && r_fail > r_run) {
                 print "fail", c; exit
               } else if (r_run <= le && lw <= le) {
                 print "miss", c; exit
@@ -580,7 +598,7 @@ case "$mode" in
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
       if [ "${last_review:-0}" -gt "$last_edit" ]; then
         if [ "$incomplete" = 0 ] && review_is_placeholder "$(field_value Review || true)"; then
-          block "Elevated-risk work with Status: COMPLETE needs a real Review line (not none/skipped/n/a/-/todo), or set Status: INCOMPLETE."
+          block "Elevated-risk work with Status: COMPLETE needs a real Review line (not none/skipped/n/a/n.a./na/-/—/todo/tbd/pending/self/self-review/not done/not run/not yet/no review/'none found, approved'), or set Status: INCOMPLETE."
         fi
         open_state elevated; o=$?
         # An open finding under INCOMPLETE stays pending, so a later COMPLETE is judged again.

@@ -1149,6 +1149,54 @@ reset; edit src/ui/button.py
 stop "$ROUTINE"$'\n\n> Risk: elevated (payments)\n> Status: COMPLETE'
 expect "M7: trailing quoted > Risk: elevated does not reclassify routine" allow
 
+# I-A: real Review verdicts starting with No/Not pass; full placeholder list still blocks.
+for rv in \
+  "No issues found by bp:code-reviewer" \
+  "no Critical or Important findings (bp:code-reviewer)" \
+  "Not blocking: minor nits only" \
+  "no findings from bp:code-reviewer"; do
+  reset; edit src/authz.py; review; stop "${ELEVATED/bp:code-reviewer — Ready to merge: Yes/$rv}"
+  expect "I-A: real Review '$rv' allows" allow
+done
+for rv in none skipped "(skipped)" "n/a" "n.a." na "-" "—" todo TBD "not done" "not run" "not yet" "no review" self "self-review" pending "none found, approved"; do
+  reset; edit src/authz.py; review; stop "${ELEVATED/bp:code-reviewer — Ready to merge: Yes/$rv}"
+  expect "I-A: placeholder Review '$rv' blocks" block "Review"
+done
+
+# I-B: unanchored sensitive stems match restored paths; benign words stay quiet.
+for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/getprice.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py; do
+  reset; edit "$p"; stop "$ROUTINE"; expect "I-B: routine on $p nudges" block "$p"
+done
+for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
+  reset; edit "$p"; stop "$ROUTINE"; expect "I-B: routine on benign $p: no nudge" allow
+done
+
+# M-b: wrapper pass (npm test) does not mask a logged failure of a named runner (pytest).
+reset; edit src/ui/button.py; failrun "pytest"; ran "npm test"; stop "$R_TESTED"
+expect "M-b: pytest fail then npm test pass still blocks Verified: pytest" block "pytest"
+reset; edit src/ui/button.py; ran "npm test"; failrun "pytest"; stop "$R_TESTED"
+expect "M-b: npm test pass then pytest fail blocks Verified: pytest" block "failed"
+reset; edit src/ui/button.py; ran "npm test"; failrun "pytest"; ran "go test ./..."; stop "$R_TESTED"
+expect "M-b: npm test pass, pytest fail, go test pass still blocks Verified: pytest" block "pytest"
+reset; edit src/ui/button.py; failrun "pytest"; ran "pytest"; stop "$R_TESTED"
+expect "M-b: pytest fail then pytest pass allows Verified: pytest" allow
+
+# M-c: parenthetical aside without a pass/fail result word is not a separate claim clause.
+reset; edit src/ui/button.py; ran "pytest"
+stop "${R_TESTED/pytest — 12 passed/unit tests passed (jest config unchanged)}"
+expect "M-c: aside '(jest config unchanged)' does not claim jest" allow
+reset; edit src/ui/button.py; ran "pytest"
+stop "${R_TESTED/pytest — 12 passed/unit tests passed (jest: 5 passed)}"
+expect "M-c: aside '(jest: 5 passed)' still claims jest" block "jest"
+
+# M-d: fork subagent_type inherits implementer context and does not count as a review.
+for st in fork Fork; do
+  reset; edit src/authz.py
+  gate record "$(jq -cn --arg s "$SID" --arg st "$st" \
+    '{session_id:$s,tool_name:"Agent",tool_input:{subagent_type:$st,description:"Review the diff",prompt:"Review"},tool_response:{status:"completed",content:[{type:"text",text:"Looks good"}]}}')"
+  stop "$ELEVATED"; expect "M-d: $st agent with Review description does not count" block "independent review"
+done
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"
   exit 1
