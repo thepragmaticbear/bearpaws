@@ -11,6 +11,9 @@ set -euo pipefail
 # Determine plugin root directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SKILL_BASE="${CLAUDE_PLUGIN_ROOT:-$PLUGIN_ROOT}"
+SKILL_BASE="${SKILL_BASE%/}"
+SKILL_DIR="${SKILL_BASE}/skills/using-bearpaws"
 
 # Read using-bearpaws content. Fail loudly if missing/empty/unreadable —
 # Claude Code surfaces a non-zero exit as a hook error rather than silently
@@ -46,7 +49,8 @@ escape_for_json() {
 }
 
 using_bearpaws_escaped=$(escape_for_json "$using_bearpaws_content")
-session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n${using_bearpaws_escaped}\n</warning>"
+skill_dir_escaped=$(escape_for_json "$SKILL_DIR")
+session_context="<warning level=\\\"hard\\\">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n${using_bearpaws_escaped}\n\nusing-bearpaws skill dir (resolve references/... here): ${skill_dir_escaped}\n</warning>"
 
 # Output context injection as JSON.
 # Each platform expects a different JSON shape for SessionStart output.

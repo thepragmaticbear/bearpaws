@@ -28,9 +28,9 @@ check_shape() {
     fail "$label: hook exited non-zero ($(cat "$out.err"))"
     return
   fi
-  if ! python3 - "$out" "$expected" "$REPO_ROOT/skills/using-bearpaws/SKILL.md" <<'PY'
+  if ! python3 - "$out" "$expected" "$REPO_ROOT/skills/using-bearpaws/SKILL.md" "$REPO_ROOT/skills/using-bearpaws" <<'PY'
 import json, sys
-out, expected, skill = sys.argv[1:]
+out, expected, skill, skill_dir = sys.argv[1:]
 data = json.load(open(out))
 keys = set(data)
 want = {"hookSpecificOutput"} if expected == "hookSpecificOutput" else {expected}
@@ -45,6 +45,8 @@ else:
 assert ctx.startswith('<warning level="hard">'), ctx[:40]
 assert ctx.rstrip().endswith("</warning>"), ctx[-40:]
 assert open(skill, encoding="utf-8").read() in ctx, "bootstrap body not embedded verbatim"
+want_line = f"\nusing-bearpaws skill dir (resolve references/... here): {skill_dir}\n</warning>"
+assert ctx.endswith(want_line), f"missing skill dir line: {ctx[-160:]!r}"
 PY
   then
     fail "$label: expected $expected shape"
@@ -86,17 +88,18 @@ check_inactive "jq missing: notice" "jq" PATH="$NOJQ"
 # Claude Code payload is release-blocking: lock the wrapper text so a change to
 # shared wording is a deliberate, reviewed edit.
 claude_out="$TMP_ROOT/claude-code.json"
-if python3 - "$claude_out" <<'PY'
+if python3 - "$claude_out" "$REPO_ROOT/skills/using-bearpaws" <<'PY'
 import json, sys
 ctx = json.load(open(sys.argv[1]))["hookSpecificOutput"]["additionalContext"]
 head = '<warning level="hard">\nYou have bearpaws.\n\n**Your bootstrap skill (bp:using-bearpaws). Use the Skill tool for all others:**\n\n'
+tail = f"\n\nusing-bearpaws skill dir (resolve references/... here): {sys.argv[2]}\n</warning>"
 assert ctx.startswith(head), repr(ctx[:len(head)])
-assert ctx.endswith("\n</warning>"), repr(ctx[-20:])
+assert ctx.endswith(tail), repr(ctx[-len(tail):])
 PY
 then echo "OK: Claude Code wrapper text unchanged"; else fail "Claude Code wrapper text changed"; fi
 
 # Escaping: quotes, backslashes, tabs, CRLF, other control characters and
-# non-ASCII must round-trip.
+# non-ASCII must round-trip, including special characters in the plugin path.
 FAKE="$TMP_ROOT/fake-plugin"
 mkdir -p "$FAKE/hooks" "$FAKE/skills/using-bearpaws"
 cp "$HOOK" "$FAKE/hooks/session-start"
@@ -110,6 +113,32 @@ body = open(sys.argv[2], encoding="utf-8", newline="").read()
 assert body in ctx, "special characters did not round-trip"
 PY
 then echo "OK: special characters round-trip through JSON"; else fail "escaping broke JSON or content"; fi
+
+# Path escaping: spaces, double quotes, and backslashes in CLAUDE_PLUGIN_ROOT or
+# in the script's own directory must round-trip cleanly for every payload shape.
+SPECIAL_ROOT="$TMP_ROOT/dir with spaces \"quotes\" and \\slashes"
+mkdir -p "$SPECIAL_ROOT/hooks" "$SPECIAL_ROOT/skills/using-bearpaws"
+cp "$HOOK" "$SPECIAL_ROOT/hooks/session-start"
+printf -- '---\nname: using-bearpaws\n---\nbody\n' > "$SPECIAL_ROOT/skills/using-bearpaws/SKILL.md"
+check_special_path() {
+  local label="$1" hook_path="$2" want_base="$3" key="$4"; shift 4
+  local out="$TMP_ROOT/$label.json"
+  if run_hook "$hook_path" "$out" "$@" && python3 - "$out" "$key" "$want_base/skills/using-bearpaws" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+key, want_dir = sys.argv[2], sys.argv[3]
+ctx = data["hookSpecificOutput"]["additionalContext"] if key == "hookSpecificOutput" else data[key]
+assert f"using-bearpaws skill dir (resolve references/... here): {want_dir}" in ctx, repr(ctx)
+PY
+  then echo "OK: $label"; else fail "$label: special path escaping failed"; fi
+}
+WEIRD_CLAUDE_ROOT='/tmp/root with spaces "q" and \bs/'
+check_special_path "path escape claude env" "$HOOK" '/tmp/root with spaces "q" and \bs' hookSpecificOutput CLAUDE_PLUGIN_ROOT="$WEIRD_CLAUDE_ROOT"
+check_special_path "path escape script-dir cursor" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" additional_context CURSOR_PLUGIN_ROOT="$SPECIAL_ROOT"
+check_special_path "path escape script-dir devin" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" hookSpecificOutput DEVIN_PLUGIN_ROOT="$SPECIAL_ROOT"
+check_special_path "path escape script-dir copilot" "$HOOK" '/tmp/root with spaces "q" and \bs' additionalContext CLAUDE_PLUGIN_ROOT="$WEIRD_CLAUDE_ROOT" COPILOT_CLI=1
+check_special_path "path escape script-dir unknown-sdk" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" additionalContext
+
 
 # Missing or empty bootstrap must fail loudly with nothing on stdout.
 for case in missing empty; do
