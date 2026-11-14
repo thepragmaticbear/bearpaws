@@ -99,6 +99,10 @@ git clone https://github.com/thepragmaticbear/bearpaws.git && cd bearpaws
 
 Codex, OpenCode, Grok Build, Junie, Copilot CLI, Cursor, Devin (experimental): see [docs/install.md](docs/install.md).
 
+### Doctor
+
+Run `./install.sh --doctor` for a read-only check of your environment: `jq`, `bash`, and Claude Code versions (flagging missing `jq` or Claude Code `< 2.1.163`, where `risk-gate` is a no-op), `BEARPAWS_ENFORCE=0`, `CLAUDE_PLUGIN_DATA` / `TMPDIR` writability, installed git hooks in the current repo, linked agent skill directories, and Windows `bash` resolution for `run-hook.cmd`. Exits `0` when enforcement can run, `1` when something blocks it.
+
 ## How it works
 
 ```mermaid

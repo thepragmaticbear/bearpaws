@@ -101,7 +101,7 @@ Never hand-edit a version in one manifest — `--check` will flag the drift and 
 
 ```bash
 tests/schema-validator/run-validator.sh                                       # verify XML tag whitelist, Agent Skills frontmatter, .agents/skills links, adversarial gates, and no test scenarios under skills/
-tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, --junie, and --git installer
+tests/install/run-install-tests.sh                                            # verify Antigravity, --agents, --grok, --junie, --git installer, and --doctor
 tests/hooks/run-hook-tests.sh                                                 # SessionStart payload shape per harness (no CLI)
 tests/hooks/run-risk-gate-tests.sh                                            # risk-gate decisions per rule (no CLI; needs jq)
 tests/hooks/run-git-gate-tests.sh                                             # git commit-msg and pre-push gate decisions per rule (no CLI, no jq)
@@ -145,7 +145,7 @@ tests/codex/run-conformance.sh                                                # 
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, shellcheck (`-S warning` over the hook scripts except `run-hook.cmd`, `install.sh` and `scripts/*.sh`), token measurement, hooks (SessionStart, risk-gate and git gate), install, bump-version, Antigravity adapter, the eval-runner path checks, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs only the model-free checks: schema validator, shellcheck (`-S warning` over the hook scripts except `run-hook.cmd`, `install.sh` and `scripts/*.sh`), token measurement, hooks (SessionStart, risk-gate and git gate; plus macOS and Windows hook/install jobs), install, bump-version, Antigravity adapter, the eval-runner path checks, the Python unit tests, the native-plan static test, and harness-wiring. Everything that shells out to a model CLI is manual.
 
 [tests/skill-triggering/run-test.sh](tests/skill-triggering/run-test.sh) parses `stream-json` output for `"name":"Skill"` plus a matching `"skill":"..."` value — that's how it decides a skill triggered. Logs land under `/tmp/bearpaws-tests/<timestamp>/`.
 
