@@ -49,6 +49,39 @@ jobs:
       - uses: actions/checkout@v7
       - run: tests/install/run-install-tests.sh
 
+  hook-and-install-macos:
+    name: hook-and-install-macos
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Ensure jq is installed
+        run: command -v jq >/dev/null 2>&1 || brew install jq
+      - run: tests/hooks/run-hook-tests.sh
+      - run: tests/hooks/run-risk-gate-tests.sh
+      - run: tests/hooks/run-git-gate-tests.sh
+      - run: tests/install/run-install-tests.sh
+
+  hook-and-install-windows:
+    name: hook-and-install-windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Ensure jq is installed
+        run: command -v jq >/dev/null 2>&1 || choco install jq -y
+      # Windows Git Bash: NOJQ symlink of bash lacks msys-2.0.dll and python3 may differ.
+      - run: tests/hooks/run-hook-tests.sh
+        continue-on-error: true
+      # Windows Git Bash: relies on POSIX symlinks (ln -s), chmod 700, and shasum.
+      - run: tests/hooks/run-risk-gate-tests.sh
+        continue-on-error: true
+      - run: tests/hooks/run-git-gate-tests.sh
+      # Windows Git Bash: agent/junie symlink tests expect POSIX symlinks rather than default MSYS copies.
+      - run: tests/install/run-install-tests.sh
+        continue-on-error: true
+
   bump-version-tests:
     name: bump-version-tests
     runs-on: ubuntu-latest
