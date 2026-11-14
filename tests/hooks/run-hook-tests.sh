@@ -132,12 +132,13 @@ assert f"using-bearpaws skill dir (resolve references/... here): {want_dir}" in 
 PY
   then echo "OK: $label"; else fail "$label: special path escaping failed"; fi
 }
-WEIRD_CLAUDE_ROOT='/tmp/root with spaces "q" and \bs/'
-check_special_path "path escape claude env" "$HOOK" '/tmp/root with spaces "q" and \bs' hookSpecificOutput CLAUDE_PLUGIN_ROOT="$WEIRD_CLAUDE_ROOT"
+check_special_path "path escape claude env" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" hookSpecificOutput CLAUDE_PLUGIN_ROOT="$SPECIAL_ROOT"
 check_special_path "path escape script-dir cursor" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" additional_context CURSOR_PLUGIN_ROOT="$SPECIAL_ROOT"
 check_special_path "path escape script-dir devin" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" hookSpecificOutput DEVIN_PLUGIN_ROOT="$SPECIAL_ROOT"
-check_special_path "path escape script-dir copilot" "$HOOK" '/tmp/root with spaces "q" and \bs' additionalContext CLAUDE_PLUGIN_ROOT="$WEIRD_CLAUDE_ROOT" COPILOT_CLI=1
+check_special_path "path escape script-dir copilot" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" additionalContext CLAUDE_PLUGIN_ROOT="$SPECIAL_ROOT" COPILOT_CLI=1
 check_special_path "path escape script-dir unknown-sdk" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" additionalContext
+# M5: reading SKILL.md and reporting its dir use the same root even when CLAUDE_PLUGIN_ROOT differs.
+check_special_path "M5: SKILL_DIR uses script root over mismatched CLAUDE_PLUGIN_ROOT" "$SPECIAL_ROOT/hooks/session-start" "$SPECIAL_ROOT" hookSpecificOutput CLAUDE_PLUGIN_ROOT="/nonexistent/other/root"
 
 
 # Missing or empty bootstrap must fail loudly with nothing on stdout.

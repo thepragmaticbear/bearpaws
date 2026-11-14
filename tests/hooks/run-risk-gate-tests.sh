@@ -621,13 +621,16 @@ for i in $(seq 1 20); do prec "$R"; done
 t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
 echo "PERF: 20 baseline calls with .tree present, 5000 files: mean $(( (t1 - t0) / 20 )) ms"
 
-# SendMessage re-review counts by summary only.
+# C2: SendMessage never counts as a review (returns on delivery, no completed review check).
 sendmsg() { # <summary|-> <message>
   gate record "$(jq -cn --arg s "$SID" --arg su "$1" --arg m "$2" \
     '{session_id:$s,tool_name:"SendMessage",tool_input:({to:"reviewer",message:$m} + (if $su == "-" then {} else {summary:$su} end))}')"
 }
 reset; edit src/authz.py; sendmsg "Re-review authz null-org fix" "Fixed it, look again"; stop "$ELEVATED"
-expect "SendMessage re-review summary counts" allow
+expect "C2: SendMessage re-review summary does not count" block "independent review"
+reset; edit src/authz.py
+gate record "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"SendMessage",tool_input:{to:"explorer-1",summary:"review the diff",message:"hi"},tool_response:{success:true}}')"
+stop "$ELEVATED"; expect "C2: SendMessage to explorer-1 with success:true does not count" block "independent review"
 reset; edit src/authz.py; sendmsg "Fix review comments" "please review"; stop "$ELEVATED"
 expect "SendMessage 'Fix review comments' is not a review" block "independent review"
 reset; edit src/authz.py; sendmsg - "Review the diff again"; stop "$ELEVATED"
@@ -771,11 +774,11 @@ done
 for c in "pytest -n 4" "go test -v ./..." "ctest -V" "pytest -k help" "pytest && pytest --version"; do
   reset; edit src/ui/button.py; ran "$c"; stop "$R_GENERIC"; expect "real test run with non-info flags: '$c'" allow
 done
-# Defect 3: command-aware matching between Verified: and logged test runner(s).
-reset; edit src/ui/button.py; ran "npm test"; stop "$R_TESTED"; expect "Verified pytest after npm test: block" block "pytest"
+# Defect 3 + I3: command-aware matching between Verified: and logged test runner(s); wrapper runners satisfy inner claims.
+reset; edit src/ui/button.py; ran "npm test"; stop "$R_TESTED"; expect "I3: Verified pytest after npm test wrapper: allow" allow
 reset; edit src/ui/button.py; ran "pytest"; stop "${R_TESTED/pytest/npm test}"; expect "Verified npm test after pytest: block" block "npm"
 reset; edit src/ui/button.py; ran "go test ./..."; stop "${R_TESTED/pytest/cargo test}"; expect "Verified cargo test after go test: block" block "cargo"
-reset; edit src/ui/button.py; ran "bash tests/hooks/run-hook-tests.sh"; stop "$R_TESTED"; expect "Verified pytest after script test: block" block "pytest"
+reset; edit src/ui/button.py; ran "bash tests/hooks/run-hook-tests.sh"; stop "$R_TESTED"; expect "I3: Verified pytest after script wrapper: allow" allow
 reset; edit src/ui/button.py; ran "python3 -m pytest -q"; stop "$R_TESTED"; expect "python3 -m pytest satisfies Verified pytest" allow
 reset; edit src/ui/button.py; ran "python -m unittest"; stop "${R_TESTED/pytest/unittest}"; expect "python -m unittest satisfies Verified unittest" allow
 reset; edit src/ui/button.py; ran "pytest && npm test"; stop "${R_TESTED/12 passed/12 passed; npm test — 5 passed}"; expect "chained runners satisfy both claims" allow
@@ -1000,6 +1003,151 @@ for row in "test|tests/x.py" "test|src/test_x.py" "test|pkg/x_test.go" "test|web
   if [ "$want" = test ]; then line="edit-test $p"; else line="edit $p"; fi
   if [ "$(cat "$(logfile)")" = "$line" ]; then echo "CLASSIFY: $p -> $want"; else fail "classifier: $p expected '$line', got '$(cat "$(logfile)")'"; fi
 done
+
+# Review findings v3.1: C1, I1-I6, M1-M4, M6, M7.
+# C1: Status leading keyword with trailing text, markdown, and case variants; keep rejecting both-words lines.
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE — waiting on CI}"
+expect "C1: Status: INCOMPLETE — waiting on CI: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Status: COMPLETE/Status: COMPLETE.}"
+expect "C1: Status: COMPLETE.: allow" allow
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: **INCOMPLETE** (review pending)}"
+expect "C1: Status: **INCOMPLETE** (review pending): allow" allow
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE - review pending}"
+expect "C1: Status: INCOMPLETE - review pending: allow" allow
+reset; edit src/authz.py; stop "${ELEVATED/Status: COMPLETE/status: incomplete — waiting}"
+expect "C1: lowercase status incomplete: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Status: COMPLETE/status: complete.}"
+expect "C1: lowercase status complete.: allow" allow
+reset; edit src/authz.py; review; stop "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE — COMPLETE later}"
+expect "C1: both INCOMPLETE and COMPLETE on Status line: block" block "Status:"
+
+# I1: multi-line Not checked / Verified / Assumptions / Open bullets.
+reset; edit src/ui/button.py
+stop $'Done.\n\nRisk: routine\nVerified: git diff\nNot checked:\n- CI\n- lint\nStatus: COMPLETE'
+expect "I1: multi-line Not checked bullets: allow" allow
+reset; edit src/ui/button.py; ran "pytest"
+stop $'Done.\n\nRisk: routine\nVerified:\n- pytest — 12 passed\nNot checked: none\nStatus: COMPLETE'
+expect "I1: multi-line Verified bullets with logged pytest: allow" allow
+reset; edit src/ui/button.py
+stop $'Done.\n\nRisk: routine\nVerified:\n- pytest — 12 passed\nNot checked: none\nStatus: COMPLETE'
+expect "I1: multi-line Verified claiming pytest without run: block" block "Verified"
+reset; edit src/authz.py; review
+stop $'Fixed.\n\nRisk: elevated (authz)\nPinned: none\nFailing first: test failed\nReview: bp:code-reviewer — Ready\nOpen: none\nAssumptions:\n- org_id is never null\nVerified: git diff\nNot checked: none\nStatus: COMPLETE'
+expect "I1: multi-line Assumptions bullets: allow" allow
+reset; edit src/authz.py; review
+stop $'Fixed.\n\nRisk: elevated (authz)\nPinned: none\nFailing first: test failed\nReview: bp:code-reviewer — Issues\nOpen:\n- Critical: SQL injection\nAssumptions: x\nVerified: git diff\nNot checked: none\nStatus: COMPLETE'
+expect "I1: Open empty with Critical bullet + COMPLETE: block" block "Open"
+reset; edit src/authz.py; review
+stop $'Fixed.\n\nRisk: elevated (authz)\nPinned: none\nFailing first: test failed\nReview: bp:code-reviewer — Issues\nOpen:\n\n- Critical: SQL injection\nAssumptions: x\nVerified: git diff\nNot checked: none\nStatus: COMPLETE'
+expect "I1: Open empty + blank + Critical bullet + COMPLETE: block" block "Open"
+reset; edit src/authz.py; review
+stop $'Fixed.\n\nRisk: elevated (authz)\nPinned: none\nFailing first: test failed\nReview: bp:code-reviewer — Issues\nOpen:\n- Critical: SQL injection\nAssumptions: x\nVerified: git diff\nNot checked: none\nStatus: INCOMPLETE'
+expect "I1: Open empty with Critical bullet + INCOMPLETE: allow" allow
+
+# I2: background review block message tells agent to use run_in_background: false and wait.
+reset; edit src/authz.py
+gate record "$(jq -cn --arg s "$SID" '{session_id:$s,tool_name:"Agent",tool_input:{subagent_type:"bp:code-reviewer",description:"Review authz",run_in_background:true},tool_response:{isAsync:true,status:"async_launched",agentId:"a1"}}')"
+stop "$ELEVATED"
+expect "I2: background review block explains run_in_background: false" block "dispatch the reviewer with run_in_background: false and wait for its result"
+
+# I3: passing wrapper runs satisfy inner runner claims; globs (* or ?) in Verified are ignored as runner names.
+reset; edit src/ui/button.py; ran "npm test"
+stop "${R_TESTED/pytest — 12 passed/jest — 42 passed}"; expect "I3: npm test satisfies Verified jest" allow
+reset; edit src/ui/button.py; ran "make test"
+stop "${R_TESTED/pytest — 12 passed/make test (pytest: 30 passed)}"; expect "I3: make test satisfies make test (pytest)" allow
+reset; edit src/ui/button.py; ran "tox -e py312"
+stop "${R_TESTED/pytest — 12 passed/tox -e py312, pytest 30 passed}"; expect "I3: tox -e py312 satisfies tox + pytest" allow
+reset; edit src/ui/button.py; ran "bash tests/hooks/run-risk-gate-tests.sh"
+stop "${R_TESTED/pytest — 12 passed/tests/hooks/*.sh all passed}"; expect "I3: glob tests/hooks/*.sh ignored as runner name" allow
+reset; edit src/ui/button.py; ran "bash tests/hooks/run-risk-gate-tests.sh"
+stop "${R_TESTED/pytest — 12 passed/tests/hooks/run-?-tests.sh all passed}"; expect "I3: glob with ? ignored as runner name" allow
+reset; edit src/ui/button.py
+stop "${R_TESTED/pytest — 12 passed/tests/hooks/*.sh all passed}"; expect "I3: glob claim with no logged run still blocks" block "Verified"
+
+# I4: sensitive_paths true positives in stop nudge.
+for p in src/userpassword.ts src/accesstoken.ts pkg/jwtauth/jwtauth.go src/resetpassword.tsx src/getACLs.ts; do
+  reset; edit "$p"; stop "$ROUTINE"; expect "I4: routine on $p nudges" block "$p"
+done
+
+# I5: bash_runners ignores segments after || and quoted spans, while keeping sh -c and pytest || true.
+reset; edit src/ui/button.py; ran "true || pytest"; stop "$R_TESTED"; expect "I5: true || pytest is not a run" block "Verified"
+reset; edit src/ui/button.py; ran 'echo "done; pytest"'; stop "$R_TESTED"; expect "I5: echo \"done; pytest\" is not a run" block "Verified"
+reset; edit src/ui/button.py; ran "echo 'done; pytest'"; stop "$R_TESTED"; expect "I5: echo 'done; pytest' is not a run" block "Verified"
+reset; edit src/ui/button.py; ran "true || pytest; jest"; stop "${R_TESTED/pytest/jest}"; expect "I5: jest after ; following true || pytest runs" allow
+reset; edit src/ui/button.py; ranout "pytest || true" "3 passed in 0.1s"; stop "$R_TESTED"; expect "I5: pytest || true still counts" allow
+reset; edit src/ui/button.py; ran "bash -c 'true || pytest'"; stop "$R_TESTED"; expect "I5: bash -c 'true || pytest' is not a run" block "Verified"
+reset; edit src/ui/button.py; ran 'bash -c '\''echo "done; pytest"'\'''; stop "$R_TESTED"; expect "I5: bash -c quoted echo pytest is not a run" block "Verified"
+
+# I6: Review placeholders in risk-gate stop.
+for rv in "not done" "(skipped)" "TBD" "self-review" "none found, approved"; do
+  reset; edit src/authz.py; review; stop "${ELEVATED/bp:code-reviewer — Ready to merge: Yes/$rv}"
+  expect "I6: elevated COMPLETE with Review: $rv blocks" block "Review"
+done
+
+# M1: make -j$(nproc) test and mvn -V test count as test runs.
+reset; edit src/ui/button.py; ran 'make -j$(nproc) test'; stop "${R_TESTED/pytest/make test}"; expect "M1: make -j\$(nproc) test counts" allow
+reset; edit src/ui/button.py; ran "mvn -V test"; stop "${R_TESTED/pytest/mvn test}"; expect "M1: mvn -V test counts" allow
+
+# M2: timing smoke test for 200-line heredoc Bash record (assert < 800ms on non-Windows, report PERF).
+R_M2="$(mkrepo m2)"
+reset; bashc "$R_M2"
+HEREDOC_200=$'cat <<'\''EOF'\'' > /dev/null\n'$(printf 'plain prose line %.0s\n' $(seq 1 200))$'EOF'
+t0=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+gate record "$(jq -cn --arg s "$SID" --arg c "$R_M2" --arg cmd "$HEREDOC_200" '{session_id:$s,cwd:$c,tool_name:"Bash",tool_input:{command:$cmd}}')"
+t1=$(python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0)
+dt=$((t1 - t0))
+echo "PERF: 200-line heredoc Bash record: ${dt} ms"
+if [ "$dt" -gt 0 ] && [ "$dt" -lt 800 ]; then echo "OK: M2 200-line heredoc Bash record under 800ms (${dt}ms)"
+elif [ "$dt" -eq 0 ]; then echo "OK: M2 timing skipped (no python3)"
+else fail "M2: 200-line heredoc Bash record took ${dt}ms (>= 800ms)"; fi
+
+# M3: fingerprint fallback passes --no-optional-locks to git status.
+R_M3="$(mkrepo m3)"
+for i in $(seq 1 8); do echo "v$i" >"$R_M3/f$i.txt"; done
+git -C "$R_M3" add -A; git -C "$R_M3" commit -qm eight
+FAKEGIT="$TMP_ROOT/fakegit"; mkdir -p "$FAKEGIT"
+cat >"$FAKEGIT/git" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKEGIT_LOG}"
+exec "${REAL_GIT}" "$@"
+SH
+chmod +x "$FAKEGIT/git"
+FAKEGIT_LOG="$TMP_ROOT/git-args.log"
+: >"$FAKEGIT_LOG"
+reset; bashc "$R_M3" BEARPAWS_FINGERPRINT_MAX=5 REAL_GIT="$(command -v git)" FAKEGIT_LOG="$FAKEGIT_LOG" PATH="$FAKEGIT:$PATH"
+if grep -q -- '--no-optional-locks status' "$FAKEGIT_LOG"; then
+  echo "OK: M3 fingerprint fallback uses git --no-optional-locks status"
+else
+  fail "M3: expected --no-optional-locks status, got: $(cat "$FAKEGIT_LOG")"
+fi
+
+# M4: Windows drive letter case-insensitivity (c:/ vs C:/).
+reset; editc 'C:\repo\oauth-proxy' 'c:\repo\oauth-proxy\src\ui\button.py'; stop "$ROUTINE"
+expect "M4: Windows mixed-case drive letter routine under sensitive dir allows" allow
+reset; editc 'C:\repo\app' 'c:\repo\app\tests\test_a.py'
+[ "$(cat "$(logfile)")" = "edit-test tests/test_a.py" ] && echo "OK: M4 Windows mixed-case drive letter test path logged as edit-test" || fail "M4: got $(cat "$(logfile)" 2>/dev/null)"
+reset; edit 'c:\cfg\.claude\plans\p.md' HOME='C:\cfg'; stop "Saved."
+expect "M4: Windows mixed-case drive letter HOME ~/.claude skipped" allow
+reset; edit 'c:\cfg\team\plans\p.md' CLAUDE_CONFIG_DIR='C:\cfg\team'; stop "Saved."
+expect "M4: Windows mixed-case drive letter CLAUDE_CONFIG_DIR skipped" allow
+
+# M6: reviewer response with status error/failed or empty content text does not count.
+for bad_resp in \
+  '{"status":"error","content":[{"type":"text","text":"agent crashed"}]}' \
+  '{"status":"failed","content":[{"type":"text","text":"timed out"}]}' \
+  '{"status":"completed","content":[{"type":"text","text":""}]}' \
+  '{"status":"completed","content":[{"type":"text","text":"   "}]}' \
+  '{"status":"completed","content":[]}' \
+  '{"status":"completed"}'; do
+  reset; edit src/authz.py
+  gate record "$(jq -cn --arg s "$SID" --argjson r "$bad_resp" '{session_id:$s,tool_name:"Agent",tool_input:{subagent_type:"bp:code-reviewer",description:"Review authz"},tool_response:$r}')"
+  stop "$ELEVATED"; expect "M6: reviewer bad response $bad_resp does not count" block "independent review"
+done
+
+# M7: trailing quoted > Risk: elevated does not reclassify routine receipt.
+reset; edit src/ui/button.py
+stop "$ROUTINE"$'\n\n> Risk: elevated (payments)\n> Status: COMPLETE'
+expect "M7: trailing quoted > Risk: elevated does not reclassify routine" allow
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"
