@@ -278,5 +278,37 @@ expect "I6: elevated INCOMPLETE with Review: not done passes" pass
 reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest — 12 passed\nStatus: COMPLETE\n\n> Risk: elevated (payments)\n> Status: COMPLETE'
 expect "M7: trailing quoted > Risk: elevated does not reclassify routine" pass
 
+# I-A: real Review verdicts pass; full placeholder list still blocks.
+for rv in \
+  "No issues found by bp:code-reviewer" \
+  "no Critical or Important findings (bp:code-reviewer)" \
+  "Not blocking: minor nits only" \
+  "no findings from bp:code-reviewer"; do
+  reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
+  expect "I-A: elevated COMPLETE with real Review '$rv' passes" pass
+done
+for rv in none skipped "(skipped)" "n/a" "n.a." na "-" "—" todo TBD "not done" "not run" "not yet" "no review" self "self-review" pending "none found, approved"; do
+  reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
+  expect "I-A: elevated COMPLETE with placeholder Review '$rv' blocks" block "Review"
+done
+
+# I-B: restored unanchored sensitive stems and benign removals in sensitive_paths and git gate.
+for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/getprice.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py; do
+  [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: I-B sensitive_paths matches $p" || fail "I-B sensitive_paths should match $p"
+  reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on $p warns" warn "$p"
+done
+for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
+  [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && fail "I-B sensitive_paths should not match $p" || echo "OK: I-B sensitive_paths does not match $p"
+  reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on benign $p passes silently" pass
+done
+
+# M-f: missing-receipt error lists what commits require and does not ask for Not checked.
+reset; stage src/ui/button.py; gate "Fix button label"
+if [ "$(cat "$TMP_ROOT/rc")" = 1 ] && ! grep -qF "Not checked" "$TMP_ROOT/err" && grep -qF "Verified" "$TMP_ROOT/err" && grep -qF "Status" "$TMP_ROOT/err"; then
+  echo "OK: M-f missing-receipt message omits Not checked"
+else
+  fail "M-f missing-receipt message should not mention Not checked: $(cat "$TMP_ROOT/err")"
+fi
+
 if [ "$failures" -gt 0 ]; then echo "$failures GIT-GATE TEST(S) FAILED"; exit 1; fi
 echo "ALL GIT-GATE TESTS PASSED"

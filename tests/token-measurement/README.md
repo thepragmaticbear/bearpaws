@@ -21,7 +21,7 @@ diff <(jq -S . /tmp/before.json) <(jq -S . /tmp/after.json)
 
 All size fields are measured in **UTF-8 bytes** (including `bootstrap_additional_context_bytes`, measured via UTF-8 encoding of the decoded `additionalContext` string, matching `wc -c` on UTF-8 skill files).
 
-- `bootstrap_additional_context_bytes`: UTF-8 bytes of the `additionalContext` string injected by `SessionStart`. This is what every session pays up front.
+- `bootstrap_additional_context_bytes`: UTF-8 bytes of the `additionalContext` string injected by `SessionStart`, with the machine-specific plugin root in the `using-bearpaws skill dir` line normalized to `/plugin-root` so measurements are reproducible across machines and checkouts. This is what every session pays up front.
 - `skills_skill_md_total_bytes`: sum of UTF-8 bytes across all `skills/*/SKILL.md` files. Skills are loaded on demand via the `Skill` tool, so this is the *aggregate* a session could load if every skill were invoked.
 - `skills_full_payload_bytes`: total UTF-8 bytes across the `skills/` tree (`SKILL.md` + supporting files); useful for tracking the fully-pulled checkout footprint.
 - `typical_session_bytes`: `bootstrap_additional_context_bytes` plus the `SKILL.md` UTF-8 bytes of the skills loaded in a typical end-to-end feature workflow:

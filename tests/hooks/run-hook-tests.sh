@@ -198,6 +198,12 @@ for script in ("run-hook.cmd", "session-start", "risk-gate"):
     assert os.access(path, os.X_OK), f"{path} not executable"
 PY
 
+if jq -e '.hooks.SessionStart[0].matcher == "startup|clear|compact"' "$REPO_ROOT/hooks/hooks.json" >/dev/null; then
+  echo "OK: M-e SessionStart matcher is startup|clear|compact"
+else
+  fail "M-e SessionStart matcher in hooks/hooks.json is not startup|clear|compact"
+fi
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures hook test(s) failed"
   exit 1

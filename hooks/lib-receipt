@@ -2,11 +2,11 @@
 # Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
 
 # Path-name heuristic for work that looks elevated-risk.
-# Unanchored for unambiguous longer stems; anchored at segment/delimiter/camelCase boundaries for short stems
-# and words with benign substrings (after removing BENIGN words).
-SENSITIVE='(passw|token|auth|secret|credential|session|payment|billing)|(^|[^a-z0-9])(relogin|login|permissions?|acls?([^a-z0-9]|$)|polic(y|ies)|(en|de|b|s|m)?crypt|invoices?|money|pric(e|es|ing)|migrat|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
+# Unanchored for unambiguous stems (after removing BENIGN words); anchored at segment/delimiter/camelCase
+# boundaries for short stems and words with benign substrings.
+SENSITIVE='(passw|token|auth|secret|credential|session|payment|billing|login|permission|polic|migrat|crypt|postgres|pric(e|es|ing))|(^|[^a-z0-9])(acls?([^a-z0-9]|$)|invoices?|money|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
 # Ordinary words that contain a SENSITIVE term, removed before matching.
-BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
+BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|police[a-z]*|cryptic[a-z]*|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
 LEAD='^[[:space:]*_#0-9.`-]*'
 TRAIL='[*_`]*'
 ALL_KEYS='(Risk|Pinned|Failing first|Review|Open|Assumptions|Verified|Not checked|Status)'
@@ -138,12 +138,12 @@ open_state() {
     }' <<<"$msg"
 }
 
-# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, na, -, todo, tbd, not, no, pending, self, self-review).
+# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, n.a., na, -, —, todo, tbd, pending, self, self-review, not done/run/yet, no review, 'none found, approved').
 review_is_placeholder() {
   local v
-  v="$(printf '%s' "$1" | tr -d '()' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  v="$(printf '%s' "$1" | tr '\n' ' ' | tr -d '()*`' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
   [ -n "$v" ] || return 0
-  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|tbd|not|no|pending|self-review|self)([^[:alnum:]_-].*)?$' <<<"$v"
+  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self(-review)?|not[[:space:]]+(done|run|yet)|no[[:space:]]+review|none[[:space:]]+found,?[[:space:]]+approved)[.]?$' <<<"$v"
 }
 
 # check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
@@ -194,7 +194,7 @@ check_receipt() {
     if [ "$risk" = elevated ] && [ "$incomplete" = 0 ]; then
       rev_val="$(field_value Review || true)"
       if review_is_placeholder "$rev_val"; then
-        receipt_err="bearpaws: an elevated-risk commit with Status: COMPLETE needs a Review line (not none/skipped/n/a/-/todo), or Status: INCOMPLETE."
+        receipt_err="bearpaws: an elevated-risk commit with Status: COMPLETE needs a Review line (not none/skipped/n/a/n.a./na/-/—/todo/tbd/pending/self/self-review/not done/not run/not yet/no review/'none found, approved'), or Status: INCOMPLETE."
         return 2
       fi
     fi

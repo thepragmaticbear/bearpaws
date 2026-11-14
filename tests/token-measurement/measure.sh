@@ -15,9 +15,10 @@ approx_tokens() {
   echo $(( ($1 + 2) / 4 ))
 }
 
-# 1. Bootstrap: the actual additionalContext payload SessionStart injects (UTF-8 bytes).
+# 1. Bootstrap: the actual additionalContext payload SessionStart injects (UTF-8 bytes),
+#    with the machine-specific plugin root in the skill-dir line normalized to /plugin-root.
 bootstrap_bytes=$(CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash hooks/session-start \
-  | python3 -c "import json,sys; print(len(json.load(sys.stdin)['hookSpecificOutput']['additionalContext'].encode('utf-8')))")
+  | python3 -c "import json,re,sys; ctx=json.load(sys.stdin)['hookSpecificOutput']['additionalContext']; ctx=re.sub(r'(using-bearpaws skill dir \(resolve references/\.\.\. here\): ).*', r'\1/plugin-root/skills/using-bearpaws', ctx); print(len(ctx.encode('utf-8')))")
 bootstrap_tokens=$(approx_tokens "$bootstrap_bytes")
 
 # 2. Per-skill SKILL.md UTF-8 bytes.
