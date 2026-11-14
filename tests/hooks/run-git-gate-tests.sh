@@ -244,5 +244,39 @@ prepush "$(printf 'refs/heads/m1 %s refs/heads/m1 %s\nrefs/heads/m2 %s refs/head
 grep -qF "git rebase -r $ONE" "$TMP_ROOT/err" && grep -qF "m2" "$TMP_ROOT/err" \
   && echo "OK: pre-push: each flagged ref gets its own rewrite base" || fail "pre-push: per-ref rewrite base missing: $(cat "$TMP_ROOT/err")"
 
+# Review findings v3.1: C1, I1, I4, I6, M7.
+# C1: Status leading keyword with trailing text, markdown, and case variants; reject both-words lines.
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE — waiting on CI}"; expect "C1: INCOMPLETE — waiting on CI passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: COMPLETE.}"; expect "C1: COMPLETE. passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: **INCOMPLETE** (review pending)}"; expect "C1: **INCOMPLETE** (review pending) passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE - review pending}"; expect "C1: INCOMPLETE - review pending passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/status: incomplete - review pending}"; expect "C1: lowercase status incomplete - review pending passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/status: complete.}"; expect "C1: lowercase status complete. passes" pass
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: COMPLETE (nothing left INCOMPLETE)}"; expect "C1: COMPLETE (nothing left INCOMPLETE) blocks" block "Status"
+reset; stage src/authz.py; gate "${ELEVATED/Status: COMPLETE/Status: INCOMPLETE — COMPLETE later}"; expect "C1: line with both INCOMPLETE and COMPLETE blocks" block "Status"
+
+# I1: multi-line fields and Open: bullets.
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified:\n- pytest — 12 passed\nStatus: COMPLETE'; expect "I1: multi-line Verified passes" pass
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: bp:code-reviewer — Issues\nOpen:\n- Critical: SQL injection\nStatus: COMPLETE'; expect "I1: Open empty with Critical bullet blocks COMPLETE" block "Open"
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: bp:code-reviewer — Issues\nOpen:\n\n- Critical: SQL injection\nStatus: COMPLETE'; expect "I1: Open empty + blank + Critical bullet blocks COMPLETE" block "Open"
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: bp:code-reviewer — Issues\nOpen:\n- Critical: SQL injection\nStatus: INCOMPLETE'; expect "I1: Open empty with Critical bullet + INCOMPLETE passes" pass
+
+# I4: sensitive_paths true positives restored and getACLs split fixed.
+for p in src/userpassword.ts src/accesstoken.ts pkg/jwtauth/jwtauth.go src/resetpassword.tsx src/getACLs.ts; do
+  [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: I4 sensitive_paths matches $p" || fail "I4 sensitive_paths should match $p"
+done
+
+# I6: Review placeholders (not done, (skipped), TBD, self-review, none found, approved).
+for rv in "not done" "(skipped)" "TBD" "self-review" "none found, approved"; do
+  reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
+  expect "I6: elevated COMPLETE with Review: $rv blocks" block "Review"
+done
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: not done\nOpen: none\nStatus: INCOMPLETE'
+expect "I6: elevated INCOMPLETE with Review: not done passes" pass
+
+# M7: trailing quoted > Risk: elevated does not reclassify routine receipt.
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest — 12 passed\nStatus: COMPLETE\n\n> Risk: elevated (payments)\n> Status: COMPLETE'
+expect "M7: trailing quoted > Risk: elevated does not reclassify routine" pass
+
 if [ "$failures" -gt 0 ]; then echo "$failures GIT-GATE TEST(S) FAILED"; exit 1; fi
 echo "ALL GIT-GATE TESTS PASSED"

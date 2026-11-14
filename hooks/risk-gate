@@ -83,7 +83,7 @@ stat_files() {
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
 # staging reorders git's list. Above BEARPAWS_FINGERPRINT_MAX (default 20000) non-cache files,
-# falls back to git status --porcelain -z -uall plus mtimes of listed files (stripping XY so
+# falls back to git --no-optional-locks status --porcelain -z -uall plus mtimes of listed files (stripping XY so
 # git add does not look like an edit). Content isn't hashed: same-size, same-tick edits are missed.
 fingerprint() { # <toplevel> <sha tool>
   local top="$1" sha="$2" files filtered count=0 max="${BEARPAWS_FINGERPRINT_MAX:-20000}"
@@ -108,7 +108,7 @@ fingerprint() { # <toplevel> <sha tool>
     fi
     [[ "$p" =~ $FP_EXCL ]] && continue
     paths+="$p"$'\n'
-  done < <(cd -- "$top" 2>/dev/null && git status --porcelain -z -uall 2>/dev/null && printf '__FP_OK__\0')
+  done < <(cd -- "$top" 2>/dev/null && git --no-optional-locks status --porcelain -z -uall 2>/dev/null && printf '__FP_OK__\0')
   [ "$ok" = 1 ] || return 1
   if [ -n "$paths" ]; then
     paths="$(printf '%s' "$paths" | LC_ALL=C sort -u)"
@@ -173,21 +173,31 @@ pend() { [ "$(tail -1 "$log")" = pending ] || echo pending >>"$log"; exit 0; }
 OPEN_MISSING="Elevated work needs an Open line: Open: none, or each unfixed Critical or Important review finding with Status: INCOMPLETE."
 OPEN_LISTED="Open: lists unfixed review findings, so the work is not COMPLETE. Fix each with its own failing test, or set Status: INCOMPLETE naming it. If nothing is open, write exactly Open: none."
 
+INFO_FLAG_RE='(^|[[:space:]'\''"])(--(help|version|collect-only|co|list|list-tests|listTests|show-only|dry-run|just-print|recon|fixtures|markers|setup-plan|setup-only)|-h)([[:space:]=;'\''"]|$)'
+INFO_V_RE='(^|[[:space:]'\''"])-V([[:space:]=;'\''"]|$)'
+INFO_GO_RE='(^|[[:space:]'\''"])-list([[:space:]=;'\''"]|$)'
+INFO_CTEST_RE='(^|[[:space:]'\''"])-N([[:space:]=;'\''"]|$)'
+INFO_MAKE_RE='(^|[[:space:]'\''"])-[A-Za-z]*n[A-Za-z]*([[:space:]=;'\''"]|$)'
+INFO_VITEST_RE='^([^[:space:]]*/)?vitest[[:space:]]+list([[:space:];'\''"]|$)'
+INFO_CARGO_RE='^([^[:space:]]*/)?cargo[[:space:]]+nextest[[:space:]]+list([[:space:];'\''"]|$)'
+TR_ANY_RUNNER='pytest|py\.test|tox|nox|jest|vitest|mocha|rspec|phpunit|bats|ctest|npm|pnpm|yarn|bun|go|cargo|mix|dotnet|deno|swift|mvn|gradle|make|bazel|just|rails|sbt|flutter|dart|lein|stack|cabal|rake|scripts?|bin|python|node|tests?'
+
 is_info_listing_cmd() { # <runner> <stripped-cmd>
   local r="$1" s="$2"
-  grep -qE '(^|[[:space:]'\''"])(--(help|version|collect-only|co|list|list-tests|listTests|show-only|dry-run|just-print|recon|fixtures|markers|setup-plan|setup-only)|-h)([[:space:]=;'\''"]|$)' <<<"$s" && return 0
-  [ "$r" != ctest ] && grep -qE '(^|[[:space:]'\''"])-V([[:space:]=;'\''"]|$)' <<<"$s" && return 0
+  [[ "$s" =~ $INFO_FLAG_RE ]] && return 0
+  [ "$r" != ctest ] && [ "$r" != mvn ] && [[ "$s" =~ $INFO_V_RE ]] && return 0
   case "$r" in
-    go) grep -qE '(^|[[:space:]'\''"])-list([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
-    ctest) grep -qE '(^|[[:space:]'\''"])-N([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
-    make) grep -qE '(^|[[:space:]'\''"])-[A-Za-z]*n[A-Za-z]*([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
-    vitest) grep -qE '^([^[:space:]]*/)?vitest[[:space:]]+list([[:space:];'\''"]|$)' <<<"$s" && return 0 ;;
-    cargo) grep -qE '^([^[:space:]]*/)?cargo[[:space:]]+nextest[[:space:]]+list([[:space:];'\''"]|$)' <<<"$s" && return 0 ;;
+    go) [[ "$s" =~ $INFO_GO_RE ]] && return 0 ;;
+    ctest) [[ "$s" =~ $INFO_CTEST_RE ]] && return 0 ;;
+    make) [[ "$s" =~ $INFO_MAKE_RE ]] && return 0 ;;
+    vitest) [[ "$s" =~ $INFO_VITEST_RE ]] && return 0 ;;
+    cargo) [[ "$s" =~ $INFO_CARGO_RE ]] && return 0 ;;
   esac
   return 1
 }
 
-segment_runner() { # <segment>: print canonical runner name if segment runs tests (not info/listing)
+segment_runner() { # <segment>: set _seg_runner to canonical runner name if segment runs tests (not info/listing)
+  _seg_runner=""
   local s="$1" r="" tok
   while :; do
     [[ "$s" =~ ^[[:space:]\(\'\"]+ ]] && s="${s#"${BASH_REMATCH[0]}"}"
@@ -224,24 +234,93 @@ segment_runner() { # <segment>: print canonical runner name if segment runs test
   fi
   [ -n "$r" ] || return 1
   is_info_listing_cmd "$r" "$s" && return 1
-  printf '%s\n' "$r"
+  _seg_runner="$r"
+  return 0
 }
 
-bash_runners() { # <cmd>: print unique canonical runner names for segments that run tests
-  local flat segstr seg r
-  flat="${1//$'\n'/;}"
-  segstr="${flat//>&/ }"; segstr="${segstr//&>/ }"
-  segstr="$(tr ';|&`(' '\n\n\n\n\n' <<<"$segstr")"
+bash_runners() { # <cmd>: set _runners to newline-separated unique canonical runner names for segments that run tests
+  _runners=""
+  [[ "$1" =~ $TR_ANY_RUNNER ]] || return 0
+  local segstr seg seen=$'\n'
+  segstr="$(LC_ALL=C awk '
+    function lex(s,   i, n, c, c2, seg, skip_or, sdepth, q, inner, is_shc) {
+      n = length(s); seg = ""; skip_or = 0; sdepth = 0; i = 1
+      while (i <= n) {
+        c = substr(s, i, 1)
+        c2 = (i < n) ? substr(s, i + 1, 1) : ""
+        if (c == "\\" && i < n) {
+          seg = seg substr(s, i, 2); i += 2; continue
+        }
+        if (c == "\047" || c == "\"") {
+          q = c
+          is_shc = (!skip_or && sdepth == 0 && seg ~ /(^|[[:space:]\/])(ba)?sh[[:space:]]+-[A-Za-z]*c[[:space:]]*$/)
+          inner = ""; i++
+          while (i <= n) {
+            c = substr(s, i, 1)
+            if (q == "\"" && c == "\\" && i < n) {
+              c2 = substr(s, i + 1, 1)
+              if (c2 == "\"" || c2 == "\\") { inner = inner c2; i += 2; continue }
+              inner = inner c c2; i += 2; continue
+            }
+            if (c == q) { i++; break }
+            inner = inner c; i++
+          }
+          if (is_shc) { seg = ""; lex(inner) } else { seg = seg "q" }
+          continue
+        }
+        if (c == "$" && c2 == "(") {
+          seg = seg "$("; sdepth++; i += 2; continue
+        }
+        if (c == "(") {
+          if (sdepth > 0) { sdepth++; seg = seg "("; i++; continue }
+          if (!skip_or && seg ~ /[^[:space:]]/) print seg
+          seg = ""; skip_or = 0; i++; continue
+        }
+        if (c == ")" && sdepth > 0) {
+          sdepth--; seg = seg ")"; i++; continue
+        }
+        if (sdepth == 0) {
+          if ((c == ">" && c2 == "&") || (c == "&" && c2 == ">")) { seg = seg " "; i += 2; continue }
+          if (c == ";" || c == "\n" || c == "`") {
+            if (!skip_or && seg ~ /[^[:space:]]/) print seg
+            seg = ""; skip_or = 0; i++; continue
+          }
+          if (c == "|" && c2 == "|") {
+            if (!skip_or && seg ~ /[^[:space:]]/) print seg
+            seg = ""; skip_or = 1; i += 2; continue
+          }
+          if ((c == "|" && c2 == "&") || (c == "&" && c2 == "&")) {
+            if (!skip_or && seg ~ /[^[:space:]]/) print seg
+            seg = ""; skip_or = 0; i += 2; continue
+          }
+          if (c == "|" || c == "&") {
+            if (!skip_or && seg ~ /[^[:space:]]/) print seg
+            seg = ""; skip_or = 0; i++; continue
+          }
+        }
+        seg = seg c; i++
+      }
+      if (!skip_or && seg ~ /[^[:space:]]/) print seg
+    }
+    { src = (got ? src "\n" $0 : $0); got = 1 }
+    END { if (got) lex(src) }
+  ' <<<"$1")" || return 0
   while IFS= read -r seg; do
-    r="$(segment_runner "$seg" || true)"
-    [ -n "$r" ] && printf '%s\n' "$r"
-  done <<<"$segstr" | awk '!seen[$0]++'
+    [ -n "$seg" ] || continue
+    segment_runner "$seg" || continue
+    if [[ "$seen" != *$'\n'"$_seg_runner"$'\n'* ]]; then
+      seen+="$_seg_runner"$'\n'
+      _runners+="${_runners:+$'\n'}$_seg_runner"
+    fi
+  done <<<"$segstr"
 }
 
 OKW='(^|[^[:alnum:]])(pass(ed|es|ing)?|ok|green)([^[:alnum:]-]|$)'
 NEG='(none|n/?a|n\.a|no|not|nothing|skip(ped)?)'
+CLAIM_BULLET_RE='^[[:space:]]*[-*+][[:space:]]+'
 claim_clause() { # <clause>: 0 if clause is a non-negated test-run claim
   local c="$1"
+  [[ "$c" =~ $CLAIM_BULLET_RE ]] && c="${c#"${BASH_REMATCH[0]}"}"
   grep -qiE "not run|not installed|unavailable|(did|could) ?n[o']t run|(^|[^0-9[:space:]])[[:space:]]*skipped([^=]|$)" <<<"$c" && return 1
   [[ "${c//:/ }" =~ $TESTRUN ]] && return 0
   grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$c" && grep -qiE 'test|spec|[0-9]' <<<"$c" && return 0
@@ -249,13 +328,15 @@ claim_clause() { # <clause>: 0 if clause is a non-negated test-run claim
   grep -qiE '(^|[^[:alnum:]])all [0-9]+ (green|ok)([^[:alnum:]]|$)' <<<"$c" && return 0
   return 1
 }
-clause_runners() { # <clause>: extract runner names explicitly mentioned in a claiming clause
-  local c="$1" cl
+clause_runners() { # <clause>: extract runner names explicitly mentioned in a claiming clause (ignoring glob tokens with * or ?)
+  local c="$1" cl tok
+  [[ "$c" =~ $CLAIM_BULLET_RE ]] && c="${c#"${BASH_REMATCH[0]}"}"
+  # Drop whitespace-delimited tokens containing * or ? so globs like tests/hooks/*.sh are not treated as runner names.
+  c="$(sed -E 's/[^[:space:]]*[*?][^[:space:]]*/ /g' <<<"$c")"
   cl="$(printf '%s' "$c" | tr '[:upper:]' '[:lower:]')"
   [[ "$cl" =~ (^|[^[:alnum:]_-])(pytest|py\.test)([^[:alnum:]_-]|$) ]] && echo pytest
   [[ "$cl" =~ (^|[^[:alnum:]_-])unittest([^[:alnum:]_-]|$) ]] && echo unittest
   [[ "$cl" =~ (^|[^[:alnum:]_-])node[[:space:]]+--test([^[:alnum:]_-]|$) ]] && echo node-test
-  local tok
   for tok in npm pnpm yarn bun; do
     [[ "$cl" =~ (^|[^[:alnum:]_-])$tok([[:space:]]+(--prefix|--dir|--cwd|-c)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+(test(:[^[:space:]]*)?|t)([^[:alnum:]_-]|$) ]] && echo "$tok"
   done
@@ -269,7 +350,7 @@ clause_runners() { # <clause>: extract runner names explicitly mentioned in a cl
   done
   if [[ "$c" =~ (^|[[:space:]])([^[:space:]\;\&\|]*(scripts?|bin)/tests?|[^[:space:]\;\&\|]*tests?/[^[:space:]\;\&\|]*\.(sh|py))([^[:alnum:]_./-]|$) ]]; then
     tok="${BASH_REMATCH[2]}"
-    echo "script:${tok##*/}"
+    [[ "$tok" != *[\*\?]* ]] && echo "script:${tok##*/}"
   fi
 }
 run_claim() { # <Verified value>: does any clause claim a test run?
@@ -284,6 +365,19 @@ verified_runners() { # <Verified value>: unique runners named in claiming clause
   while IFS= read -r c; do
     claim_clause "$c" && clause_runners "$c"
   done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}") | awk '!seen[$0]++'
+}
+
+norm_drive() { # <path>: set _nd with any leading Windows drive letter lowercased (0 forks, bash 3.2)
+  _nd="$1"
+  case "$_nd" in
+    A:*) _nd="a:${_nd#?:}" ;; B:*) _nd="b:${_nd#?:}" ;; C:*) _nd="c:${_nd#?:}" ;; D:*) _nd="d:${_nd#?:}" ;;
+    E:*) _nd="e:${_nd#?:}" ;; F:*) _nd="f:${_nd#?:}" ;; G:*) _nd="g:${_nd#?:}" ;; H:*) _nd="h:${_nd#?:}" ;;
+    I:*) _nd="i:${_nd#?:}" ;; J:*) _nd="j:${_nd#?:}" ;; K:*) _nd="k:${_nd#?:}" ;; L:*) _nd="l:${_nd#?:}" ;;
+    M:*) _nd="m:${_nd#?:}" ;; N:*) _nd="n:${_nd#?:}" ;; O:*) _nd="o:${_nd#?:}" ;; P:*) _nd="p:${_nd#?:}" ;;
+    Q:*) _nd="q:${_nd#?:}" ;; R:*) _nd="r:${_nd#?:}" ;; S:*) _nd="s:${_nd#?:}" ;; T:*) _nd="t:${_nd#?:}" ;;
+    U:*) _nd="u:${_nd#?:}" ;; V:*) _nd="v:${_nd#?:}" ;; W:*) _nd="w:${_nd#?:}" ;; X:*) _nd="x:${_nd#?:}" ;;
+    Y:*) _nd="y:${_nd#?:}" ;; Z:*) _nd="z:${_nd#?:}" ;;
+  esac
 }
 
 case "$mode" in
@@ -303,14 +397,20 @@ case "$mode" in
         [ "$cwd" != / ] && cwd="${cwd%/}"
         home_norm="${HOME:-}"; home_norm="${home_norm//\\//}"
         cfg_norm="${CLAUDE_CONFIG_DIR:-}"; cfg_norm="${cfg_norm//\\//}"
+        norm_drive "$path"; path_cmp="$_nd"
+        norm_drive "$cwd"; cwd_cmp="$_nd"
+        norm_drive "$home_norm"; home_cmp="$_nd"
+        norm_drive "$cfg_norm"; cfg_cmp="$_nd"
         # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits:
         # skip a path under one of those dirs unless the session cwd is inside that dir too. Checked on the
         # absolute path, before it is made cwd-relative, so a session whose cwd is HOME still skips them.
-        [ -n "$home_norm" ] && [ "$path" = "${home_norm%/}/.claude.json" ] && exit 0
-        for d in ${home_norm:+"${home_norm%/}/.claude" "${home_norm%/}/.bearpaws"} ${cfg_norm:+"${cfg_norm%/}"}; do
-          case "$path" in "$d"/*) case "$cwd/" in "$d"/*) ;; *) exit 0 ;; esac ;; esac
+        [ -n "$home_cmp" ] && [ "$path_cmp" = "${home_cmp%/}/.claude.json" ] && exit 0
+        for d in ${home_cmp:+"${home_cmp%/}/.claude" "${home_cmp%/}/.bearpaws"} ${cfg_cmp:+"${cfg_cmp%/}"}; do
+          case "$path_cmp" in "$d"/*) case "$cwd_cmp/" in "$d"/*) ;; *) exit 0 ;; esac ;; esac
         done
-        [ -n "$cwd" ] && path="${path#"$cwd"/}"
+        if [ -n "$cwd_cmp" ] && [ "${path_cmp#"$cwd_cmp"/}" != "$path_cmp" ]; then
+          path="${path:${#cwd}+1}"
+        fi
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
           # Test-file edits are logged apart: Pinned needs a run only before the first non-test edit.
@@ -322,7 +422,8 @@ case "$mode" in
         # Tree first: files the run itself writes land before its test-run line.
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         cmd="$(jq -r '.tool_input.command // empty' <<<"$input")"
-        runners="$(bash_runners "$cmd")"
+        bash_runners "$cmd"
+        runners="$_runners"
         if [ -n "$runners" ]; then
           # A nonzero exit arrives as PostToolUseFailure. An exit of 0 is a pass unless the command could
           # hide the status and its output shows a failure summary. A background launch has no result yet.
@@ -348,13 +449,19 @@ case "$mode" in
           fi
         fi
         ;;
-      Agent|Task|SendMessage)
-        # Reviewer subagent_type ((code-)?reviewer), or a matching description on a non-Explore/Plan/guide agent
-        # (SendMessage: summary, not to main). For Agent/Task, require a returned result (not run_in_background:true
-        # and not an async-launch acknowledgement or empty tool_response).
-        if jq -e --arg re "$REVIEW_DESC" --arg tool "$tool" '
+      Agent|Task)
+        # Reviewer subagent_type ((code-)?reviewer), or a matching description on a non-Explore/Plan/guide agent.
+        # Require a returned non-error result with non-empty text (not run_in_background:true, async-launch
+        # acknowledgement, error status, or empty tool_response).
+        if jq -e --arg re "$REVIEW_DESC" '
           def is_reviewer_type: test("(^|[:/_-])(code-)?reviewer($|[^[:alnum:]])"; "i");
           def is_non_review_type: test("^(explore|plan|claude-code-guide|statusline-setup)$"; "i");
+          def text_present:
+            if type == "string" then test("\\S")
+            elif type == "array" then any(.[]; text_present)
+            elif type == "object" then
+              ([.text, .result, .output, .message, .content] | any(. != null and text_present))
+            else false end;
           def has_returned_result:
             (.tool_input.run_in_background // false) != true
             and .tool_response != null
@@ -362,24 +469,23 @@ case "$mode" in
               if type == "object" then
                 length > 0
                 and (.isAsync // false) != true
-                and ((.status // "" | tostring) | test("^(async_launched|launched|running|queued|pending|in_progress)$"; "i") | not)
+                and (.isError // false) != true
+                and (.is_error // false) != true
+                and (.error == null or .error == false or .error == "")
+                and ((.status // "" | tostring) | test("^(async_launched|launched|running|queued|pending|in_progress|error|errored|failed|fail|cancelled|canceled|aborted|timeout|timed_out)$"; "i") | not)
+                and text_present
               elif type == "string" then
                 test("\\S")
                 and (test("^(async|background)[[:space:]]+agent|async_launched|launched in background|running in background"; "i") | not)
               elif type == "array" then
-                length > 0
+                length > 0 and text_present
               else false end);
           (.tool_input // {}) as $ti
-          | if $tool == "SendMessage" then
-              ($ti.to != "main")
-              and (($ti.summary | strings) | test($re; "i"))
-            else
-              has_returned_result
-              and (($ti.subagent_type // "" | tostring) as $st
-                | ($st | is_reviewer_type)
-                  or (($st | is_non_review_type | not)
-                      and (($ti.description // "" | tostring) | test($re; "i"))))
-            end' <<<"$input" >/dev/null 2>&1; then
+          | has_returned_result
+          and (($ti.subagent_type // "" | tostring) as $st
+            | ($st | is_reviewer_type)
+              or (($st | is_non_review_type | not)
+                  and (($ti.description // "" | tostring) | test($re; "i"))))' <<<"$input" >/dev/null 2>&1; then
           echo review >>"$log"
         fi
         ;;
@@ -415,36 +521,56 @@ case "$mode" in
     # Verified claims a run when any clause (split on ; , ( ) and ". ") names a runner, says passed next
     # to test/spec or a count, or says "tests ok", "suite green" or "all 41 green", and that clause
     # does not say the run did not happen ("1 skipped" and "skipped=2" are counts, not cancels).
-    verified="$(grep -iE "${LEAD}Verified${TRAIL}:" <<<"$msg" | tail -1)"
+    verified="$(field_raw Verified || true)"
     # Honest incompleteness is never blocked, so both claim checks apply only to COMPLETE.
-    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "${verified#*:}"; then
+    if [ "$incomplete" = 0 ] && [[ -n "$verified" ]] && run_claim "$verified"; then
       if [ "$last_fail" -gt "$last_edit" ] && [ "$last_fail" -gt "$last_run" ]; then
         block "Verified: claims a test run, but the last test run after the edit failed (nonzero exit, or a failure summary in its output). Fix and rerun, or say Status: INCOMPLETE."
       elif [ "$last_run" -le "$last_edit" ]; then
         block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
       fi
-      claimed_runners="$(verified_runners "${verified#*:}")"
+      claimed_runners="$(verified_runners "$verified")"
       if [ -n "$claimed_runners" ]; then
-        while IFS= read -r cr; do
-          [ -n "$cr" ] || continue
-          read -r r_run r_fail < <(awk -v r="$cr" '
-            $1 == "test-run"  && $2 == r { rr = NR }
-            $1 == "test-fail" && $2 == r { rf = NR }
-            END { print rr + 0, rf + 0 }' "$log")
-          if [ "$r_fail" -gt "$last_edit" ] && [ "$r_fail" -gt "$r_run" ]; then
-            block "Verified: claims a ${cr} run, but the last ${cr} run after the edit failed. Fix and rerun ${cr}, or say Status: INCOMPLETE."
-          elif [ "$r_run" -le "$last_edit" ]; then
-            block "Verified: claims a ${cr} run, but no ${cr} run was logged after the last edit. Run ${cr} now, or say what you actually ran."
-          fi
-        done <<<"$claimed_runners"
+        bad_mode=""; bad_runner=""
+        read -r bad_mode bad_runner < <(CR="$claimed_runners" LE="$last_edit" LC_ALL=C awk '
+          BEGIN {
+            le = ENVIRON["LE"] + 0
+            n = split(ENVIRON["CR"], cl, "\n")
+          }
+          $1 == "test-run"  { rr[$2] = NR }
+          $1 == "test-fail" { rf[$2] = NR }
+          END {
+            lw = 0
+            for (w in rr) {
+              if ((w ~ /^(npm|pnpm|yarn|bun|make|just|tox|nox|rake)$/ || w ~ /^script:/) && rr[w] > le && rr[w] > rf[w] + 0) {
+                if (rr[w] > lw) lw = rr[w]
+              }
+            }
+            for (i = 1; i <= n; i++) {
+              c = cl[i]
+              if (c == "") continue
+              r_run = rr[c] + 0
+              r_fail = rf[c] + 0
+              if (r_fail > le && r_fail > r_run && r_fail > lw) {
+                print "fail", c; exit
+              } else if (r_run <= le && lw <= le) {
+                print "miss", c; exit
+              }
+            }
+          }' "$log") || true
+        if [ "${bad_mode:-}" = fail ]; then
+          block "Verified: claims a ${bad_runner} run, but the last ${bad_runner} run after the edit failed. Fix and rerun ${bad_runner}, or say Status: INCOMPLETE."
+        elif [ "${bad_mode:-}" = miss ]; then
+          block "Verified: claims a ${bad_runner} run, but no ${bad_runner} run was logged after the last edit. Run ${bad_runner} now, or say what you actually ran."
+        fi
       fi
     fi
-    # Pinned (its last line) claims a run unless it starts with none, n/a, no, not, nothing, skipped,
-    # "there were no" or a dash, or says one of those anywhere and no pass/ok/green; it must precede
-    # the first non-test edit.
-    pinned="$(grep -iE "${LEAD}Pinned${TRAIL}:" <<<"$msg" | tail -1)"; pinned="${pinned#*:}"
+    # Pinned (last line or continuation bullets) claims a run unless it starts with none, n/a, no, not, nothing,
+    # skipped, "there were no" or a standalone dash, or says one of those anywhere and no pass/ok/green;
+    # it must precede the first non-test edit.
+    pinned="$(field_raw Pinned || true)"
     if [ "$incomplete" = 0 ] && [[ "$pinned" =~ [^*_\`[:space:]] ]] \
-       && ! grep -qiE '^[*_`[:space:](]*((none|n/?a|n\.a\.?|no|not|nothing|skip(ped)?|there (were|was|are|is) no)([^[:alnum:]]|$)|(-|—)([[:space:]]|$))' <<<"$pinned" \
+       && ! grep -qiE '^[*_`[:space:](]*((none|n/?a|n\.a\.?|no|not|nothing|skip(ped)?|there (were|was|are|is) no)([^[:alnum:]]|$)|(-|—)[[:space:]*_`)]*$)' <<<"$pinned" \
        && ! { grep -qiE "(^|[^[:alnum:]])$NEG([^[:alnum:]]|$)" <<<"$pinned" && ! grep -qiE "$OKW" <<<"$pinned"; } \
        && { [ "$first_run" -ge "$first_edit" ] || [ "$pin_failed" = 1 ]; }; then
       block "Pinned: claims tests passed before the edit, but no passing test run was logged before the first edit (none ran, or the last one failed). Correct the line: Pinned: none, and why."
@@ -464,7 +590,7 @@ case "$mode" in
       fi
       # Elevated INCOMPLETE without a review stays pending.
       [ "$incomplete" = 1 ] && pend
-      block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review), or set Status: INCOMPLETE."
+      block "Elevated-risk work needs an independent review dispatched after the last edit. Dispatch one (bp:requesting-code-review) — dispatch the reviewer with run_in_background: false and wait for its result — or set Status: INCOMPLETE."
     fi
     [ "$incomplete" = 1 ] || { open_state routine || block "$OPEN_LISTED"; }
     [ "$incomplete" = 1 ] && accept

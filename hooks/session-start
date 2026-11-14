@@ -11,14 +11,12 @@ set -euo pipefail
 # Determine plugin root directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SKILL_BASE="${CLAUDE_PLUGIN_ROOT:-$PLUGIN_ROOT}"
-SKILL_BASE="${SKILL_BASE%/}"
-SKILL_DIR="${SKILL_BASE}/skills/using-bearpaws"
+SKILL_DIR="${PLUGIN_ROOT}/skills/using-bearpaws"
 
 # Read using-bearpaws content. Fail loudly if missing/empty/unreadable —
 # Claude Code surfaces a non-zero exit as a hook error rather than silently
 # injecting a garbage bootstrap.
-SKILL_FILE="${PLUGIN_ROOT}/skills/using-bearpaws/SKILL.md"
+SKILL_FILE="${SKILL_DIR}/SKILL.md"
 if [ ! -r "$SKILL_FILE" ] || [ ! -s "$SKILL_FILE" ]; then
     echo "bearpaws session-start: ${SKILL_FILE} missing, empty, or unreadable" >&2
     exit 1

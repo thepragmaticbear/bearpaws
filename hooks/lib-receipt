@@ -2,27 +2,31 @@
 # Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
 
 # Path-name heuristic for work that looks elevated-risk.
-# Matches on path-segment, delimiter, or camelCase boundaries (after removing BENIGN words).
-SENSITIVE='(^|[^a-z0-9])((o|un|re)?auth|relogin|login|sessions?|tokens?|passw|credentials?|secrets?|(en|de|b|s|m)?crypt|permissions?|acls?([^a-z0-9]|$)|polic(y|ies)|payments?|billing|invoices?|money|pric(e|es|ing)|migrat|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
+# Unanchored for unambiguous longer stems; anchored at segment/delimiter/camelCase boundaries for short stems
+# and words with benign substrings (after removing BENIGN words).
+SENSITIVE='(passw|token|auth|secret|credential|session|payment|billing)|(^|[^a-z0-9])(relogin|login|permissions?|acls?([^a-z0-9]|$)|polic(y|ies)|(en|de|b|s|m)?crypt|invoices?|money|pric(e|es|ing)|migrat|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
 # Ordinary words that contain a SENSITIVE term, removed before matching.
 BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
-LEAD='^[[:space:]>*_#0-9.`-]*'
+LEAD='^[[:space:]*_#0-9.`-]*'
 TRAIL='[*_`]*'
+ALL_KEYS='(Risk|Pinned|Failing first|Review|Open|Assumptions|Verified|Not checked|Status)'
 
 # sensitive_paths: print the stdin lines that look elevated-risk, case-insensitively, splitting
-# camelCase/Acronym boundaries and removing BENIGN words so tokenizer.py, AUTHORS.md, authoring.md,
-# oracle.py and miracle.js pass while tokenstore.go, sessionManager.ts and userAcl.ts match.
+# camelCase/Acronym boundaries (keeping plural acronyms like ACLs intact) and removing BENIGN words
+# so tokenizer.py, AUTHORS.md, authoring.md, oracle.py and miracle.js pass while tokenstore.go,
+# sessionManager.ts, userpassword.ts, getACLs.ts and userAcl.ts match.
 # Through ENVIRON, not -v, so awk keeps backslashes.
 sensitive_paths() {
   bn="$BENIGN" ci="$SENSITIVE" LC_ALL=C awk '
-    function split_camel(s,   out, i, c, prev, nxt) {
+    function split_camel(s,   out, i, c, prev, nxt, nxt2) {
       out = ""
       for (i = 1; i <= length(s); i++) {
         c = substr(s, i, 1)
         if (i > 1) {
           prev = substr(s, i - 1, 1)
           nxt = (i < length(s)) ? substr(s, i + 1, 1) : ""
-          if (c ~ /[A-Z]/ && (prev ~ /[a-z0-9]/ || (prev ~ /[A-Z]/ && nxt ~ /[a-z]/)))
+          nxt2 = (i + 1 < length(s)) ? substr(s, i + 2, 1) : ""
+          if (c ~ /[A-Z]/ && (prev ~ /[a-z0-9]/ || (prev ~ /[A-Z]/ && nxt ~ /[a-z]/ && !(nxt == "s" && nxt2 !~ /[a-z]/))))
             out = out " "
         }
         out = out c
@@ -41,30 +45,105 @@ field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 # reply) must not reclassify this reply's own work.
 field_last() { grep -iE "${LEAD}$1${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2"; }
 
-# field_value <key>: print trimmed, markdown-stripped value of the last <key>: line, or return 1 if absent.
-field_value() {
-  local line
-  line="$(grep -iE "${LEAD}$1${TRAIL}:" <<<"$msg" | tail -1)" || return 1
-  [ -n "$line" ] || return 1
-  tr -d '*_`' <<<"${line#*:}" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+# field_raw <key>: print trimmed value of the last <key>: line (stripping * and ` but keeping _),
+# or following non-empty lines until the next receipt Key: line (or blank line after bullets) if the
+# line value is empty. Returns 1 if absent.
+field_raw() {
+  LEAD="$LEAD" TRAIL="$TRAIL" ALL_KEYS="$ALL_KEYS" KEY="$1" LC_ALL=C awk '
+    BEGIN {
+      key_re = tolower(ENVIRON["LEAD"] ENVIRON["KEY"] ENVIRON["TRAIL"] ":")
+      all_re = tolower(ENVIRON["LEAD"] ENVIRON["ALL_KEYS"] ENVIRON["TRAIL"] ":")
+    }
+    { lines[NR] = $0; if (tolower($0) ~ key_re) last = NR }
+    END {
+      if (!last) exit 1
+      val = lines[last]
+      sub(/^[^:]*:/, "", val)
+      chk = val; gsub(/[*_`[:space:]]/, "", chk)
+      if (chk != "") {
+        gsub(/[*`]/, "", val); sub(/^[[:space:]]+/, "", val); sub(/[[:space:]]+$/, "", val)
+        print val; exit 0
+      }
+      cnt = 0; out = ""
+      for (i = last + 1; i <= NR; i++) {
+        ln = lines[i]
+        if (tolower(ln) ~ all_re) break
+        if (ln ~ /^[[:space:]]*>/) break
+        if (ln ~ /^[[:space:]]*$/) {
+          if (cnt > 0) break
+          j = i + 1
+          while (j <= NR && lines[j] ~ /^[[:space:]]*$/) j++
+          if (j <= NR && lines[j] ~ /^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]/ && tolower(lines[j]) !~ all_re) continue
+          break
+        }
+        gsub(/[*`]/, "", ln); sub(/^[[:space:]]+/, "", ln); sub(/[[:space:]]+$/, "", ln)
+        if (ln != "") { out = (cnt++ ? out "\n" ln : ln) }
+      }
+      print out
+    }' <<<"$msg"
 }
 
-# open_state <risk>: inspect first Open: line after the last Risk: line.
+# field_value <key>: print trimmed, markdown-stripped value of the last <key>: line (or following bullets),
+# or return 1 if absent.
+field_value() {
+  local v
+  v="$(field_raw "$1")" || return 1
+  tr -d '_' <<<"$v" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+# open_state <risk>: inspect first Open: line (and continuation bullets if empty) after the last Risk: line.
 # Returns 0: empty (none, n/a or blank), or absent on non-elevated; 1: absent on elevated; 2: lists findings.
 open_state() {
-  local line
-  line="$(awk -v re="${LEAD}Risk${TRAIL}:" 'tolower($0) ~ tolower(re) {r=NR} {l[NR]=$0} END{for(i=r;i<=NR;i++) print l[i]}' <<<"$msg" \
-    | grep -iE "${LEAD}Open${TRAIL}:" | head -1)"
-  if [ -z "$line" ]; then [ "$1" = elevated ] && return 1; return 0; fi
-  grep -qiE '^[[:space:]]*((none|n/a)[.[:space:]]*)?$' <<<"$(tr -d '*_`' <<<"${line#*:}")" && return 0
-  return 2
+  LEAD="$LEAD" TRAIL="$TRAIL" ALL_KEYS="$ALL_KEYS" RISK="$1" LC_ALL=C awk '
+    BEGIN {
+      risk_re = tolower(ENVIRON["LEAD"] "Risk" ENVIRON["TRAIL"] ":")
+      open_re = tolower(ENVIRON["LEAD"] "Open" ENVIRON["TRAIL"] ":")
+      all_re = tolower(ENVIRON["LEAD"] ENVIRON["ALL_KEYS"] ENVIRON["TRAIL"] ":")
+      risk = ENVIRON["RISK"]
+    }
+    { lines[NR] = $0; if (tolower($0) ~ risk_re) r = NR }
+    END {
+      if (!r) r = 1
+      for (i = r; i <= NR; i++) {
+        if (tolower(lines[i]) ~ open_re) { o = i; break }
+      }
+      if (!o) { exit (risk == "elevated" ? 1 : 0) }
+      val = lines[o]
+      sub(/^[^:]*:/, "", val)
+      gsub(/[*_`]/, "", val); sub(/^[[:space:]]+/, "", val); sub(/[[:space:]]+$/, "", val)
+      if (val != "") {
+        if (tolower(val) ~ /^(none|n\/a)[.]?$/) exit 0
+        exit 2
+      }
+      cnt = 0; has_bullet = 0; txt = ""
+      for (i = o + 1; i <= NR; i++) {
+        ln = lines[i]
+        if (tolower(ln) ~ all_re) break
+        if (ln ~ /^[[:space:]]*>/) break
+        if (ln ~ /^[[:space:]]*$/) {
+          if (cnt > 0) break
+          j = i + 1
+          while (j <= NR && lines[j] ~ /^[[:space:]]*$/) j++
+          if (j <= NR && lines[j] ~ /^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]/ && tolower(lines[j]) !~ all_re) continue
+          break
+        }
+        if (ln ~ /^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]/) has_bullet = 1
+        gsub(/[*_`]/, "", ln); sub(/^[[:space:]]+/, "", ln); sub(/[[:space:]]+$/, "", ln)
+        if (ln != "") { txt = (cnt++ ? txt " " ln : ln) }
+      }
+      if (cnt == 0) exit 0
+      if (has_bullet) exit 2
+      if (tolower(txt) ~ /^(none|n\/a)[.]?$/) exit 0
+      exit 2
+    }' <<<"$msg"
 }
 
-# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, na, -, todo, pending).
+# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, na, -, todo, tbd, not, no, pending, self, self-review).
 review_is_placeholder() {
-  local v="$1"
+  local v
+  v="$(printf '%s' "$1" | tr -d '()' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
   [ -n "$v" ] || return 0
-  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|pending)([^[:alnum:]_-].*)?$' <<<"$v"
+  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|tbd|not|no|pending|self-review|self)([^[:alnum:]_-].*)?$' <<<"$v"
 }
 
 # check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
@@ -83,8 +162,10 @@ check_receipt() {
 
   status_val="$(field_value Status || true)"
   status_uc="$(printf '%s' "$status_val" | tr '[:lower:]' '[:upper:]')"
-  if [ "$status_uc" = COMPLETE ]; then incomplete=0
-  elif [ "$status_uc" = INCOMPLETE ]; then incomplete=1
+  if [[ "$status_uc" =~ (^|[^A-Z0-9_])INCOMPLETE([^A-Z0-9_]|$) ]] && [[ "$status_uc" =~ (^|[^A-Z0-9_])COMPLETE([^A-Z0-9_]|$) ]]; then
+    missing="Status: (COMPLETE or INCOMPLETE)"
+  elif [[ "$status_uc" =~ ^INCOMPLETE([^A-Z0-9_-]|$) ]]; then incomplete=1
+  elif [[ "$status_uc" =~ ^COMPLETE([^A-Z0-9_-]|$) ]]; then incomplete=0
   else missing="Status: (COMPLETE or INCOMPLETE)"
   fi
 
