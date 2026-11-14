@@ -283,11 +283,16 @@ for rv in \
   "No issues found by bp:code-reviewer" \
   "no Critical or Important findings (bp:code-reviewer)" \
   "Not blocking: minor nits only" \
-  "no findings from bp:code-reviewer"; do
+  "no findings from bp:code-reviewer" \
+  "bp:code-reviewer — Ready to merge: Yes"; do
   reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
   expect "I-A: elevated COMPLETE with real Review '$rv' passes" pass
 done
-for rv in none skipped "(skipped)" "n/a" "n.a." na "-" "—" todo TBD "not done" "not run" "not yet" "no review" self "self-review" pending "none found, approved"; do
+for rv in none skipped "(skipped)" skip "skip for now" "n/a" "n.a." na "-" "—" todo TBD "not done" "not run" "not yet" "no review" self "self-review" pending "none found, approved" \
+  no not "no." "not." \
+  "skipped (low risk)" "skipped: trivial" "none, trivial change" "none needed" "n/a - no reviewer" \
+  "todo: run review" "pending: awaiting reviewer" "pending review" "self-review only" "self-reviewed" \
+  "no review needed" "no review done" "not reviewed" "not   reviewed" "*skipped* (low risk)" "Not applicable" "not required" "no reviewer" "no reviews"; do
   reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
   expect "I-A: elevated COMPLETE with placeholder Review '$rv' blocks" block "Review"
 done
