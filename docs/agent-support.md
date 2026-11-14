@@ -35,7 +35,6 @@ Existing files:
 - `hooks/run-hook.cmd`
 - `hooks/session-start`
 - `agents/code-reviewer.md`
-- `commands/*.md`
 - `skills/*/SKILL.md`
 - `tests/claude-code/`
 - `tests/skill-triggering/`
