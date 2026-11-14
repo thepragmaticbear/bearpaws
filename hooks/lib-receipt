@@ -2,16 +2,36 @@
 # Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
 
 # Path-name heuristic for work that looks elevated-risk.
-SENSITIVE='auth|login|session|token|passw|credential|secret|crypt|permission|acl|polic|payment|billing|invoice|money|price|pricing|migrat|schema|sql'
-# Ordinary words that contain a SENSITIVE term, removed before matching (tokenizer, schematic, priceless).
-BENIGN='tokeniz|schemati|priceless'
+# Matches on path-segment, delimiter, or camelCase boundaries (after removing BENIGN words).
+SENSITIVE='(^|[^a-z0-9])((o|un|re)?auth|relogin|login|sessions?|tokens?|passw|credentials?|secrets?|(en|de|b|s|m)?crypt|permissions?|acls?([^a-z0-9]|$)|polic(y|ies)|payments?|billing|invoices?|money|pric(e|es|ing)|migrat|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
+# Ordinary words that contain a SENSITIVE term, removed before matching.
+BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
 LEAD='^[[:space:]>*_#0-9.`-]*'
 TRAIL='[*_`]*'
 
-# sensitive_paths: print the stdin lines that look elevated-risk, case-insensitively, after removing BENIGN
-# words, so tokenizer.py passes while tokenstore.go and sessionManager.ts match. Through ENVIRON, not -v,
-# so awk keeps backslashes.
-sensitive_paths() { bn="$BENIGN" ci="$SENSITIVE" LC_ALL=C awk '{ l = tolower($0); gsub(ENVIRON["bn"], "", l) } l ~ ENVIRON["ci"]'; }
+# sensitive_paths: print the stdin lines that look elevated-risk, case-insensitively, splitting
+# camelCase/Acronym boundaries and removing BENIGN words so tokenizer.py, AUTHORS.md, authoring.md,
+# oracle.py and miracle.js pass while tokenstore.go, sessionManager.ts and userAcl.ts match.
+# Through ENVIRON, not -v, so awk keeps backslashes.
+sensitive_paths() {
+  bn="$BENIGN" ci="$SENSITIVE" LC_ALL=C awk '
+    function split_camel(s,   out, i, c, prev, nxt) {
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (i > 1) {
+          prev = substr(s, i - 1, 1)
+          nxt = (i < length(s)) ? substr(s, i + 1, 1) : ""
+          if (c ~ /[A-Z]/ && (prev ~ /[a-z0-9]/ || (prev ~ /[A-Z]/ && nxt ~ /[a-z]/)))
+            out = out " "
+        }
+        out = out c
+      }
+      return out
+    }
+    { l = tolower(split_camel($0)); gsub(ENVIRON["bn"], "", l) }
+    l ~ ENVIRON["ci"]'
+}
 
 # field <key> <value regex>: a receipt line in $msg, tolerating bullets and markdown bold/backticks.
 # shellcheck disable=SC2154 # msg is set by the sourcing hook.
@@ -20,3 +40,90 @@ field() { grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2" <<<"$msg"; }
 # Status does: a receipt quoted earlier in the message (a diagnosis report, a review of another
 # reply) must not reclassify this reply's own work.
 field_last() { grep -iE "${LEAD}$1${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "${LEAD}$1${TRAIL}:[*_\`[:space:]]*$2"; }
+
+# field_value <key>: print trimmed, markdown-stripped value of the last <key>: line, or return 1 if absent.
+field_value() {
+  local line
+  line="$(grep -iE "${LEAD}$1${TRAIL}:" <<<"$msg" | tail -1)" || return 1
+  [ -n "$line" ] || return 1
+  tr -d '*_`' <<<"${line#*:}" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'
+}
+
+# open_state <risk>: inspect first Open: line after the last Risk: line.
+# Returns 0: empty (none, n/a or blank), or absent on non-elevated; 1: absent on elevated; 2: lists findings.
+open_state() {
+  local line
+  line="$(awk -v re="${LEAD}Risk${TRAIL}:" 'tolower($0) ~ tolower(re) {r=NR} {l[NR]=$0} END{for(i=r;i<=NR;i++) print l[i]}' <<<"$msg" \
+    | grep -iE "${LEAD}Open${TRAIL}:" | head -1)"
+  if [ -z "$line" ]; then [ "$1" = elevated ] && return 1; return 0; fi
+  grep -qiE '^[[:space:]]*((none|n/a)[.[:space:]]*)?$' <<<"$(tr -d '*_`' <<<"${line#*:}")" && return 0
+  return 2
+}
+
+# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, na, -, todo, pending).
+review_is_placeholder() {
+  local v="$1"
+  [ -n "$v" ] || return 0
+  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|pending)([^[:alnum:]_-].*)?$' <<<"$v"
+}
+
+# check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
+# Sets risk (routine|elevated), incomplete (0|1), receipt_err (on failure).
+# Returns 0 on pass, 1 when Risk: is missing/invalid, 2 when required fields or COMPLETE checks fail.
+# shellcheck disable=SC2034 # risk, incomplete, receipt_err are read by sourcing hooks (risk-gate, git-commit-msg).
+check_receipt() {
+  local mode="$1" missing="" status_val status_uc v o rev_val prefix=""
+  msg="${msg//$'\r'/}"
+  risk=""; incomplete=0; receipt_err=""
+  if field_last Risk 'elevated([^[:alnum:]_-]|$)'; then risk=elevated
+  elif field_last Risk 'routine([^[:alnum:]_-]|$)'; then risk=routine
+  else return 1
+  fi
+  [ "$mode" = commit ] && prefix="bearpaws: "
+
+  status_val="$(field_value Status || true)"
+  status_uc="$(printf '%s' "$status_val" | tr '[:lower:]' '[:upper:]')"
+  if [ "$status_uc" = COMPLETE ]; then incomplete=0
+  elif [ "$status_uc" = INCOMPLETE ]; then incomplete=1
+  else missing="Status: (COMPLETE or INCOMPLETE)"
+  fi
+
+  v="$(field_value Verified || true)"
+  [ -n "$v" ] || missing="${missing:+$missing, }Verified:"
+
+  if [ "$mode" = stop ]; then
+    v="$(field_value "Not checked" || true)"
+    [ -n "$v" ] || missing="${missing:+$missing, }Not checked:"
+    if [ "$risk" = elevated ]; then
+      for k in Pinned "Failing first" Review Assumptions; do
+        v="$(field_value "$k" || true)"
+        [ -n "$v" ] || missing="${missing:+$missing, }${k}:"
+      done
+      open_state elevated; o=$?
+      [ "$o" != 1 ] || missing="${missing:+$missing, }Open:"
+    fi
+  fi
+
+  if [ -n "$missing" ]; then
+    receipt_err="${prefix}Incomplete risk receipt: missing or invalid ${missing}."
+    return 2
+  fi
+
+  if [ "$mode" = commit ]; then
+    if [ "$risk" = elevated ] && [ "$incomplete" = 0 ]; then
+      rev_val="$(field_value Review || true)"
+      if review_is_placeholder "$rev_val"; then
+        receipt_err="bearpaws: an elevated-risk commit with Status: COMPLETE needs a Review line (not none/skipped/n/a/-/todo), or Status: INCOMPLETE."
+        return 2
+      fi
+    fi
+    if [ "$incomplete" = 0 ]; then
+      open_state "$risk"; o=$?
+      if [ "$o" = 2 ]; then
+        receipt_err="bearpaws: Open: lists unfixed review findings, so the work is not COMPLETE. Fix each finding or set Status: INCOMPLETE."
+        return 2
+      fi
+    fi
+  fi
+  return 0
+}
