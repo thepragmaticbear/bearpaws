@@ -27,21 +27,17 @@ case "$(grep -m1 '[^[:space:]]' <<<"$msg")" in 'fixup! '*|'squash! '*) exit 0 ;;
 staged="$(git diff --cached --name-only)" || { echo "bearpaws git gate: could not list staged paths" >&2; exit 1; }
 [ -n "$staged" ] || exit 0
 
-if field_last Risk elevated; then risk=elevated
-elif field_last Risk routine; then risk=routine
-else
+risk=""; receipt_err=""
+check_receipt commit
+rc=$?
+if [ "$rc" = 1 ]; then
   echo "bearpaws: this commit has no risk receipt. Add one to the message, as trailers or in the body: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion." >&2
   exit 1
+elif [ "$rc" != 0 ]; then
+  echo "$receipt_err" >&2
+  exit 1
 fi
-# Only the last Status line counts, and INCOMPLETE must be its value.
-grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
-if [ "$risk" = elevated ]; then
-  field Review "[^*_\`[:space:]]" || [ "$incomplete" = 1 ] || {
-    echo "bearpaws: an elevated-risk commit needs a Review line (reviewer and verdict), or Status: INCOMPLETE." >&2
-    exit 1
-  }
-  exit 0
-fi
+[ "$risk" = elevated ] && exit 0
 hits="$(sensitive_paths <<<"$staged" | head -5 | tr '\n' ' ')"
 [ -z "$hits" ] || echo "bearpaws: staged ${hits}look elevated-risk. Reclassify as Risk: elevated, or keep routine and say why in the receipt." >&2
 exit 0

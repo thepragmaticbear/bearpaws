@@ -55,6 +55,26 @@ reset; stage src/authz.py; gate "${ELEVATED/Review: bp:code-reviewer — Ready t
 expect "empty Review line does not count" block "Review"
 reset; stage src/authz.py; gate $'x\n\nRisk: elevated (authz)\nStatus: INCOMPLETE\nVerified: ok\nStatus: COMPLETE'
 expect "only the last Status line counts" block "Review"
+# Parity: Status and Verified required; Review cannot be placeholder on elevated COMPLETE; Open findings block COMPLETE.
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine'; expect "bare Risk: routine blocks" block "Status"
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nStatus: COMPLETE'; expect "routine without Verified blocks" block "Verified"
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest'; expect "routine without Status blocks" block "Status"
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest\nStatus: done'; expect "invalid Status blocks" block "Status"
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest\nStatus: COMPLETE | INCOMPLETE'; expect "template Status blocks" block "Status"
+for rv in none skipped "n/a" na "-" todo; do
+  reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: '"$rv"$'\nOpen: none\nStatus: COMPLETE'
+  expect "elevated COMPLETE with Review: $rv blocks" block "Review"
+done
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: skipped\nOpen: SQL injection (Critical)\nStatus: COMPLETE'
+expect "elevated COMPLETE with skipped Review and Open finding blocks" block "Review"
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: bp:code-reviewer — Issues\nOpen: SQL injection (Critical)\nStatus: COMPLETE'
+expect "elevated COMPLETE with Open finding blocks" block "Open"
+reset; stage src/ui/button.py; gate $'Fix\n\nRisk: routine\nVerified: pytest\nOpen: Important — overflows\nStatus: COMPLETE'
+expect "routine COMPLETE with Open finding blocks" block "Open"
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: skipped\nOpen: SQL injection (Critical)\nStatus: INCOMPLETE'
+expect "elevated INCOMPLETE with skipped Review and Open finding passes" pass
+reset; stage src/authz.py; gate $'Fix\n\nRisk: elevated (security)\nVerified: pytest\nReview: bp:code-reviewer — Ready\nOpen: none\nStatus: COMPLETE'
+expect "elevated COMPLETE with real Review and Open: none passes" pass
 
 reset; stage src/auth/login.py src/ui/a.py; gate "$ROUTINE"; expect "routine on sensitive path warns and passes" warn "src/auth/login.py"
 grep -qF src/ui/a.py "$TMP_ROOT/err" && fail "warning lists a non-sensitive path" || echo "OK: warning lists only sensitive paths"
@@ -77,10 +97,11 @@ for p in src/session.py app/sessions/store.ts lib/userSession.ts auth/accessToke
   CREDENTIALS.md secret.txt crypto.go permission.rb acl.c policy.yml payment.py billing.ts invoice.py money.go query.sql \
   src/sessionManager.ts auth/TokenStore.ts lib/tokenService.ts db/schemaRegistry.ts src/PriceCalculator.ts pricing.ts \
   ui/sessionStorage-polyfill.js src/tokenstore.go src/sessionstore.go src/tokenvalidator.go src/pricecalc.go pricelist.py \
-  src/schemaregistry.ts; do
+  src/schemaregistry.ts auth/login.py crypto/aes.py secrets.yaml payments/stripe.ts migrations/002_add_users.py src/userAcl.ts ACLManager.ts; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: sensitive_paths matches $p" || fail "sensitive_paths should match $p"
 done
-for p in src/tokenizer.py src/Tokenizer.ts docs/schematic.svg lib/priceless.md README.md; do
+for p in src/tokenizer.py src/Tokenizer.ts docs/schematic.svg lib/priceless.md README.md \
+  AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && fail "sensitive_paths should not match $p" || echo "OK: sensitive_paths does not match $p"
 done
 
@@ -95,12 +116,12 @@ reset; stage src/x.py; gate "No receipt" BEARPAWS_ENFORCE=0; expect "BEARPAWS_EN
 
 # Field matching is the risk-gate format: case-insensitive, markdown bold, backticks, bullets.
 reset; stage src/x.py; gate $'Fix\n\n**Risk:** routine\n**Verified:** ok\n**Status:** COMPLETE'; expect "markdown-bold receipt passes" pass
-reset; stage src/x.py; gate $'Fix\n\nrisk: ROUTINE\nstatus: complete'; expect "case-insensitive receipt passes" pass
-reset; stage src/x.py; gate $'Fix\n\n- `Risk:` `routine`\n- `Status:` COMPLETE'; expect "backticked bullet receipt passes" pass
-reset; stage src/authz.py; gate $'Fix\n\n**Risk:** elevated (authz)\n**review:** bp:code-reviewer — Yes\n**Status:** COMPLETE'; expect "bold elevated with bold Review passes" pass
+reset; stage src/x.py; gate $'Fix\n\nrisk: ROUTINE\nverified: ok\nstatus: complete'; expect "case-insensitive receipt passes" pass
+reset; stage src/x.py; gate $'Fix\n\n- `Risk:` `routine`\n- `Verified:` ok\n- `Status:` COMPLETE'; expect "backticked bullet receipt passes" pass
+reset; stage src/authz.py; gate $'Fix\n\n**Risk:** elevated (authz)\n**review:** bp:code-reviewer — Yes\n**Verified:** ok\n**Status:** COMPLETE'; expect "bold elevated with bold Review passes" pass
 reset; stage src/x.py; gate $'Fix\n\nNo Risk: routine here'; expect "mid-line Risk does not count" block "Risk:"
 reset; stage docs/report.md; gate $'Diagnosis\n\n> Risk: elevated (payments)\n> Status: COMPLETE\n\nRisk: routine\nVerified: none — report only\nStatus: COMPLETE'; expect "quoted elevated receipt before the commit's own routine one: routine" pass
-reset; stage src/authz.py; gate $'Fix\n\nRisk: routine\nRisk: elevated (authz)\nStatus: COMPLETE'; expect "last Risk line wins: elevated without Review blocks" block "Review"
+reset; stage src/authz.py; gate $'Fix\n\nRisk: routine\nVerified: ok\nRisk: elevated (authz)\nStatus: COMPLETE'; expect "last Risk line wins: elevated without Review blocks" block "Review"
 
 # Comment lines and the verbose diff are not the message.
 reset; stage src/x.py; gate $'Fix\n# Risk: routine'; expect "commented receipt does not count" block "Risk:"

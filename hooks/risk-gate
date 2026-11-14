@@ -73,29 +73,66 @@ HIDES='[|;&]'
 # A trailing lone & (not &&, |&, >& or &>) backgrounds the command: it has no result yet.
 BG='(^|[^&>|])&$'
 
+FP_EXCL='^$|(^|/)(__pycache__|\.pytest_cache|node_modules|\.mypy_cache|\.ruff_cache|\.venv|htmlcov|\.hypothesis|\.tox|\.nox|\.eslintcache|\.coverage(\.[^/]*)?|[^/]*\.egg-info)(/|$)|\.pyc$'
+stat_files() {
+  # GNU stat, else BSD with fractional seconds, else whole seconds. -- stops names like -f being options.
+  if stat -c %s / >/dev/null 2>&1; then xargs -0 stat -c '%n %s %.9Y' --
+  elif stat -f %Fm / >/dev/null 2>&1; then xargs -0 stat -f '%N %z %Fm' --
+  else xargs -0 stat -f '%N %z %m' --; fi 2>/dev/null || true
+}
 # Hash of path, size and mtime for every tracked or untracked, non-ignored file, listed from the
 # toplevel. Ignores the index and HEAD, so git add and commit don't change it; sorted because
-# staging reorders git's list. Content isn't hashed: a same-size edit within one mtime tick is missed.
+# staging reorders git's list. Above BEARPAWS_FINGERPRINT_MAX (default 20000) non-cache files,
+# falls back to git status --porcelain -z -uall plus mtimes of listed files (stripping XY so
+# git add does not look like an edit). Content isn't hashed: same-size, same-tick edits are missed.
 fingerprint() { # <toplevel> <sha tool>
-  local top="$1" files
+  local top="$1" sha="$2" files filtered count=0 max="${BEARPAWS_FINGERPRINT_MAX:-20000}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=20000
   files="$(cd -- "$top" 2>/dev/null && git ls-files -co --exclude-standard -z 2>/dev/null | tr '\0' '\n')" || return 1
   # Excluded: caches and unambiguous test artifacts. Not dist/, build/ or coverage/: those can be real work.
-  printf '%s\n' "$files" \
-    | { grep -vE '^$|(^|/)(__pycache__|\.pytest_cache|node_modules|\.mypy_cache|\.ruff_cache|\.venv|htmlcov|\.hypothesis|\.tox|\.nox|\.eslintcache|\.coverage(\.[^/]*)?|[^/]*\.egg-info)(/|$)|\.pyc$' || true; } \
-    | LC_ALL=C sort | tr '\n' '\0' \
-    | (cd -- "$top" 2>/dev/null && {
-        # GNU stat, else BSD with fractional seconds, else whole seconds. -- stops names like -f being options.
-        if stat -c %s / >/dev/null 2>&1; then xargs -0 stat -c '%n %s %.9Y' --
-        elif stat -f %Fm / >/dev/null 2>&1; then xargs -0 stat -f '%N %z %Fm' --
-        else xargs -0 stat -f '%N %z %m' --; fi; } 2>/dev/null || true) | $2 | cut -d' ' -f1
+  filtered="$(printf '%s\n' "$files" | { grep -vE "$FP_EXCL" || true; })"
+  [ -n "$filtered" ] && count="$(wc -l <<<"$filtered" | tr -d ' ')"
+  if [ "$count" -le "$max" ]; then
+    printf '%s\n' "$filtered" \
+      | LC_ALL=C sort | tr '\n' '\0' \
+      | (cd -- "$top" 2>/dev/null && stat_files) | "$sha" | cut -d' ' -f1
+    return 0
+  fi
+  local ok=0 entry xy p paths="" existing=""
+  while IFS= read -r -d '' entry; do
+    if [ "$entry" = "__FP_OK__" ]; then ok=1; break; fi
+    xy="${entry:0:2}"
+    p="${entry:3}"
+    if [ "${xy:0:1}" = R ] || [ "${xy:0:1}" = C ]; then
+      IFS= read -r -d '' entry || true
+    fi
+    [[ "$p" =~ $FP_EXCL ]] && continue
+    paths+="$p"$'\n'
+  done < <(cd -- "$top" 2>/dev/null && git status --porcelain -z -uall 2>/dev/null && printf '__FP_OK__\0')
+  [ "$ok" = 1 ] || return 1
+  if [ -n "$paths" ]; then
+    paths="$(printf '%s' "$paths" | LC_ALL=C sort -u)"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      if [ -e "$top/$p" ] || [ -L "$top/$p" ]; then
+        existing+="$p"$'\n'
+      fi
+    done <<<"$paths"
+  fi
+  {
+    [ -n "$paths" ] && printf '%s\n' "$paths"
+    if [ -n "$existing" ]; then
+      printf '%s\n' "$existing" | tr '\n' '\0' | (cd -- "$top" 2>/dev/null && stat_files)
+    fi
+  } | "$sha" | cut -d' ' -f1
 }
 # One fingerprint file per repo, kept across accepted stops. A Bash call that changes it is an edit;
 # the first one for a repo only sets the baseline. Always returns 0.
 track_tree() { # <cwd> <tool>
-  local top sha fp last tree
-  [ -n "$1" ] || return 0
+  local cwd="${1//\\//}" top sha fp last tree
+  [ -n "$cwd" ] || return 0
   if command -v shasum >/dev/null 2>&1; then sha=shasum; elif command -v sha1sum >/dev/null 2>&1; then sha=sha1sum; else return 0; fi
-  top="$(git -C "$1" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ] || return 0
+  top="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ] || return 0
   tree="$dir/$sid.$(printf '%s' "$top" | $sha | cut -c1-12).tree"
   [ ! -L "$tree" ] || return 0
   [ "$2" = baseline ] && [ -e "$tree" ] && return 0
@@ -110,42 +147,143 @@ track_tree() { # <cwd> <tool>
   return 0
 }
 
-# Accept the pending work: clear the log, but keep a passing test run that followed the last edit,
-# so the next turn's Pinned can rest on it.
+# Accept the pending work: clear the log, but keep passing test runs that followed the last edit,
+# so the next turn's Pinned can rest on them.
 accept() {
-  # Only a pass that no later edit or failed run superseded.
-  if awk '/^edit(-test)? /{e=NR} /^test-run$/{r=NR} /^test-fail$/{f=NR} END{exit !(r>e && r>f)}' "$log"; then
-    echo test-run >"$log"; else rm -f "$log"; fi
+  # Only passes that no later edit or failed run superseded.
+  local carried
+  carried="$(awk '
+    /^edit(-test)? /{e=NR}
+    /^test-run( |$)/{r=NR; run[NR]=$0}
+    /^test-fail( |$)/{f=NR}
+    END{
+      if (!(r>e && r>f)) exit 1
+      b = (e > f ? e : f)
+      for (i = b + 1; i <= NR; i++) if (i in run && !seen[run[i]]++) print run[i]
+    }' "$log")"
+  if [ -n "$carried" ]; then
+    printf '%s\n' "$carried" >"$log"
+  else
+    rm -f "$log"
+  fi
   exit 0
 }
 block() { jq -cn --arg r "$1" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $r}}'; exit 0; }
-# Open: lists unfixed Critical/Important findings. 0: empty (none, n/a or blank), or absent on routine
-# work; 1: absent on elevated work; 2: lists something.
-open_state() { # <risk>
-  local line
-  # The first Open line after the last Risk line: prose before the receipt or notes after it don't count.
-  line="$(awk -v re="${LEAD}Risk${TRAIL}:" 'tolower($0) ~ tolower(re) {r=NR} {l[NR]=$0} END{for(i=r;i<=NR;i++) print l[i]}' <<<"$msg" \
-    | grep -iE "${LEAD}Open${TRAIL}:" | head -1)"
-  if [ -z "$line" ]; then [ "$1" = elevated ] && return 1; return 0; fi
-  grep -qiE '^[[:space:]]*((none|n/a)[.[:space:]]*)?$' <<<"$(tr -d '*_`' <<<"${line#*:}")" && return 0
-  return 2
-}
 pend() { [ "$(tail -1 "$log")" = pending ] || echo pending >>"$log"; exit 0; }
 OPEN_MISSING="Elevated work needs an Open line: Open: none, or each unfixed Critical or Important review finding with Status: INCOMPLETE."
 OPEN_LISTED="Open: lists unfixed review findings, so the work is not COMPLETE. Fix each with its own failing test, or set Status: INCOMPLETE naming it. If nothing is open, write exactly Open: none."
 
+is_info_listing_cmd() { # <runner> <stripped-cmd>
+  local r="$1" s="$2"
+  grep -qE '(^|[[:space:]'\''"])(--(help|version|collect-only|co|list|list-tests|listTests|show-only|dry-run|just-print|recon|fixtures|markers|setup-plan|setup-only)|-h)([[:space:]=;'\''"]|$)' <<<"$s" && return 0
+  [ "$r" != ctest ] && grep -qE '(^|[[:space:]'\''"])-V([[:space:]=;'\''"]|$)' <<<"$s" && return 0
+  case "$r" in
+    go) grep -qE '(^|[[:space:]'\''"])-list([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
+    ctest) grep -qE '(^|[[:space:]'\''"])-N([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
+    make) grep -qE '(^|[[:space:]'\''"])-[A-Za-z]*n[A-Za-z]*([[:space:]=;'\''"]|$)' <<<"$s" && return 0 ;;
+    vitest) grep -qE '^([^[:space:]]*/)?vitest[[:space:]]+list([[:space:];'\''"]|$)' <<<"$s" && return 0 ;;
+    cargo) grep -qE '^([^[:space:]]*/)?cargo[[:space:]]+nextest[[:space:]]+list([[:space:];'\''"]|$)' <<<"$s" && return 0 ;;
+  esac
+  return 1
+}
+
+segment_runner() { # <segment>: print canonical runner name if segment runs tests (not info/listing)
+  local s="$1" r="" tok
+  while :; do
+    [[ "$s" =~ ^[[:space:]\(\'\"]+ ]] && s="${s#"${BASH_REMATCH[0]}"}"
+    if [[ "$s" =~ ^$TR_PM$TR_END ]]; then
+      break
+    elif [[ "$s" =~ ^($TR_VAR|$TR_EXEC|$TR_WRAP|$TR_DOCKER)[[:space:]]+ ]]; then
+      s="${s#"${BASH_REMATCH[0]}"}"
+    elif [[ "$s" =~ ^$TR_SHC ]]; then
+      s="${s#"${BASH_REMATCH[0]}"}"
+    else
+      break
+    fi
+  done
+  [[ "$s" =~ ^$TR_DIR($TR_RUN|$TR_PM|$TR_BUILD|$TR_RAKE|$TR_SCRIPT)$TR_END ]] || return 1
+  if [[ "$s" =~ ^$TR_DIR($TR_PM)$TR_END ]]; then
+    tok="${s%%[[:space:]]*}"; r="${tok##*/}"
+  elif [[ "$s" =~ ^$TR_DIR($TR_RUN)$TR_END ]]; then
+    tok="${s%%[[:space:]]*}"; tok="${tok##*/}"
+    case "$tok" in py.test*) r=pytest ;; *) r="${tok%%[\'\";&|)]*}" ;; esac
+  elif [[ "$s" =~ ^$TR_DIR($TR_BUILD)$TR_END ]]; then
+    tok="${s%%[[:space:]]*}"; tok="${tok##*/}"
+    case "$tok" in mvnw) r=mvn ;; gradlew) r=gradle ;; *) r="$tok" ;; esac
+  elif [[ "$s" =~ ^$TR_DIR($TR_RAKE)$TR_END ]]; then
+    r=rake
+  elif [[ "$s" =~ ^$TR_DIR(python3?(\.[0-9]+)?)[[:space:]]+-m[[:space:]]+(pytest|unittest)$TR_END ]]; then
+    if [[ "$s" =~ -m[[:space:]]+pytest ]]; then r=pytest; else r=unittest; fi
+  elif [[ "$s" =~ ^$TR_DIR(node)[[:space:]]+--test$TR_END ]]; then
+    r=node-test
+  elif [[ "$s" =~ ^$TR_DIR($TR_SCRIPT)$TR_END ]]; then
+    tok="$s"
+    [[ "$tok" =~ ^([^[:space:]]*/)?(bash|sh|python3?)[[:space:]]+ ]] && tok="${tok#"${BASH_REMATCH[0]}"}"
+    tok="${tok%%[[:space:];&|)\'\"]*}"
+    r="script:${tok##*/}"
+  fi
+  [ -n "$r" ] || return 1
+  is_info_listing_cmd "$r" "$s" && return 1
+  printf '%s\n' "$r"
+}
+
+bash_runners() { # <cmd>: print unique canonical runner names for segments that run tests
+  local flat segstr seg r
+  flat="${1//$'\n'/;}"
+  segstr="${flat//>&/ }"; segstr="${segstr//&>/ }"
+  segstr="$(tr ';|&`(' '\n\n\n\n\n' <<<"$segstr")"
+  while IFS= read -r seg; do
+    r="$(segment_runner "$seg" || true)"
+    [ -n "$r" ] && printf '%s\n' "$r"
+  done <<<"$segstr" | awk '!seen[$0]++'
+}
+
 OKW='(^|[^[:alnum:]])(pass(ed|es|ing)?|ok|green)([^[:alnum:]-]|$)'
 NEG='(none|n/?a|n\.a|no|not|nothing|skip(ped)?)'
+claim_clause() { # <clause>: 0 if clause is a non-negated test-run claim
+  local c="$1"
+  grep -qiE "not run|not installed|unavailable|(did|could) ?n[o']t run|(^|[^0-9[:space:]])[[:space:]]*skipped([^=]|$)" <<<"$c" && return 1
+  [[ "${c//:/ }" =~ $TESTRUN ]] && return 0
+  grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$c" && grep -qiE 'test|spec|[0-9]' <<<"$c" && return 0
+  grep -qiE '(^|[^[:alnum:]])(tests?|specs?|suites?)[[:space:]:]+((are|is|all|still)[[:space:]]+)?(ok|green)([^[:alnum:]-]|$)' <<<"$c" && return 0
+  grep -qiE '(^|[^[:alnum:]])all [0-9]+ (green|ok)([^[:alnum:]]|$)' <<<"$c" && return 0
+  return 1
+}
+clause_runners() { # <clause>: extract runner names explicitly mentioned in a claiming clause
+  local c="$1" cl
+  cl="$(printf '%s' "$c" | tr '[:upper:]' '[:lower:]')"
+  [[ "$cl" =~ (^|[^[:alnum:]_-])(pytest|py\.test)([^[:alnum:]_-]|$) ]] && echo pytest
+  [[ "$cl" =~ (^|[^[:alnum:]_-])unittest([^[:alnum:]_-]|$) ]] && echo unittest
+  [[ "$cl" =~ (^|[^[:alnum:]_-])node[[:space:]]+--test([^[:alnum:]_-]|$) ]] && echo node-test
+  local tok
+  for tok in npm pnpm yarn bun; do
+    [[ "$cl" =~ (^|[^[:alnum:]_-])$tok([[:space:]]+(--prefix|--dir|--cwd|-c)[[:space:]]+[^[:space:]]+)*([[:space:]]+run)?[[:space:]]+(test(:[^[:space:]]*)?|t)([^[:alnum:]_-]|$) ]] && echo "$tok"
+  done
+  for tok in tox nox jest vitest mocha rspec phpunit bats ctest rake; do
+    [[ "$cl" =~ (^|[^[:alnum:]_-])$tok([^[:alnum:]_-]|$) ]] && echo "$tok"
+  done
+  for tok in go cargo mix dotnet deno swift mvn mvnw gradle gradlew make bazel just rails sbt flutter dart lein stack cabal; do
+    if [[ "$cl" =~ (^|[^[:alnum:]_-])$tok([[:space:]]+-[^[:space:]]+)*[[:space:]]+(test|nextest)([^[:alnum:]_-]|$) ]]; then
+      case "$tok" in mvnw) echo mvn ;; gradlew) echo gradle ;; *) echo "$tok" ;; esac
+    fi
+  done
+  if [[ "$c" =~ (^|[[:space:]])([^[:space:]\;\&\|]*(scripts?|bin)/tests?|[^[:space:]\;\&\|]*tests?/[^[:space:]\;\&\|]*\.(sh|py))([^[:alnum:]_./-]|$) ]]; then
+    tok="${BASH_REMATCH[2]}"
+    echo "script:${tok##*/}"
+  fi
+}
 run_claim() { # <Verified value>: does any clause claim a test run?
   local c
   while IFS= read -r c; do
-    grep -qiE "not run|not installed|unavailable|(did|could) ?n[o']t run|(^|[^0-9[:space:]])[[:space:]]*skipped([^=]|$)" <<<"$c" && continue
-    [[ "${c//:/ }" =~ $TESTRUN ]] && return 0
-    grep -qiE '(^|[^[:alnum:]])pass(ed|es|ing)?([^[:alnum:]-]|$)' <<<"$c" && grep -qiE 'test|spec|[0-9]' <<<"$c" && return 0
-    grep -qiE '(^|[^[:alnum:]])(tests?|specs?|suites?)[[:space:]:]+((are|is|all|still)[[:space:]]+)?(ok|green)([^[:alnum:]-]|$)' <<<"$c" && return 0
-    grep -qiE '(^|[^[:alnum:]])all [0-9]+ (green|ok)([^[:alnum:]]|$)' <<<"$c" && return 0
+    claim_clause "$c" && return 0
   done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}")
   return 1
+}
+verified_runners() { # <Verified value>: unique runners named in claiming clauses
+  local c
+  while IFS= read -r c; do
+    claim_clause "$c" && clause_runners "$c"
+  done < <(tr ';,()' '\n\n\n\n' <<<"${1//. /$'\n'}") | awk '!seen[$0]++'
 }
 
 case "$mode" in
@@ -160,18 +298,23 @@ case "$mode" in
         path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
         # Relative to the session cwd, so a project dir named oauth-proxy does not look sensitive.
         cwd="$(jq -r '.cwd // empty' <<<"$input")"
+        path="${path//\\//}"
+        cwd="${cwd//\\//}"
+        [ "$cwd" != / ] && cwd="${cwd%/}"
+        home_norm="${HOME:-}"; home_norm="${home_norm//\\//}"
+        cfg_norm="${CLAUDE_CONFIG_DIR:-}"; cfg_norm="${cfg_norm//\\//}"
         # Claude's own config, memory, and plan files, and bearpaws' own reports (~/.bearpaws), are not project edits:
         # skip a path under one of those dirs unless the session cwd is inside that dir too. Checked on the
         # absolute path, before it is made cwd-relative, so a session whose cwd is HOME still skips them.
-        [ -n "${HOME:-}" ] && [ "$path" = "${HOME%/}/.claude.json" ] && exit 0
-        for d in ${HOME:+"${HOME%/}/.claude" "${HOME%/}/.bearpaws"} ${CLAUDE_CONFIG_DIR:+"${CLAUDE_CONFIG_DIR%/}"}; do
+        [ -n "$home_norm" ] && [ "$path" = "${home_norm%/}/.claude.json" ] && exit 0
+        for d in ${home_norm:+"${home_norm%/}/.claude" "${home_norm%/}/.bearpaws"} ${cfg_norm:+"${cfg_norm%/}"}; do
           case "$path" in "$d"/*) case "$cwd/" in "$d"/*) ;; *) exit 0 ;; esac ;; esac
         done
         [ -n "$cwd" ] && path="${path#"$cwd"/}"
         path="${path//$'\n'/ }"; path="${path//$'\r'/ }"
         if [ -n "$path" ]; then
           # Test-file edits are logged apart: Pinned needs a run only before the first non-test edit.
-          if [[ "$path" != /* && "$path" != *../* && "$path" =~ $TESTFILE ]]; then printf 'edit-test %s\n' "$path" >>"$log"; else printf 'edit %s\n' "$path" >>"$log"; fi
+          if [[ "$path" != /* && "$path" != [A-Za-z]:/* && "$path" != *../* && "$path" =~ $TESTFILE ]]; then printf 'edit-test %s\n' "$path" >>"$log"; else printf 'edit %s\n' "$path" >>"$log"; fi
         fi
         track_tree "$cwd" "$tool"
         ;;
@@ -179,7 +322,8 @@ case "$mode" in
         # Tree first: files the run itself writes land before its test-run line.
         track_tree "$(jq -r '.cwd // empty' <<<"$input")" Bash
         cmd="$(jq -r '.tool_input.command // empty' <<<"$input")"
-        if [[ "${cmd//$'\n'/;}" =~ $TESTRUN ]]; then
+        runners="$(bash_runners "$cmd")"
+        if [ -n "$runners" ]; then
           # A nonzero exit arrives as PostToolUseFailure. An exit of 0 is a pass unless the command could
           # hide the status and its output shows a failure summary. A background launch has no result yet.
           read -r event bg < <(jq -r '"\(.hook_event_name // "-") \(.tool_input.run_in_background // false)"' <<<"$input")
@@ -197,13 +341,45 @@ case "$mode" in
               outcome=test-fail
             fi
           fi
-          [ -n "$outcome" ] && echo "$outcome" >>"$log"
+          if [ -n "$outcome" ]; then
+            while IFS= read -r r; do
+              [ -n "$r" ] && printf '%s %s\n' "$outcome" "$r" >>"$log"
+            done <<<"$runners"
+          fi
         fi
         ;;
       Agent|Task|SendMessage)
-        # Reviewer subagent_type, or a matching description (SendMessage: summary, not to main). Never the prompt.
-        if jq -e --arg re "$REVIEW_DESC" '.tool_input | ((.subagent_type // "" | tostring | test("\\breview"; "i"))
-                  or ((if $tool == "SendMessage" then (if .to == "main" then null else .summary | strings end) else .description end) // "" | tostring | test($re; "i")))' --arg tool "$tool" <<<"$input" >/dev/null 2>&1; then
+        # Reviewer subagent_type ((code-)?reviewer), or a matching description on a non-Explore/Plan/guide agent
+        # (SendMessage: summary, not to main). For Agent/Task, require a returned result (not run_in_background:true
+        # and not an async-launch acknowledgement or empty tool_response).
+        if jq -e --arg re "$REVIEW_DESC" --arg tool "$tool" '
+          def is_reviewer_type: test("(^|[:/_-])(code-)?reviewer($|[^[:alnum:]])"; "i");
+          def is_non_review_type: test("^(explore|plan|claude-code-guide|statusline-setup)$"; "i");
+          def has_returned_result:
+            (.tool_input.run_in_background // false) != true
+            and .tool_response != null
+            and (.tool_response |
+              if type == "object" then
+                length > 0
+                and (.isAsync // false) != true
+                and ((.status // "" | tostring) | test("^(async_launched|launched|running|queued|pending|in_progress)$"; "i") | not)
+              elif type == "string" then
+                test("\\S")
+                and (test("^(async|background)[[:space:]]+agent|async_launched|launched in background|running in background"; "i") | not)
+              elif type == "array" then
+                length > 0
+              else false end);
+          (.tool_input // {}) as $ti
+          | if $tool == "SendMessage" then
+              ($ti.to != "main")
+              and (($ti.summary | strings) | test($re; "i"))
+            else
+              has_returned_result
+              and (($ti.subagent_type // "" | tostring) as $st
+                | ($st | is_reviewer_type)
+                  or (($st | is_non_review_type | not)
+                      and (($ti.description // "" | tostring) | test($re; "i"))))
+            end' <<<"$input" >/dev/null 2>&1; then
           echo review >>"$log"
         fi
         ;;
@@ -212,14 +388,16 @@ case "$mode" in
   stop)
     [ -f "$log" ] && grep -qE '^edit(-test)? ' "$log" || exit 0
     msg="$(jq -er '.last_assistant_message | strings' <<<"$input" 2>/dev/null)" || exit 0
-    if field_last Risk elevated; then risk=elevated
-    elif field_last Risk routine; then risk=routine
-    # Pending from an earlier INCOMPLETE, nothing since, and no receipt now: an unrelated reply passes.
-    elif [ "$(tail -1 "$log")" = pending ] && ! grep -qiE "${LEAD}(Risk|Status)${TRAIL}:" <<<"$msg"; then exit 0
-    else block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion."
+    risk=""; incomplete=0; receipt_err=""
+    check_receipt stop
+    rc=$?
+    if [ "$rc" = 1 ]; then
+      # Pending from an earlier INCOMPLETE, nothing since, and no receipt now: an unrelated reply passes.
+      [ "$(tail -1 "$log")" = pending ] && ! grep -qiE "${LEAD}(Risk|Status)${TRAIL}:" <<<"$msg" && exit 0
+      block "Edits are pending without a risk receipt. End with one: Risk: routine or Risk: elevated (surface), then Verified, Not checked and Status lines (elevated work adds Pinned, Failing first, Review, Open, Assumptions). See bp:verification-before-completion."
+    elif [ "$rc" != 0 ]; then
+      block "$receipt_err"
     fi
-    # Only the last Status line counts, and INCOMPLETE must be its value.
-    grep -iE "${LEAD}Status${TRAIL}:" <<<"$msg" | tail -1 | grep -qiE "Status${TRAIL}:[*_\`[:space:]]*INCOMPLETE" && incomplete=1 || incomplete=0
     # Line numbers: the last edit of any kind (test edits included), the first non-test edit, test runs.
     last_edit="$(grep -nE '^edit(-test)? ' "$log" | tail -1 | cut -d: -f1)"
     # Bash edits carry no path and may be the failing test, so they count only when nothing else does.
@@ -230,8 +408,8 @@ case "$mode" in
     # run after a test edit is expected and does not unpin).
     read -r first_run last_run last_fail pin_failed < <(awk '
       /^edit(-test)? / { if (!fa) fa = NR }
-      /^test-run$/  { if (!fr) fr = NR; lr = NR; if (!fa) lb = "run" }
-      /^test-fail$/ { lf = NR; if (!fa) lb = "fail" }
+      /^test-run( |$)/  { if (!fr) fr = NR; lr = NR; if (!fa) lb = "run" }
+      /^test-fail( |$)/ { lf = NR; if (!fa) lb = "fail" }
       END { print fr + 0, lr + 0, lf + 0, (lb == "fail") }' "$log")
     [ "$first_run" -gt 0 ] || first_run="$first_edit"
     # Verified claims a run when any clause (split on ; , ( ) and ". ") names a runner, says passed next
@@ -244,6 +422,21 @@ case "$mode" in
         block "Verified: claims a test run, but the last test run after the edit failed (nonzero exit, or a failure summary in its output). Fix and rerun, or say Status: INCOMPLETE."
       elif [ "$last_run" -le "$last_edit" ]; then
         block "Verified: claims a test run, but none ran after the last edit. Run the tests now, or say what you actually checked."
+      fi
+      claimed_runners="$(verified_runners "${verified#*:}")"
+      if [ -n "$claimed_runners" ]; then
+        while IFS= read -r cr; do
+          [ -n "$cr" ] || continue
+          read -r r_run r_fail < <(awk -v r="$cr" '
+            $1 == "test-run"  && $2 == r { rr = NR }
+            $1 == "test-fail" && $2 == r { rf = NR }
+            END { print rr + 0, rf + 0 }' "$log")
+          if [ "$r_fail" -gt "$last_edit" ] && [ "$r_fail" -gt "$r_run" ]; then
+            block "Verified: claims a ${cr} run, but the last ${cr} run after the edit failed. Fix and rerun ${cr}, or say Status: INCOMPLETE."
+          elif [ "$r_run" -le "$last_edit" ]; then
+            block "Verified: claims a ${cr} run, but no ${cr} run was logged after the last edit. Run ${cr} now, or say what you actually ran."
+          fi
+        done <<<"$claimed_runners"
       fi
     fi
     # Pinned (its last line) claims a run unless it starts with none, n/a, no, not, nothing, skipped,
@@ -260,6 +453,9 @@ case "$mode" in
       # The review must follow the last edit of any kind: a test edit can weaken what the review saw.
       last_review="$(grep -n '^review$' "$log" | tail -1 | cut -d: -f1)"
       if [ "${last_review:-0}" -gt "$last_edit" ]; then
+        if [ "$incomplete" = 0 ] && review_is_placeholder "$(field_value Review || true)"; then
+          block "Elevated-risk work with Status: COMPLETE needs a real Review line (not none/skipped/n/a/-/todo), or set Status: INCOMPLETE."
+        fi
         open_state elevated; o=$?
         # An open finding under INCOMPLETE stays pending, so a later COMPLETE is judged again.
         [ "$o" = 2 ] && [ "$incomplete" = 1 ] && pend
