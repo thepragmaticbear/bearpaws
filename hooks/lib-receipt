@@ -138,12 +138,13 @@ open_state() {
     }' <<<"$msg"
 }
 
-# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, n.a., na, -, —, todo, tbd, pending, self, self-review, not done/run/yet, no review, 'none found, approved').
+# review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, -, todo, tbd, pending,
+# self-review (with or without trailing text), bare no/not, or no/not followed by review/done/run/yet/applicable/needed).
 review_is_placeholder() {
   local v
-  v="$(printf '%s' "$1" | tr '\n' ' ' | tr -d '()*`' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+  v="$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | tr '\n\r\t' '   ' | tr -d '()*`' | sed -E 's/[[:space:]]+/ /g; s/^ +| +$//g')"
   [ -n "$v" ] || return 0
-  grep -qiE '^(none|skipped|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self(-review)?|not[[:space:]]+(done|run|yet)|no[[:space:]]+review|none[[:space:]]+found,?[[:space:]]+approved)[.]?$' <<<"$v"
+  grep -qE '^(none|skipped|skip|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self-review(ed)?|self)([^[:alnum:]_-].*)?$|^(no|not)[.]?$|^(no|not) (review|reviews|reviewed|reviewer|done|run|yet|applicable|needed|required)([^[:alnum:]_-].*)?$' <<<"$v"
 }
 
 # check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
@@ -194,7 +195,7 @@ check_receipt() {
     if [ "$risk" = elevated ] && [ "$incomplete" = 0 ]; then
       rev_val="$(field_value Review || true)"
       if review_is_placeholder "$rev_val"; then
-        receipt_err="bearpaws: an elevated-risk commit with Status: COMPLETE needs a Review line (not none/skipped/n/a/n.a./na/-/—/todo/tbd/pending/self/self-review/not done/not run/not yet/no review/'none found, approved'), or Status: INCOMPLETE."
+        receipt_err="bearpaws: an elevated-risk commit with Status: COMPLETE needs a Review line (not none, skipped, n/a, -, todo, tbd, pending, self-review (with or without trailing text), bare no/not, or no/not followed by review/done/run/yet/applicable/needed), or Status: INCOMPLETE."
         return 2
       fi
     fi
