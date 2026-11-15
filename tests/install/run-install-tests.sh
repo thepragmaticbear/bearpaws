@@ -488,3 +488,114 @@ grep -qx 'echo theirs' "$PHOOK" && grep -qF '# bearpaws-owned' "$GHOOK"
 grep -qF "not created by Bearpaws" "$TMP_ROOT/git-foreign-pp.log"
 
 echo "OK: Git gate installer (owned commit-msg and pre-push hooks, run the gates, idempotent, never clobber, fail outside a repo)"
+
+# ========== Doctor Diagnostic Tests ==========
+help_out="$( cd "$WORK" && ./install.sh --help 2>&1 )"
+if ! grep -qF -- '--doctor' <<<"$help_out"; then
+  echo "FAIL: --help should document --doctor, got: $help_out"
+  exit 1
+fi
+
+NOJQ_BIN="$TMP_ROOT/doctor-nojq-bin"
+DOC_BIN="$TMP_ROOT/doctor-bin"
+mkdir -p "$NOJQ_BIN" "$DOC_BIN"
+for cmd in bash dirname basename cat grep git uname tr sed cut head awk readlink env perl timeout gtimeout sleep; do
+  if path_cmd="$(command -v "$cmd" 2>/dev/null)"; then
+    ln -s "$path_cmd" "$NOJQ_BIN/$cmd"
+    ln -s "$path_cmd" "$DOC_BIN/$cmd"
+  fi
+done
+if jq_cmd="$(command -v jq 2>/dev/null)"; then
+  ln -s "$jq_cmd" "$DOC_BIN/jq"
+else
+  printf '#!/usr/bin/env bash\necho "jq-1.7.1"\n' >"$DOC_BIN/jq"
+  chmod +x "$DOC_BIN/jq"
+fi
+
+DOC_HOME="$TMP_ROOT/doctor-home"
+mkdir -p "$DOC_HOME"
+
+# All-OK (no claude on PATH -> skipped gracefully, non-git dir, empty temp HOME)
+doc_ok="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA -u JUNIE_HOME -u GROK_HOME \
+  HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$DOC_BIN" ./install.sh --doctor 2>&1 )"
+grep -qF "jq-" <<<"$doc_ok"
+grep -qF "bash:" <<<"$doc_ok"
+grep -qF "not on PATH" <<<"$doc_ok"
+grep -qF "writable" <<<"$doc_ok"
+test ! -e "$DOC_HOME/.agents" && test ! -e "$DOC_HOME/.junie" && test ! -e "$DOC_HOME/.gemini" && test ! -e "$DOC_HOME/.grok"
+
+# Claude Code version checks: >= 2.1.163 passes, < 2.1.163 fails, hanging claude skips gracefully
+CLAUDE_OK_BIN="$TMP_ROOT/claude-ok-bin"; cp -R "$DOC_BIN" "$CLAUDE_OK_BIN"
+printf '#!/usr/bin/env bash\necho "2.1.163 (Claude Code)"\n' >"$CLAUDE_OK_BIN/claude"
+chmod +x "$CLAUDE_OK_BIN/claude"
+doc_c_ok="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$CLAUDE_OK_BIN" ./install.sh --doctor 2>&1 )"
+grep -qF "2.1.163" <<<"$doc_c_ok"
+
+CLAUDE_OLD_BIN="$TMP_ROOT/claude-old-bin"; cp -R "$DOC_BIN" "$CLAUDE_OLD_BIN"
+printf '#!/usr/bin/env bash\necho "2.1.162 (Claude Code)"\n' >"$CLAUDE_OLD_BIN/claude"
+chmod +x "$CLAUDE_OLD_BIN/claude"
+if doc_c_old="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$CLAUDE_OLD_BIN" ./install.sh --doctor 2>&1 )"; then
+  echo "FAIL: --doctor should exit 1 when claude < 2.1.163"
+  exit 1
+fi
+grep -qF "2.1.162" <<<"$doc_c_old" && grep -qF "2.1.163" <<<"$doc_c_old"
+
+CLAUDE_HANG_BIN="$TMP_ROOT/claude-hang-bin"; cp -R "$DOC_BIN" "$CLAUDE_HANG_BIN"
+printf '#!/usr/bin/env bash\nsleep 30\n' >"$CLAUDE_HANG_BIN/claude"
+chmod +x "$CLAUDE_HANG_BIN/claude"
+doc_c_hang="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$CLAUDE_HANG_BIN" ./install.sh --doctor 2>&1 )"
+grep -qF "skipped" <<<"$doc_c_hang"
+
+# Missing jq (via PATH manipulation) exits 1 and flags risk-gate no-op
+if doc_nojq="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$NOJQ_BIN" ./install.sh --doctor 2>&1 )"; then
+  echo "FAIL: --doctor should exit 1 when jq is missing"
+  exit 1
+fi
+grep -qF "jq" <<<"$doc_nojq" && grep -qF "no-op" <<<"$doc_nojq"
+
+# Enforcement disabled (BEARPAWS_ENFORCE=0) exits 1
+if doc_off="$( cd "$WORK" && env -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$DOC_BIN" BEARPAWS_ENFORCE=0 ./install.sh --doctor 2>&1 )"; then
+  echo "FAIL: --doctor should exit 1 when BEARPAWS_ENFORCE=0"
+  exit 1
+fi
+grep -qF "BEARPAWS_ENFORCE=0" <<<"$doc_off"
+
+# Unwritable CLAUDE_PLUGIN_DATA exits 1 without modifying anything
+NOT_A_DIR="$TMP_ROOT/not-a-dir"; touch "$NOT_A_DIR"
+if doc_ro="$( cd "$WORK" && env -u BEARPAWS_ENFORCE HOME="$DOC_HOME" CLAUDE_PLUGIN_DATA="$NOT_A_DIR" PATH="$DOC_BIN" ./install.sh --doctor 2>&1 )"; then
+  echo "FAIL: --doctor should exit 1 when CLAUDE_PLUGIN_DATA is not writable"
+  exit 1
+fi
+grep -qF "not writable" <<<"$doc_ro"
+
+# Git hooks missing vs present
+DOC_REPO="$TMP_ROOT/doctor-repo"
+git init -q "$DOC_REPO"
+doc_hooks_missing="$( cd "$DOC_REPO" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$DOC_BIN" "$WORK/install.sh" --doctor 2>&1 )"
+grep -qE 'commit-msg.*missing' <<<"$doc_hooks_missing"
+grep -qE 'pre-push.*missing' <<<"$doc_hooks_missing"
+
+( cd "$DOC_REPO" && HOME="$DOC_HOME" "$WORK/install.sh" --git ) >/dev/null 2>&1
+doc_hooks_present="$( cd "$DOC_REPO" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$DOC_BIN" "$WORK/install.sh" --doctor 2>&1 )"
+grep -qE 'commit-msg.*installed' <<<"$doc_hooks_present"
+grep -qE 'pre-push.*installed' <<<"$doc_hooks_present"
+
+# Installed agent skill dirs + HOME/JUNIE_HOME overrides
+( cd "$WORK" && HOME="$DOC_HOME" ./install.sh --antigravity --agents --grok --global ) >/dev/null 2>&1
+( cd "$WORK" && HOME="$DOC_HOME" JUNIE_HOME="$DOC_HOME/custom-junie" ./install.sh --junie --global ) >/dev/null 2>&1
+doc_skills="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" JUNIE_HOME="$DOC_HOME/custom-junie" TMPDIR="$TMP_ROOT" PATH="$DOC_BIN" ./install.sh --doctor 2>&1 )"
+grep -qE 'agents.*link.*\.agents/skills' <<<"$doc_skills"
+grep -qE 'junie.*link.*custom-junie/skills' <<<"$doc_skills"
+grep -qE 'Antigravity.*installed' <<<"$doc_skills"
+grep -qE 'Grok.*installed' <<<"$doc_skills"
+
+# Windows (Git Bash/MSYS) check for bash resolution
+WIN_BIN="$TMP_ROOT/doctor-win-bin"; cp -R "$DOC_BIN" "$WIN_BIN"
+rm -f "$WIN_BIN/uname"
+printf '#!/usr/bin/env bash\necho "MINGW64_NT-10.0"\n' >"$WIN_BIN/uname"
+chmod +x "$WIN_BIN/uname"
+doc_win="$( cd "$WORK" && env -u BEARPAWS_ENFORCE -u CLAUDE_PLUGIN_DATA HOME="$DOC_HOME" TMPDIR="$TMP_ROOT" PATH="$WIN_BIN" ./install.sh --doctor 2>&1 )"
+grep -qF "run-hook.cmd bash: resolvable" <<<"$doc_win"
+
+echo "OK: Doctor diagnostic (--help, all-OK, missing jq, BEARPAWS_ENFORCE=0, Claude Code version/timeout, unwritable state dir, hooks missing/present, agent skill dirs, Windows bash check)"
+

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Scorer tests: which text counts as a blocking issue, and what the verdict line means."""
+import json
 import os
 import re
 import sys
@@ -217,6 +218,108 @@ class RereviewTest(unittest.TestCase):
         reply = GREEN_REPLY.replace("- Finding 2 (running total): NOT ADDRESSED",
                                     "**Verdict:** see below\n- Finding 2 (running total): NOT ADDRESSED")
         self.assertEqual(score.rereview_score(reply)["f2"], "NOT ADDRESSED")
+
+
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+class AdversarialAndAccuracyTest(unittest.TestCase):
+    def _score_fixture(self, name, fixture_env=None):
+        old = os.environ.get("FIXTURE")
+        try:
+            if fixture_env is not None:
+                os.environ["FIXTURE"] = fixture_env
+            else:
+                os.environ.pop("FIXTURE", None)
+            return score.score(os.path.join(FIXTURES, name), "lbl", 1)
+        finally:
+            if old is not None:
+                os.environ["FIXTURE"] = old
+            else:
+                os.environ.pop("FIXTURE", None)
+
+    def test_planted_valid_fixture_scores_full_accuracy_and_format(self):
+        row = self._score_fixture("planted_valid.jsonl")
+        for k in ("missing_empty_valueerror", "extra_days_unit", "repeat_or_order_bug", "unknown_units_ignored"):
+            self.assertTrue(row["defects"][k], k)
+        self.assertEqual(row["defect_accuracy"], 1.0)
+        self.assertEqual(row["severity_accuracy"], 1.0)
+        self.assertEqual(row["format_compliance"], 1.0)
+        self.assertTrue(row["verdict_reject"])
+
+    def test_alternate_headings_still_score(self):
+        row = self._score_fixture("planted_alternate_headings.jsonl")
+        for k in ("missing_empty_valueerror", "extra_days_unit", "repeat_or_order_bug", "unknown_units_ignored"):
+            self.assertTrue(row["defects"][k], k)
+        self.assertEqual(row["defect_accuracy"], 1.0)
+        self.assertEqual(row["severity_accuracy"], 1.0)
+        self.assertGreaterEqual(row["blocking_items"], 4)
+        self.assertTrue(row["verdict_reject"])
+
+    def test_wrong_severity_separates_defect_from_severity_accuracy(self):
+        row = self._score_fixture("planted_wrong_severity.jsonl")
+        self.assertEqual(row["defect_accuracy"], 1.0)
+        self.assertEqual(row["severity_accuracy"], 0.0)
+        self.assertEqual(row["blocking_items"], 0)
+        self.assertGreater(row["format_compliance"], 0.5)
+
+    def test_negated_findings_do_not_score(self):
+        row = self._score_fixture("negated_findings.jsonl")
+        for k, v in row["defects"].items():
+            self.assertFalse(v, f"negated finding matched {k}")
+        self.assertEqual(row["defect_accuracy"], 0.0)
+        self.assertEqual(row["severity_accuracy"], 0.0)
+
+    def test_rereview_negated_sql_does_not_count_as_sql_finding(self):
+        row = self._score_fixture("rereview_negated_sql.jsonl", fixture_env="rereview")
+        self.assertFalse(row["rereview"]["sql_mentioned"])
+        self.assertFalse(row["rereview"]["sql_blocking"])
+
+    def test_keyword_only_answer_does_not_score(self):
+        row = self._score_fixture("keyword_only.jsonl")
+        for k, v in row["defects"].items():
+            self.assertFalse(v, f"keyword-only matched {k}")
+        self.assertEqual(row["defect_accuracy"], 0.0)
+        self.assertEqual(row["severity_accuracy"], 0.0)
+        self.assertLess(row["format_compliance"], 0.5)
+
+    def test_incorrect_fix_does_not_score(self):
+        row = self._score_fixture("incorrect_fix.jsonl")
+        for k, v in row["defects"].items():
+            self.assertFalse(v, f"incorrect fix matched {k}")
+        self.assertEqual(row["defect_accuracy"], 0.0)
+        self.assertEqual(row["severity_accuracy"], 0.0)
+
+    def test_tightened_patterns_reject_topic_mentions_and_clean_reports(self):
+        # Clean report from report-minimal.txt style should not match defect patterns.
+        clean = ("#### Important\n- Empty input, unknown units, repeated and out-of-order units raise ValueError.\n"
+                 "- Takes 3 days to run.\n- Uses __all__ properly.\n- Ignored whitespace in tests.\n"
+                 "- No negative side effects.\n- Duplicated test setup across two methods.\n")
+        for k in score.DEFECTS:
+            self.assertFalse(score.defect_found(k, clean), f"clean prose falsely matched {k}")
+
+    def test_summary_and_fixture_modes(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stdout
+
+        r1 = self._score_fixture("planted_valid.jsonl")
+        r2 = self._score_fixture("rereview_negated_sql.jsonl", fixture_env="rereview")
+        self.assertGreaterEqual(r2["defect_accuracy"], 0.75)
+        self.assertEqual(r2["severity_accuracy"], 1.0)
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as tmp:
+            tmp.write(json.dumps(r1) + "\n")
+            tmp_path = tmp.name
+        try:
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                score.summary(tmp_path)
+            out = buf.getvalue()
+            self.assertIn("defect accuracy", out)
+            self.assertIn("severity accuracy", out)
+            self.assertIn("format compliance", out)
+        finally:
+            os.unlink(tmp_path)
 
 
 if __name__ == "__main__":

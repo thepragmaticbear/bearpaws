@@ -306,9 +306,274 @@ install_antigravity() {
     fi
 }
 
+# Run a command with a timeout in seconds, portably across Linux, macOS, and Git Bash.
+run_with_timeout() {
+    local secs="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$secs" "$@"
+    elif command -v perl >/dev/null 2>&1; then
+        perl -e '
+            my ($s, @cmd) = @ARGV;
+            my $pid = fork();
+            exit 127 unless defined $pid;
+            if ($pid == 0) {
+                eval { setpgrp(0, 0) };
+                exec @cmd or exit 127;
+            }
+            $SIG{ALRM} = sub { kill("TERM", -$pid); kill("TERM", $pid); exit 124; };
+            alarm $s;
+            waitpid($pid, 0);
+            alarm 0;
+            exit($? >> 8);
+        ' "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
+# Return 0 if semver $1 < $2 (major.minor.patch), 1 otherwise.
+version_lt() {
+    local a_maj a_min a_pat b_maj b_min b_pat
+    IFS=. read -r a_maj a_min a_pat <<<"${1%%[^0-9.]*}"
+    IFS=. read -r b_maj b_min b_pat <<<"${2%%[^0-9.]*}"
+    a_maj=$((10#${a_maj:-0})); a_min=$((10#${a_min:-0})); a_pat=$((10#${a_pat:-0}))
+    b_maj=$((10#${b_maj:-0})); b_min=$((10#${b_min:-0})); b_pat=$((10#${b_pat:-0}))
+    if (( a_maj < b_maj )); then return 0; fi
+    if (( a_maj > b_maj )); then return 1; fi
+    if (( a_min < b_min )); then return 0; fi
+    if (( a_min > b_min )); then return 1; fi
+    if (( a_pat < b_pat )); then return 0; fi
+    return 1
+}
+
+# Report whether an agent skills directory contains Bearpaws symlinks (read-only).
+doctor_check_skill_links() {
+    local label="$1" dir="$2"
+    local roots_file="$dir/.bearpaws-roots"
+    if [[ ! -d "$dir" ]]; then
+        log_info "Agent skills ($label): no bearpaws links ($dir does not exist)"
+        return 0
+    fi
+    local count=0 broken=0 entry target is_bp
+    for entry in "$dir"/*; do
+        [[ -L "$entry" ]] || continue
+        target="$(readlink "$entry" 2>/dev/null || true)"
+        target="${target%/}"
+        is_bp=false
+        if [[ -f "$roots_file" ]] && grep -qxF -- "${target%/*}" "$roots_file" 2>/dev/null; then
+            is_bp=true
+        elif [[ "$(basename "$entry")" == "using-bearpaws" && "$target" == */skills/using-bearpaws ]]; then
+            is_bp=true
+        fi
+        if [[ "$is_bp" == "true" ]]; then
+            if [[ -e "$entry" ]]; then
+                ((++count))
+            else
+                ((++broken))
+            fi
+        fi
+    done
+    if (( count > 0 || broken > 0 )); then
+        if (( broken > 0 )); then
+            log_warning "Agent skills ($label): $count valid, $broken broken bearpaws link(s) in $dir"
+        else
+            log_success "Agent skills ($label): $count bearpaws link(s) in $dir"
+        fi
+    else
+        log_info "Agent skills ($label): no bearpaws links in $dir"
+    fi
+}
+
+# Read-only environment and installation diagnostic. Never edits anything.
+# Exits 0 when enforcement can run, 1 when something blocks enforcement.
+run_doctor() {
+    local blocked=0
+
+    # 1. jq presence and version (risk-gate is a no-op without jq)
+    if command -v jq >/dev/null 2>&1; then
+        local jq_ver
+        jq_ver="$(jq --version 2>/dev/null || echo "unknown")"
+        log_success "jq: $jq_ver ($(command -v jq))"
+    else
+        log_error "jq: not found on PATH (risk-gate is a no-op without jq)"
+        blocked=1
+    fi
+
+    # 2. bash version
+    log_info "bash: $BASH_VERSION"
+
+    # 3. Claude Code version if claude is on PATH (short timeout; skip gracefully)
+    if command -v claude >/dev/null 2>&1; then
+        local claude_raw="" claude_ver=""
+        if claude_raw="$(run_with_timeout 3 claude --version </dev/null 2>/dev/null)"; then
+            claude_ver="$(printf '%s\n' "$claude_raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+        fi
+        if [[ -n "$claude_ver" ]]; then
+            if version_lt "$claude_ver" "2.1.163"; then
+                log_error "Claude Code: $claude_ver (< 2.1.163 — risk-gate is a no-op on Claude Code < 2.1.163)"
+                blocked=1
+            else
+                log_success "Claude Code: $claude_ver (>= 2.1.163)"
+            fi
+        else
+            log_warning "Claude Code: on PATH at $(command -v claude), version check timed out or returned no version (skipped)"
+        fi
+    else
+        log_info "Claude Code: claude not on PATH (skipped)"
+    fi
+
+    # 4. BEARPAWS_ENFORCE=0
+    if [[ "${BEARPAWS_ENFORCE:-1}" == "0" ]]; then
+        log_error "Enforcement: disabled (BEARPAWS_ENFORCE=0; risk-gate and git hooks are no-ops)"
+        blocked=1
+    else
+        log_success "Enforcement: enabled (BEARPAWS_ENFORCE=${BEARPAWS_ENFORCE:-unset})"
+    fi
+
+    # 5. CLAUDE_PLUGIN_DATA (or TMPDIR fallback) writability without modifying disk
+    local data_source data_root gate_dir check_dir
+    if [[ -n "${CLAUDE_PLUGIN_DATA:-}" ]]; then
+        data_source="CLAUDE_PLUGIN_DATA"
+        data_root="$CLAUDE_PLUGIN_DATA"
+    elif [[ -n "${TMPDIR:-}" ]]; then
+        data_source="TMPDIR"
+        data_root="$TMPDIR"
+    else
+        data_source="default /tmp"
+        data_root="/tmp"
+    fi
+    [[ "$data_root" != "/" ]] && data_root="${data_root%/}"
+    gate_dir="$data_root/risk-gate"
+
+    local state_ok=true state_reason=""
+    if [[ -L "$gate_dir" ]]; then
+        state_ok=false
+        state_reason="$gate_dir is a symlink (risk-gate refuses symlinked state dirs)"
+    elif [[ -e "$gate_dir" ]]; then
+        if [[ ! -d "$gate_dir" ]]; then
+            state_ok=false
+            state_reason="$gate_dir exists and is not a directory"
+        elif [[ ! -w "$gate_dir" || ! -x "$gate_dir" ]]; then
+            state_ok=false
+            state_reason="$gate_dir is not writable"
+        fi
+    elif [[ -e "$data_root" ]]; then
+        if [[ ! -d "$data_root" ]]; then
+            state_ok=false
+            state_reason="$data_root exists and is not a directory"
+        elif [[ ! -w "$data_root" || ! -x "$data_root" ]]; then
+            state_ok=false
+            state_reason="$data_root is not writable"
+        fi
+    else
+        check_dir="$data_root"
+        while [[ ! -e "$check_dir" && "$check_dir" != "/" && "$check_dir" != "." ]]; do
+            check_dir="$(dirname "$check_dir")"
+        done
+        if [[ ! -d "$check_dir" || ! -w "$check_dir" || ! -x "$check_dir" ]]; then
+            state_ok=false
+            state_reason="parent $check_dir for $data_root is not writable"
+        fi
+    fi
+
+    if [[ "$state_ok" == "true" ]]; then
+        log_success "State dir ($data_source): writable ($gate_dir)"
+    else
+        log_error "State dir ($data_source): not writable ($state_reason)"
+        blocked=1
+    fi
+
+    # 6. Git commit-msg / pre-push hooks in the current repo (if in one)
+    local hooks_dir=""
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1 || git rev-parse --git-dir >/dev/null 2>&1; then
+        hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
+        if [[ -z "$hooks_dir" || "$hooks_dir" == --path-format=* || "$hooks_dir" == *$'\n'* ]]; then
+            hooks_dir="$(git rev-parse --git-path hooks 2>/dev/null || true)"
+        fi
+        if [[ -n "$hooks_dir" ]]; then
+            local hook_name hook_path
+            for hook_name in commit-msg pre-push; do
+                hook_path="$hooks_dir/$hook_name"
+                if [[ -f "$hook_path" && -x "$hook_path" ]] && grep -qxF "$GIT_HOOK_MARKER" "$hook_path" 2>/dev/null; then
+                    log_success "Git hook ($hook_name): installed (bearpaws-owned at $hook_path)"
+                elif [[ -e "$hook_path" || -L "$hook_path" ]]; then
+                    log_warning "Git hook ($hook_name): present at $hook_path (not bearpaws-owned)"
+                else
+                    log_info "Git hook ($hook_name): missing at $hook_path (run ./install.sh --git to install)"
+                fi
+            done
+        else
+            log_info "Git hooks: unable to resolve hooks directory"
+        fi
+    else
+        log_info "Git hooks: not inside a git repository (skipped)"
+    fi
+
+    # 7. Agent skill dirs and plugin/rule installations
+    doctor_check_skill_links "agents" "$HOME/.agents/skills"
+    doctor_check_skill_links "junie" "${JUNIE_HOME:-$HOME/.junie}/skills"
+
+    local ag_dir="$HOME/.gemini/config/plugins/bearpaws"
+    if [[ -f "$ag_dir/plugin.json" && -f "$ag_dir/skills/using-bearpaws/SKILL.md" ]]; then
+        log_success "Antigravity plugin: installed at $ag_dir"
+    elif [[ -d "$ag_dir" ]]; then
+        log_warning "Antigravity plugin: partial directory at $ag_dir (missing plugin.json or using-bearpaws)"
+    else
+        log_info "Antigravity plugin: not installed ($ag_dir)"
+    fi
+
+    local grok_rule="${GROK_HOME:-$HOME/.grok}/rules/bearpaws.md"
+    if [[ -f "$grok_rule" ]] && grep -qF "$GROK_RULE_MARKER" "$grok_rule" 2>/dev/null; then
+        log_success "Grok bootstrap rule: installed at $grok_rule (bearpaws-owned)"
+    elif [[ -e "$grok_rule" || -L "$grok_rule" ]]; then
+        log_warning "Grok bootstrap rule: present at $grok_rule (not bearpaws-owned)"
+    else
+        log_info "Grok bootstrap rule: not installed ($grok_rule)"
+    fi
+
+    # 8. On Windows (Git Bash/MSYS), check whether bash is resolvable for run-hook.cmd
+    case "$(uname -s 2>/dev/null || true)" in
+        MINGW*|MSYS*|CYGWIN*)
+            local win_bash="" pf64="/c/Program Files/Git/bin/bash.exe" pf86="/c/Program Files (x86)/Git/bin/bash.exe"
+            if command -v cygpath >/dev/null 2>&1; then
+                pf64="$(cygpath -u 'C:\Program Files\Git\bin\bash.exe' 2>/dev/null || printf '%s' "$pf64")"
+                pf86="$(cygpath -u 'C:\Program Files (x86)\Git\bin\bash.exe' 2>/dev/null || printf '%s' "$pf86")"
+            fi
+            if [[ -x "$pf64" ]]; then
+                win_bash="$pf64"
+            elif [[ -x "$pf86" ]]; then
+                win_bash="$pf86"
+            elif command -v where.exe >/dev/null 2>&1 && where.exe bash >/dev/null 2>&1; then
+                win_bash="$(where.exe bash 2>/dev/null | head -1 | tr -d '\r')"
+            elif command -v bash >/dev/null 2>&1; then
+                win_bash="$(command -v bash)"
+            fi
+            if [[ -n "$win_bash" ]]; then
+                log_success "Windows run-hook.cmd bash: resolvable ($win_bash)"
+            else
+                log_error "Windows run-hook.cmd bash: not resolvable (install Git for Windows or put bash.exe on PATH)"
+                blocked=1
+            fi
+            ;;
+    esac
+
+    echo ""
+    if [[ $blocked -eq 0 ]]; then
+        log_success "Doctor check passed: Bearpaws enforcement can run."
+        return 0
+    else
+        log_error "Doctor check found issue(s) blocking Bearpaws enforcement."
+        return 1
+    fi
+}
+
 # Main installation
 main() {
     local platforms=()
+    local do_doctor=false
     
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -333,6 +598,10 @@ main() {
                 platforms+=("git")
                 shift
                 ;;
+            --doctor)
+                do_doctor=true
+                shift
+                ;;
             --global)
                 export INSTALL_GLOBAL="true"
                 shift
@@ -340,7 +609,7 @@ main() {
             --help|-h)
                 echo "Bearpaws installation script"
                 echo ""
-                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global | --junie --global | --git"
+                echo "Usage: $0 --antigravity --global | --agents --global | --grok --global | --junie --global | --git | --doctor"
                 echo ""
                 echo "Options:"
                 echo "  --antigravity Install Bearpaws plugin for Google Antigravity"
@@ -348,6 +617,7 @@ main() {
                 echo "  --grok        --agents plus a bootstrap rule in ~/.grok/rules/ for Grok Build"
                 echo "  --junie       Link skills into ~/.junie/skills for JetBrains Junie (\$JUNIE_HOME honored)"
                 echo "  --git         Risk-receipt commit-msg and identity-check pre-push hooks in the current git repository (bypass: --no-verify)"
+                echo "  --doctor      Run read-only environment and installation diagnostics"
                 echo "  --global      Required for --antigravity, --agents, --grok and --junie"
                 echo "  --help        Show this help message"
                 exit 0
@@ -360,6 +630,18 @@ main() {
         esac
     done
     
+    if [[ "$do_doctor" == "true" ]]; then
+        if [[ ${#platforms[@]} -gt 0 ]]; then
+            log_error "--doctor cannot be combined with installation flags"
+            exit 1
+        fi
+        set +e
+        run_doctor
+        local doc_rc=$?
+        set -e
+        exit "$doc_rc"
+    fi
+
     if [[ ${#platforms[@]} -eq 0 ]]; then
         log_error "No platform given"
         echo "Use --help for usage information"
