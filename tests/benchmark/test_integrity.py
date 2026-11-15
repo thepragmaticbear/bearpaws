@@ -1001,5 +1001,200 @@ class FixtureTests(unittest.TestCase):
             "src/report.py": duplicate+'def report_row(n,v,c): return f"{n:10}"+format_money(v,c)\n'})
 
 
+class CostSourceTests(unittest.TestCase):
+    """cost_sources() splits a run's cost by where the billed tokens came from."""
+    MODEL = "claude-sonnet-5-5"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = pathlib.Path(self.tmp.name)
+
+    def write(self, events):
+        path = self.root / "stream.jsonl"
+        path.write_text("\n".join(json.dumps(e) for e in events))
+        return str(path)
+
+    def call(self, ident, content, read=0, write=0, inp=0, parent=None):
+        return {"type": "assistant", "parent_tool_use_id": parent,
+                "message": {"id": ident, "model": self.MODEL, "content": content,
+                            "usage": {"input_tokens": inp, "output_tokens": 1,
+                                      "cache_read_input_tokens": read,
+                                      "cache_creation_input_tokens": write,
+                                      "cache_creation": {"ephemeral_5m_input_tokens": write,
+                                                         "ephemeral_1h_input_tokens": 0}}}}
+
+    def result(self, inp, out, read, write):
+        price = summarize.PRICES[self.MODEL]
+        cost = (inp * price["input"] + out * price["output"] + read * price["cache_read"]
+                + write * price["cache_write_5m"]) / 1e6
+        return {"type": "result", "subtype": "success", "session_id": "s", "total_cost_usd": cost,
+                "modelUsage": {self.MODEL: {"inputTokens": inp, "outputTokens": out,
+                                            "cacheReadInputTokens": read,
+                                            "cacheCreationInputTokens": write,
+                                            "cacheCreationEphemeral5mInputTokens": write,
+                                            "cacheCreationEphemeral1hInputTokens": 0,
+                                            "costUSD": cost}}}
+
+    def hook(self, context):
+        stdout = json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                    "additionalContext": context}})
+        return {"type": "system", "subtype": "hook_response", "hook_event": "SessionStart",
+                "stdout": stdout}
+
+    def test_prices_reproduce_recorded_session_cost(self):
+        # Fitted from the 2026-11-04 transcripts: costUSD = tokens . prices to float precision.
+        usage = {"inputTokens": 28, "outputTokens": 4726, "cacheReadInputTokens": 427948,
+                 "cacheCreationEphemeral5mInputTokens": 10527, "cacheCreationEphemeral1hInputTokens": 15907}
+        self.assertAlmostEqual(summarize.usage_cost(self.MODEL, usage), 0.18005630, places=7)
+
+    def test_first_call_splits_bootstrap_from_harness(self):
+        # One call, 1000 tokens written. The bootstrap is sized at a fixed text ratio, not the stream's
+        # growth ratio (which hidden framing deflates): 350 chars at 3.5 chars/token is 100 tokens.
+        self.assertEqual(summarize.BOOTSTRAP_CHARS_PER_TOKEN, 3.5)
+        path = self.write([self.hook("b" * 350),
+                           self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                           self.result(0, 1, 0, 1000)])
+        got = summarize.cost_sources(path)
+        write_cost = 1000 * summarize.PRICES[self.MODEL]["cache_write_5m"] / 1e6
+        self.assertAlmostEqual(got["bootstrap"], write_cost * 0.1)
+        self.assertAlmostEqual(got["harness"], write_cost * 0.9)
+
+    def test_duplicate_message_events_are_charged_once(self):
+        # The CLI emits one assistant event per content block, each with the same id and usage.
+        events = [self.hook("b" * 350),
+                  self.call("m1", [{"type": "thinking", "thinking": ""}], write=1000),
+                  self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                  self.result(0, 1, 0, 1000)]
+        got = summarize.cost_sources(self.write(events))
+        self.assertAlmostEqual(sum(got.values()), self.result(0, 1, 0, 1000)["total_cost_usd"])
+        self.assertNotIn("overstreamed", got)
+
+    def test_one_hour_writes_use_their_price(self):
+        call = self.call("m1", [{"type": "text", "text": "done"}], write=1000)
+        call["message"]["usage"]["cache_creation"] = {"ephemeral_5m_input_tokens": 0,
+                                                     "ephemeral_1h_input_tokens": 1000}
+        self.assertAlmostEqual(summarize._call_costs(self.MODEL, call["message"]["usage"])[1],
+                               1000 * summarize.PRICES[self.MODEL]["cache_write_1h"] / 1e6)
+
+    def test_zero_usage_message_from_unpriced_model_is_ignored(self):
+        # API-error placeholders carry model "<synthetic>" and no usage; they must not drop the run.
+        synthetic = self.call("e1", [{"type": "text", "text": "API Error"}])
+        synthetic["message"]["model"] = "<synthetic>"
+        synthetic["message"]["usage"] = {"input_tokens": 0, "output_tokens": 0}
+        events = [self.hook("b" * 350), synthetic,
+                  self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                  self.result(0, 1, 0, 1000)]
+        got = summarize.cost_sources(self.write(events))
+        self.assertAlmostEqual(sum(got.values()), self.result(0, 1, 0, 1000)["total_cost_usd"])
+
+    def test_calls_streamed_beyond_the_result_keep_the_sum_exact(self):
+        # A session killed during a continuation streams calls its last result never counted.
+        events = [self.hook("b" * 350),
+                  self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                  self.result(0, 1, 0, 1000),
+                  self.call("m2", [{"type": "text", "text": "more"}], read=1000, write=500)]
+        got = summarize.cost_sources(self.write(events))
+        self.assertAlmostEqual(sum(got.values()), self.result(0, 1, 0, 1000)["total_cost_usd"])
+        self.assertLess(got["overstreamed"], 0)
+
+    def test_unpriced_model_is_named_in_the_table(self):
+        run = self.root / "runs" / "small-bug" / "bearpaws" / "1"
+        run.mkdir(parents=True)
+        call = self.call("m1", [{"type": "text", "text": "done"}], write=1000)
+        call["message"]["model"] = "claude-haiku-9"
+        (run / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in [
+            self.hook("b"), call, self.result(0, 1, 0, 1000)]))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            summarize.print_cost_sources([str(self.root / "runs")])
+        self.assertIn("claude-haiku-9", out.getvalue())
+
+    def test_buckets_sum_to_session_cost_and_tools_are_split(self):
+        events = [
+            self.hook("b" * 350),
+            self.call("m1", [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}],
+                      write=1000),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "x" * 800}]}},
+            self.call("m2", [{"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": "a"}}],
+                      read=1000, write=200),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t2", "content": "y" * 400}]}},
+            self.call("m3", [{"type": "text", "text": "fixed"}], read=1200, write=100),
+            self.result(0, 3, 2200, 1300),
+        ]
+        got = summarize.cost_sources(self.write(events))
+        total = self.result(0, 3, 2200, 1300)["total_cost_usd"]
+        self.assertAlmostEqual(sum(got.values()), total)
+        self.assertGreater(got["tool:Bash"], got["tool:Read"])  # larger, and re-read once more
+        self.assertGreater(got["output"], 0)
+        self.assertNotIn("unstreamed", got)
+
+    def test_subagent_calls_go_to_their_type_and_reports_to_agent(self):
+        events = [
+            self.hook("b" * 350),
+            self.call("m1", [{"type": "tool_use", "id": "a1", "name": "Agent",
+                              "input": {"subagent_type": "bp:code-reviewer", "prompt": "review"}}],
+                      write=1000),
+            self.call("s1", [{"type": "text", "text": "LGTM"}], write=500, parent="a1"),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "a1", "content": "Approve"}]}},
+            self.call("m2", [{"type": "text", "text": "done"}], read=1000, write=50),
+            self.result(0, 3, 1000, 1550),
+        ]
+        got = summarize.cost_sources(self.write(events))
+        write_price = summarize.PRICES[self.MODEL]["cache_write_5m"] / 1e6
+        self.assertGreaterEqual(got["subagent:bp:code-reviewer"], 500 * write_price)
+        self.assertGreater(got["tool:Agent"], 0)
+        self.assertAlmostEqual(sum(got.values()), self.result(0, 3, 1000, 1550)["total_cost_usd"])
+
+    def test_skill_bodies_and_unseen_growth_are_their_own_buckets(self):
+        events = [
+            self.hook("b" * 350),
+            self.call("m1", [{"type": "tool_use", "id": "k1", "name": "Skill", "input": {"skill": "x"}}],
+                      write=1000),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "k1", "content": "Launching skill: x"}]}},
+            {"type": "user", "isSynthetic": True, "message": {"content": [
+                {"type": "text", "text": "Base directory for this skill: /s\n" + "z" * 2000}]}},
+            self.call("m2", [{"type": "text", "text": "ok"}], read=1000, write=600),
+            # A Stop-hook reason or reminder enters context without a stream block.
+            self.call("m3", [{"type": "text", "text": "ok"}], read=1600, write=300),
+            self.result(0, 3, 2600, 1900),
+        ]
+        got = summarize.cost_sources(self.write(events))
+        self.assertGreater(got["skills"], got["tool:Skill"])
+        self.assertGreater(got["other"], 0)
+
+    def test_calls_missing_from_the_stream_are_unstreamed(self):
+        events = [self.hook("b" * 350),
+                  self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                  self.result(0, 1, 5000, 1000)]  # 5000 read tokens never appear in the stream
+        got = summarize.cost_sources(self.write(events))
+        self.assertAlmostEqual(got["unstreamed"],
+                               5000 * summarize.PRICES[self.MODEL]["cache_read"] / 1e6)
+
+    def test_run_without_result_has_no_cost(self):
+        # A timed-out session records cost_usd 0 (no result event); the split must agree.
+        path = self.write([self.hook("b" * 350),
+                           self.call("m1", [{"type": "text", "text": "done"}], write=1000)])
+        self.assertEqual(summarize.cost_sources(path), {})
+
+    def test_cost_sources_table_groups_runs_by_arm(self):
+        for arm in ("control", "bearpaws"):
+            run = self.root / "runs" / "small-bug" / arm / "1"
+            run.mkdir(parents=True)
+            (run / "stream.jsonl").write_text("\n".join(json.dumps(e) for e in [
+                self.hook("b" * 350),
+                self.call("m1", [{"type": "text", "text": "done"}], write=1000),
+                self.result(0, 1, 0, 1000)]))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            summarize.print_cost_sources([str(self.root / "runs")])
+        text = out.getvalue()
+        self.assertIn("bootstrap", text)
+        self.assertIn("control", text)
+        self.assertIn("small-bug/bearpaws", text)
+
+
 if __name__ == "__main__":
     unittest.main()

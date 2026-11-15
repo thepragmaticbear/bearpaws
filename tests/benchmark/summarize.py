@@ -402,6 +402,261 @@ def parse_stream(path):
     }
 
 
+# USD per million tokens. Fitted to the 212 session records in the 2026-11-04 transcripts, where
+# tokens . prices reproduces every recorded costUSD to float precision. Reads are 0.05x input;
+# 5-minute cache writes 1.25x, 1-hour writes 2x.
+PRICES = {"claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_read": 0.1,
+                                "cache_write_5m": 2.5, "cache_write_1h": 4.0}}
+COST_COLUMNS = ("harness", "bootstrap", "skills", "output", "tool:Bash", "tool:Read", "tool:Grep",
+                "tool:Edit", "tool:Agent", "tool:other", "subagents", "other", "unstreamed", "overstreamed")
+# The bootstrap is sized at a plain-text ratio. The stream's own growth ratio (median ~1.9 chars per
+# token over the 2026-11-04 runs) is deflated by framing and reminders the stream does not show.
+BOOTSTRAP_CHARS_PER_TOKEN = 3.5
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+
+
+def usage_cost(model, usage):
+    """Cost of a modelUsage record (camelCase keys, as in CLI result events)."""
+    p = PRICES[model]
+    return (usage.get("inputTokens", 0) * p["input"] + usage.get("outputTokens", 0) * p["output"]
+            + usage.get("cacheReadInputTokens", 0) * p["cache_read"]
+            + usage.get("cacheCreationEphemeral5mInputTokens", 0) * p["cache_write_5m"]
+            + usage.get("cacheCreationEphemeral1hInputTokens", 0) * p["cache_write_1h"]) / 1e6
+
+
+def _call_costs(model, usage):
+    """(read cost, write cost) of one API call's input side, from its message usage."""
+    if not any(usage.get(k) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")):
+        return 0.0, 0.0  # e.g. "<synthetic>" API-error messages: nothing billed, no price needed
+    p = PRICES[model]
+    split = usage.get("cache_creation") or {}
+    one_hour = split.get("ephemeral_1h_input_tokens", 0)
+    five_min = split.get("ephemeral_5m_input_tokens", usage.get("cache_creation_input_tokens", 0) - one_hour)
+    write = (usage.get("input_tokens", 0) * p["input"] + five_min * p["cache_write_5m"]
+             + one_hour * p["cache_write_1h"]) / 1e6
+    return usage.get("cache_read_input_tokens", 0) * p["cache_read"] / 1e6, write
+
+
+def _share(buckets, amount, blocks):
+    """Add amount to buckets in proportion to each (bucket, tokens) block."""
+    total = sum(t for _, t in blocks)
+    for name, tokens in blocks:
+        if total > 0:
+            buckets[name] += amount * tokens / total
+
+
+def _content_chars(content):
+    if isinstance(content, str):
+        return len(content)
+    chars = 0
+    for block in content or []:
+        if block.get("type") == "tool_use":
+            chars += len(json.dumps(block.get("input", {})))
+        elif "text" in block:
+            chars += len(block["text"])
+        elif "content" in block:
+            chars += _content_chars(block["content"])
+    return chars
+
+
+def cost_sources(path):
+    """Split one run's cost (USD) by where the billed tokens came from.
+
+    Input-side cost is exact per API call (message usage). Within a root call, cache reads are shared
+    over everything already in context and writes over what is new since the previous call, in
+    proportion to estimated tokens (characters / the stream's median characters-per-token of context
+    growth, so hidden framing and reminders are mostly spread over the visible blocks). The first
+    call's context is the bootstrap (sized at BOOTSTRAP_CHARS_PER_TOKEN) plus `harness` (system
+    prompt, tool schemas, skill listing, task prompt); `harness` is re-read on every call, so its total
+    grows with the number of calls. `other` is growth left over by the median fit on calls whose
+    visible blocks are small (hook reasons, reminders, fit residue). Calls in a subagent thread go to
+    `subagent:<type>` whole. Streamed output token counts are partial, so the session's output cost is
+    spread over messages by their visible size. `unstreamed` is input cost in the session totals that
+    no streamed call accounts for (API retries, some subagent calls); `overstreamed` (negative) removes
+    calls streamed after the last result event. Buckets sum to the session cost.
+    """
+    events = []
+    with open(path) as f:
+        for line in f:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    tool_bucket, agent_type = {}, {}
+    bootstrap_chars = 0
+    root_calls, sub_calls, out_weight = [], [], {}
+    pending, seen, sessions = [], set(), {}
+    for event in events:
+        kind = event.get("type")
+        parent = event.get("parent_tool_use_id")
+        if kind == "system" and event.get("subtype") == "hook_response" \
+                and event.get("hook_event") == "SessionStart" and not bootstrap_chars:
+            try:
+                out = json.loads(event.get("stdout") or "{}")
+            except json.JSONDecodeError:
+                out = {}
+            context = (out.get("hookSpecificOutput") or {}).get("additionalContext") \
+                or out.get("additionalContext") or out.get("additional_context") or ""
+            bootstrap_chars = len(context)
+        elif kind == "system" and event.get("subtype") == "task_notification":
+            pending.append(("tool:Agent", len(event.get("summary") or "")))
+        elif kind == "assistant":
+            message = event.get("message", {})
+            ident = message.get("id") or f"anon-{len(seen)}"
+            content = message.get("content", [])
+            for block in content:
+                if block.get("type") == "tool_use":
+                    name = block.get("name")
+                    if name in ("Agent", "Task"):
+                        agent_type[block.get("id")] = block.get("input", {}).get("subagent_type") or "?"
+                        name = "Agent"
+                    tool_bucket[block.get("id")] = f"tool:{name}"
+            thread = f"subagent:{agent_type.get(parent, '?')}" if parent else "output"
+            if ident not in seen:
+                seen.add(ident)
+                record = (message.get("model"), message.get("usage") or {}, thread)
+                if parent:
+                    sub_calls.append(record)
+                else:
+                    root_calls.append(record + (pending,))
+                    pending = []
+            chars = _content_chars(content)
+            weight = out_weight.setdefault(ident, [thread, (message.get("usage") or {}).get("output_tokens", 0), 0])
+            weight[2] += chars
+            if not parent:
+                pending.append(("output", chars))
+        elif kind == "user" and not parent:
+            content = event.get("message", {}).get("content", [])
+            if isinstance(content, str):
+                content = [{"type": "text", "text": content}]
+            for block in content:
+                if block.get("type") == "tool_result":
+                    pending.append((tool_bucket.get(block.get("tool_use_id"), "tool:?"),
+                                    _content_chars(block.get("content"))))
+                elif block.get("type") == "text":
+                    text = block.get("text", "")
+                    name = "skills" if text.startswith("Base directory for this skill") else "other"
+                    pending.append((name, len(text)))
+        elif kind == "result":
+            sessions[event.get("session_id") or f"unknown-{len(sessions)}"] = event.get("modelUsage") or {}
+    if not sessions:  # no result event (timeout, crash): the run's recorded cost_usd is 0
+        return {}
+
+    def context(usage):
+        return (usage.get("input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+                + usage.get("cache_creation_input_tokens", 0))
+
+    # Characters per token for this stream: the median over root calls of new characters / new tokens.
+    ratios, prev = [], None
+    for _, usage, _, new in root_calls:
+        chars, ctx = sum(c for _, c in new), context(usage)
+        if prev is not None and chars and ctx > prev:
+            ratios.append(chars / (ctx - prev))
+        prev = ctx
+    cpt = sorted(ratios)[len(ratios) // 2] if ratios else 4.0
+
+    buckets = defaultdict(float)
+    blocks, prev, streamed = [], None, 0.0
+    for model, usage, _, new in root_calls:
+        read, write = _call_costs(model, usage)
+        streamed += read + write
+        ctx = context(usage)
+        if prev is None:
+            boot = min(bootstrap_chars / BOOTSTRAP_CHARS_PER_TOKEN, ctx)
+            fresh = [("bootstrap", boot), ("harness", ctx - boot)] + [(n, c / cpt) for n, c in new]
+            _share(buckets, read + write, fresh)
+        else:
+            grown = max(ctx - prev, 0)
+            fresh = [(n, c / cpt) for n, c in new if c]
+            estimate = sum(t for _, t in fresh)
+            if estimate > grown:
+                fresh = [(n, t * grown / estimate) for n, t in fresh]
+            elif grown - estimate > 0:
+                fresh.append(("other", grown - estimate))
+            written = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+            to_new = min(1.0, grown / written) if written else 0.0
+            _share(buckets, write * to_new, fresh or [("other", 1)])
+            _share(buckets, write * (1 - to_new) + read, blocks or [("harness", 1)])
+        blocks.extend(fresh)
+        prev = ctx
+    for model, usage, thread in sub_calls:
+        read, write = _call_costs(model, usage)
+        streamed += read + write
+        buckets[thread] += read + write
+
+    output_cost = input_cost = 0.0
+    for per_model in sessions.values():
+        for model, usage in per_model.items():
+            out = PRICES[model]["output"] * usage.get("outputTokens", 0) / 1e6
+            output_cost += out
+            input_cost += usage_cost(model, usage) - out
+    weights = [(thread, max(tokens, chars / 4)) for thread, tokens, chars in out_weight.values()]
+    if sum(w for _, w in weights) > 0:
+        _share(buckets, output_cost, weights)
+    elif output_cost:
+        buckets["unstreamed"] += output_cost
+    if input_cost - streamed > 1e-9:
+        buckets["unstreamed"] += input_cost - streamed
+    elif streamed - input_cost > 1e-9:
+        # Calls streamed after the last result event (a session killed mid-continuation): the
+        # recorded cost never counted them, so take them back out to keep the sum equal to cost_usd.
+        buckets["overstreamed"] -= streamed - input_cost
+    return dict(buckets)
+
+
+def cost_column(bucket):
+    if bucket.startswith("subagent:"):
+        return "subagents"
+    if bucket.startswith("tool:"):
+        name = bucket[5:]
+        if name in EDIT_TOOLS:
+            return "tool:Edit"
+        if name == "Glob":
+            return "tool:Grep"
+        return bucket if bucket in COST_COLUMNS else "tool:other"
+    return bucket
+
+
+def print_cost_sources(dirs):
+    """Mean USD per run by source, by arm and by scenario/arm, for runs/<scenario>/<arm>/<n>/stream.jsonl."""
+    rows, unpriced = [], Counter()
+    for d in dirs:
+        for stream in sorted(Path(d).glob("*/*/*/stream.jsonl")):
+            scenario, arm = stream.parts[-4], stream.parts[-3]
+            try:
+                rows.append((scenario, arm, cost_sources(stream)))
+            except KeyError as missing:
+                unpriced[(arm, missing.args[0] if missing.args else "?")] += 1
+    print("Cost by source (mean USD per run; input side exact per call, split by estimated tokens; "
+          "see cost_sources())")
+    print("tools*=other tools (Skill stub, TodoWrite, ...); other=context growth no stream block explains")
+    short = ["tools*" if c == "tool:other" else c.replace("tool:", "") for c in COST_COLUMNS]
+    print(f"{'group':<34} {'n':>3} " + " ".join(f"{c:>9}" for c in short) + f" {'total':>8}")
+    for key_fn in (lambda r: r[1], lambda r: f"{r[0]}/{r[1]}"):
+        groups = defaultdict(list)
+        for r in rows:
+            groups[key_fn(r)].append(r[2])
+        for key in sorted(groups):
+            g = groups[key]
+            cols = defaultdict(float)
+            for b in g:
+                for name, usd in b.items():
+                    cols[cost_column(name)] += usd / len(g)
+            print(f"{key:<34} {len(g):>3} " + " ".join(f"{cols[c]:>9.4f}" for c in COST_COLUMNS)
+                  + f" {sum(cols.values()):>8.4f}")
+    types = defaultdict(lambda: defaultdict(float))
+    for _, arm, b in rows:
+        for name, usd in b.items():
+            if name.startswith("subagent:"):
+                types[arm][name[9:]] += usd
+    if types:
+        print("\nSubagent cost by type (USD, all runs)")
+        for arm in sorted(types):
+            print(f"  {arm}: " + ", ".join(f"{t} {u:.4f}" for t, u in sorted(types[arm].items())))
+    for (arm, model), n in sorted(unpriced.items()):
+        print(f"\n{arm}: {n} run(s) skipped, model {model} not in PRICES (arm means exclude them)")
+
+
 def accept_fraction(path):
     """Share of unittest test methods passed; not requirement coverage."""
     try:
@@ -641,9 +896,13 @@ def main():
     parser.add_argument("--rescore", metavar="RESULTS", help="re-emit rows with diff fields from --runs-dir")
     parser.add_argument("--runs-dir")
     parser.add_argument("--scenarios-dir")
+    parser.add_argument("--cost-sources", nargs="+", metavar="RUNS_DIR",
+                        help="split cost by source over RUNS_DIR/<scenario>/<arm>/<n>/stream.jsonl")
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args()
-    if args.checker_source:
+    if args.cost_sources:
+        print_cost_sources(args.cost_sources)
+    elif args.checker_source:
         print(CHECKER_SOURCE)
     elif args.sandbox_profile:
         print(sandbox_profile(*args.sandbox_profile))

@@ -11,7 +11,10 @@ SUPERPOWERS_DIR=/path/to/superpowers tests/benchmark/run.sh --arms "baseline bea
 tests/benchmark/run.sh --arms "old=/path/to/previous/checkout bearpaws"   # compare two versions
 tests/benchmark/run.sh --interactive                     # no "don't ask me" suffix: measures interruptions
 tests/benchmark/summarize.py /tmp/bearpaws-tests/benchmark/<stamp>/results.jsonl
+tests/benchmark/summarize.py --cost-sources /tmp/bearpaws-tests/benchmark/<stamp>/runs   # cost split by source
 ```
+
+`--cost-sources` reads each run's `stream.jsonl` and splits its cost into the fixed harness, the bootstrap, skill bodies, the root agent's output, tool results by tool, subagent sessions, context growth the fit leaves over (`other`), calls missing from the stream (`unstreamed`) and a negative correction for calls streamed after the last result (`overstreamed`). Prices are per model in `PRICES` (fitted from recorded sessions; a run on another model is skipped and counted). Input-side cost is exact per API call; the split inside a call is by estimated tokens. Per-run sums equal the recorded `cost_usd`. Method and first results: [docs/benchmarks/2026-11-06-cost-by-source.md](../../docs/benchmarks/2026-11-06-cost-by-source.md).
 
 An empty scenario selection prints `no scenarios selected` and exits 2.
 
