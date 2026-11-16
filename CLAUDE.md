@@ -140,6 +140,7 @@ DESIGN=elevated tests/builder-eval/run.sh skills/brainstorming/SKILL.md <label> 
 tests/diagnose-eval/run.sh skills/diagnosing-bearpaws/SKILL.md <label>          # diagnosis finds a masked test failure and an ignored finding, cites path:line (none: RED)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
+tests/trim-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # SDD text routes no design / no plan / coupled plan / separate session to the right skill
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```

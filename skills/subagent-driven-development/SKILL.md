@@ -12,7 +12,7 @@ description: Use when executing implementation plans with independent tasks in t
   <triggers>
     <rule>Use when you have an implementation plan and the user chose subagent-driven execution.</rule>
     <rule>Use when tasks are mostly independent and you're staying in this session.</rule>
-    <rule>No plan, or tightly coupled tasks: use bp:brainstorming first. Executing in a separate session: use bp:executing-plans.</rule>
+    <rule>A plan comes first: no agreed design → bp:brainstorming; agreed design, no plan → bp:writing-plans. A plan with tightly coupled tasks, or run in a separate session → bp:executing-plans.</rule>
   </triggers>
 
   <process>

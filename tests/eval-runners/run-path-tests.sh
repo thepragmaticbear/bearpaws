@@ -45,6 +45,7 @@ check resume-eval       lbl-1.json      "$ROOT/tests/resume-eval/run.sh" "$skill
 check reuse-eval        lbl-1.jsonl     "$ROOT/tests/reuse-eval/run.sh" lbl 1 out
 check review-eval       lbl-1.jsonl     "$ROOT/tests/review-eval/run.sh" "$ROOT/skills/requesting-code-review/code-reviewer.md" lbl 1 out
 check risk-eval         lbl-1.jsonl     "$ROOT/tests/risk-eval/run.sh" "$skill" lbl 1 out
+check trim-eval         lbl-fit-1.json  "$ROOT/tests/trim-eval/run.sh" "$ROOT/skills/subagent-driven-development/SKILL.md" lbl 1 out
 check verification-eval lbl-skip-1.json "$ROOT/tests/verification-eval/run.sh" "$skill" lbl 1 out
 
 [ "$failed" -eq 0 ] && echo "All eval-runner path checks passed" || { echo "$failed eval-runner path check(s) failed"; exit 1; }
