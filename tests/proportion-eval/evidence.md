@@ -272,13 +272,17 @@ Text, RED (6203e56) -> final:
   first:` "(or, only if no behavior changes, `none, behavior preserved; pinned by [test names]`)".
   "However small the change," (covered by the first sentence), a lazy-load sentence and one Brevity
   bullet were cut to pay for it.
-- `test-driven-development`: "Never exempt: elevated-risk work, even a pure rename, from the pins,
-  review and receipt (`bp:using-bearpaws`), though it needs a failing test only if behavior changes".
+- `test-driven-development`: elevated work leaves the never-exempt list for its own sentence:
+  "Elevated-risk work, even a pure rename, always needs pins, review and a receipt
+  (`bp:using-bearpaws`); it needs RED only when behavior changes." Round 2 had the same rule inside
+  the list ("Never exempt: elevated-risk work, even a pure rename, from the pins, review and receipt
+  ..., though it needs a failing test only if behavior changes").
 
 Rows: iterations 1-2 tried other `Failing first:` wordings ("say so and name the pinning tests";
 `none, behavior preserved` and the names); "iter 3 + 4" used `<test names>`, which the schema
 validator rejects as a tag; "round-1 final" is `[test names]` with the unconditional failing-test
-floor; "final" is the text above.
+floor; "round-2" is the final `using-bearpaws` text with the round-2 TDD sentence; "final" is the
+text above.
 
 | Arm (3 runs each) | Risk elevated | Review dispatched | FF preserved | floor | `expected` |
 |---|---:|---:|---:|---:|---:|
@@ -287,37 +291,42 @@ floor; "final" is the text above.
 | Sonnet iter 2 | 3/3 | 2/3 | 3/3 | 2/3 | 2/3 |
 | Sonnet iter 3 + 4 (6 runs) | 5/6 | 3/6 | 5/6 | 3/6 | 3/6 |
 | Sonnet round-1 final | 2/3 | 1/3 | 2/3 | 1/3 | 1/3 |
-| Sonnet final | 2/3 | 2/3 | 2/3 | 1/3 | 1/3 |
+| Sonnet round-2 | 2/3 | 2/3 | 2/3 | 1/3 | 1/3 |
+| Sonnet final | 3/3 | 2/3 | 3/3 | 2/3 | 2/3 |
 | Opus RED | 3/3 | 3/3 | 0/3 | 3/3 | 0/3 |
 | Opus iter 1 | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
 | Opus iter 2 | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
 | Opus iter 3 + 4 (6 runs) | 6/6 | 6/6 | 4/6 | 5/6 | 3/6 |
 | Opus round-1 final | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| Opus round-2 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
 | Opus final | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
 
-Sonnet risk class: RED 1/3 here (0/3 and 1/3 in round 5) -> 14/18 across every text with the rename
-clause (2/3 on the final text). RED rationalizations: "The rename doesn't touch auth, secrets, money
+Sonnet risk class: RED 1/3 here (0/3 and 1/3 in round 5) -> 17/21 across every text with the rename
+clause (2/3 on the round-2 text, 3/3 on the final). RED rationalizations: "The rename doesn't touch auth, secrets, money
 logic, data migration or other elevated-risk areas, though the function computes tax." and "I
 treated this as a behavior-preserving rename and relied on the existing tests." The remaining misses
 give no risk reasoning at all: "I didn't add a new test, since this is a behavior-preserving rename"
 (round-1 final), "a behavior-preserving rename, which the TDD skill exempts" (iter 1). Sonnet's review
 misses are mostly an `Explore` subagent sent to review (iter 3: 2/3, round-1 final: 1/3); the scorer,
-like risk-gate, does not count `Explore` as a reviewer, which is left for a follow-up. The final
-Sonnet `expected` miss beyond the routine run had no passing run before the edit.
+like risk-gate, does not count `Explore` as a reviewer, which is left for a follow-up. The round-2
+Sonnet `expected` miss beyond the routine run had no passing run before the edit; the final miss
+dispatched no review and ended `Status: INCOMPLETE` with "Review: not run".
 
 Opus classified elevated and dispatched a review in every run; what failed is the new line. RED wrote
 a red run in 3/3: "switched `tests/test_tax.py` to the new name first; it failed with `ImportError:
 cannot import name 'compute_tax'`". That is a broken import, not a test of the risk, and the scorer
 does not count it. With the pointer rule, the earlier texts still show it in 1 of 3 runs per arm (iter
-1, iter 2, round-1 final; 2 of 6 in iter 3 + 4). On the final text, where the floor asks for a failing test
-only if behavior changes, all 3 Opus runs wrote "none, behavior preserved; pinned by the tests above"
-with `Pinned:` naming the tests, and none wrote the ImportError form.
+1, iter 2, round-1 final; 2 of 6 in iter 3 + 4). On the round-2 and final texts, where the floor asks for a failing test
+only if behavior changes, all 6 Opus runs wrote the preserved form (round-2: all 3 "none, behavior preserved; pinned by the tests above"
+with `Pinned:` naming the tests; final: 2 pointers, 1 with names), and none wrote the ImportError form.
 
 Hooks: `lib-receipt` rejects a bare placeholder `Failing first:` (N/A, na, n.a., none, none needed,
 not needed, -, —, TBD, todo, not applicable; any case, markdown or parentheses, trailing period) on
 an elevated COMPLETE receipt, in risk-gate and the git commit-msg gate. The value includes wrapped
 continuation lines up to the next receipt key or a blank line, so "none" followed by an indented
-"behavior preserved; pinned by test_tax" passes. The hook cannot judge the rest of the line; the
+"behavior preserved; pinned by test_tax" passes; with an empty inline value, blank lines before
+bullets are skipped (as the other fields do). Bullet and number markers are stripped first, so
+`Failing first:` over "- none" or "1) N/A" still blocks. The hook cannot judge the rest of the line; the
 review, `Pinned:` against the log, and this scorer are the backstop against a real fix called
 behavior-preserving.
 
@@ -328,7 +337,7 @@ the scorer does not count (the follow-up above). Routing eval (`tests/skill-trig
 Sonnet, new `money-rename` case): RED 3/3 elevated, `<test names>` text 3/3, other cases 3/3 in both;
 the text-only routing probe does not reproduce the in-task miss.
 
-Runs: 42 `money-rename` runs (Sonnet 21, Opus 21), 9 risk-eval, 36 routing (text-only). Raw
+Runs: 48 `money-rename` runs (Sonnet 24, Opus 24), 9 risk-eval, 36 routing (text-only). Raw
 outputs: `/tmp/bearpaws-tests/elev-rename/`.
 
 Limits: one fixture, n=3 per cell, two models. Raw outputs land under

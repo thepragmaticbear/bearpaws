@@ -1228,6 +1228,18 @@ expect "FF: none followed by the next key still blocks" block "Failing first"
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; review
 stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: none${NL}${NL}behavior preserved; pinned by test_tax}"
 expect "FF: text after a blank line is not part of the value" block "Failing first"
+# Empty inline value with bullets (after an optional blank line): the bullets are the value.
+FF_RISK="Failing first: none, behavior preserved; test_tax and test_invoice_total pin it"
+for v in "${NL}${NL}- test_tax failed before the fix, passed after" "${NL}- test_tax failed before the fix, passed after" \
+  "${NL}- none${NL}- behavior preserved; pinned by test_tax" "${NL}${NL}1. none, behavior preserved; pinned by test_tax"; do
+  reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:$v}"
+  expect "FF: bullet Failing first '${v//$NL/ / }': allow" allow
+done
+# A placeholder inside a bullet or numbered item is still a placeholder.
+for v in "${NL}- none" "${NL}- N/A" "${NL}- none needed" "${NL}${NL}* n/a" "${NL}+ TBD" "${NL}1. none" "${NL}1) N/A" " - none"; do
+  reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:$v}"
+  expect "FF: bullet placeholder Failing first '${v//$NL/ / }' blocks" block "Failing first"
+done
 reset; edit src/tax.py; ran "pytest"; review; stop "$E_RENAME"
 expect "FF: behavior-preserving form still needs a Pinned run before the edit" block "Pinned"
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; stop "$E_RENAME"

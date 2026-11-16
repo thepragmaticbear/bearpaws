@@ -149,24 +149,43 @@ review_is_placeholder() {
 
 # field_block <key>: like field_raw, but the value always includes the lines that follow the last
 # <key>: line, up to the next receipt key, a quoted line or a blank line, so a populated first line
-# that wraps ("none" then "  behavior preserved; pinned by test_tax") is read whole. Returns 1 if absent.
+# that wraps ("none" then "  behavior preserved; pinned by test_tax") is read whole. While nothing has
+# been read (empty inline value), blank lines before a bullet are skipped, as in field_raw. Bullet and
+# number markers (-, *, +, 1., 1)) are stripped from each line, so "- none" reads as "none".
+# Returns 1 if absent.
 field_block() {
   LEAD="$LEAD" TRAIL="$TRAIL" ALL_KEYS="$ALL_KEYS" KEY="$1" LC_ALL=C awk '
     BEGIN {
       key_re = tolower(ENVIRON["LEAD"] ENVIRON["KEY"] ENVIRON["TRAIL"] ":")
       all_re = tolower(ENVIRON["LEAD"] ENVIRON["ALL_KEYS"] ENVIRON["TRAIL"] ":")
+      item_re = "^[[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+"
+    }
+    function clean(t) {
+      gsub(/[*`_]/, "", t)
+      sub(/^[[:space:]]+/, "", t); sub(/[[:space:]]+$/, "", t)
+      return t
     }
     { lines[NR] = $0; if (tolower($0) ~ key_re) last = NR }
     END {
       if (!last) exit 1
-      out = lines[last]
-      sub(/^[^:]*:/, "", out)
+      val = lines[last]
+      sub(/^[^:]*:/, "", val)
+      sub(item_re, "", val)
+      out = clean(val)
       for (i = last + 1; i <= NR; i++) {
         ln = lines[i]
-        if (tolower(ln) ~ all_re || ln ~ /^[[:space:]]*>/ || ln ~ /^[[:space:]]*$/) break
-        out = out " " ln
+        if (tolower(ln) ~ all_re || ln ~ /^[[:space:]]*>/) break
+        if (ln ~ /^[[:space:]]*$/) {
+          if (out != "") break
+          j = i + 1
+          while (j <= NR && lines[j] ~ /^[[:space:]]*$/) j++
+          if (j <= NR && lines[j] ~ item_re && tolower(lines[j]) !~ all_re) continue
+          break
+        }
+        sub(item_re, "", ln)
+        ln = clean(ln)
+        if (ln != "") out = (out == "" ? ln : out " " ln)
       }
-      gsub(/[*`_]/, "", out); sub(/^[[:space:]]+/, "", out); sub(/[[:space:]]+$/, "", out)
       print out
     }' <<<"$msg"
 }

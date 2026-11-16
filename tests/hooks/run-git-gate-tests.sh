@@ -331,6 +331,18 @@ reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied f
 expect "FF: none followed by the next key still blocks" block "Failing first"
 reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: none${NL}${NL}behavior preserved; pinned by test_tax}"
 expect "FF: text after a blank line is not part of the value" block "Failing first"
+# Empty inline value with bullets (after an optional blank line): the bullets are the value.
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+for v in "${NL}${NL}- test_tax failed before the fix, passed after" "${NL}- test_tax failed before the fix, passed after" \
+  "${NL}- none${NL}- behavior preserved; pinned by test_tax" "${NL}${NL}1. none, behavior preserved; pinned by test_tax"; do
+  reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:$v}"
+  expect "FF: bullet Failing first '${v//$NL/ / }' passes" pass
+done
+# A placeholder inside a bullet or numbered item is still a placeholder.
+for v in "${NL}- none" "${NL}- N/A" "${NL}- none needed" "${NL}${NL}* n/a" "${NL}+ TBD" "${NL}1. none" "${NL}1) N/A" " - none"; do
+  reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:$v}"
+  expect "FF: bullet placeholder Failing first '${v//$NL/ / }' blocks" block "Failing first"
+done
 reset; stage src/authz.py; gate "$ELEVATED"; expect "FF: normal failing-test Failing first passes" pass
 reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: N/A}")"
 expect "FF: placeholder Failing first with INCOMPLETE passes" pass
