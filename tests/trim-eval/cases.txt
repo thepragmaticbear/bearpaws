@@ -1,0 +1,5 @@
+nodesign|bp:brainstorming|Your human partner says: "Add per-user rate limiting to our API." No design has been discussed or agreed, and no plan exists.
+noplan|bp:writing-plans|Your human partner approved the design at docs/bearpaws/plans/rate-limit-design.md. No implementation plan has been written yet.
+coupled|bp:executing-plans|There is an approved plan at docs/bearpaws/plans/refactor.md. Its five tasks are tightly coupled: every task rewrites the same core module and each builds on the previous task's output.
+separate|bp:executing-plans|There is an approved plan with six independent tasks. Your human partner says: "Don't run it here; I'll execute it in a separate session later with checkpoints."
+fit|bp:subagent-driven-development,bp:using-git-worktrees|There is an approved plan with six independent tasks, and your human partner wants it executed now in this session.

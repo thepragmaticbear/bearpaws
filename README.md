@@ -1,5 +1,7 @@
 # Bearpaws
 
+<p align="center"><img src="assets/bearpaws.png" alt="Bearpaws mascot: a brown bear in a pixel-art mask, raising one paw" width="480"></p>
+
 **Safety habits for AI assistants that write code.**
 
 AI coding assistants, such as Claude Code, can write and change software on their own. Bearpaws is a free add-on that makes them more careful when a mistake would be costly, and keeps them quick when it wouldn't.

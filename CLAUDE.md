@@ -142,6 +142,7 @@ tests/diagnose-eval/run.sh skills/diagnosing-bearpaws/SKILL.md <label>          
 tests/proportion-eval/run.sh <label>                                         # no new test for exempt changes; failing test first for behavior, prompt files, defaults (SKILL_ROOT=<checkout>; VIA=implementer: SDD implementer prompt; VIA=plan: writing-plans plan only)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
+tests/trim-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # SDD text routes no design / no plan / coupled plan / separate session to the right skill
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
 GLOBAL=1 tests/codex/run-conformance.sh                                       # same, against ./install.sh --agents --global + ~/.codex/AGENTS.md line
 ```

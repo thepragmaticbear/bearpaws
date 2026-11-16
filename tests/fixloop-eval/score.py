@@ -126,7 +126,8 @@ def parse(path):
     """
     final, uses, costs = None, [], {}
     try:
-        lines = open(path, errors="replace").readlines()
+        with open(path, errors="replace") as f:
+            lines = f.readlines()
     except OSError:
         lines = []
     for line in lines:
@@ -148,9 +149,10 @@ def parse(path):
 def main(argv):
     if argv[1:2] == ["--summary"]:
         groups = defaultdict(list)
-        for line in open(argv[2]):
-            row = json.loads(line)
-            groups[row["label"]].append(row)
+        with open(argv[2]) as f:
+            for line in f:
+                row = json.loads(line)
+                groups[row["label"]].append(row)
         keys = ["pass", "incomplete", "open_names_finding", "no_dispatch", "no_round6"]
         for label, rows in groups.items():
             counts = {k: f"{sum(r.get(k, False) for r in rows)}/{len(rows)}" for k in keys}
