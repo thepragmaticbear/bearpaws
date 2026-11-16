@@ -10,8 +10,9 @@ BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|police[a-z]*|cryptic[a-z]*|(co)?a
 LEAD='^[[:space:]*_#0-9.`-]*'
 TRAIL='[*_`]*'
 ALL_KEYS='(Risk|Pinned|Failing first|Review|Open|Assumptions|Verified|Not checked|Status)'
-# A list item: -, * or + bullets and 1. or 1) numbers, at any indent, followed by space or end of line.
-ITEM='^[[:space:]]*([-*+]|[0-9]+[.)])([[:space:]]|$)'
+# A list item: -, *, + or • bullets and 1. or 1) numbers, at any indent, followed by space or end of
+# line. • is matched as its UTF-8 bytes, so it works under LC_ALL=C (every reader here sets it).
+ITEM='^[[:space:]]*([-*+]|•|[0-9]+[.)])([[:space:]]|$)'
 
 # sensitive_paths: print the stdin lines that look elevated-risk, case-insensitively, splitting
 # camelCase/Acronym boundaries (keeping plural acronyms like ACLs intact) and removing BENIGN words
@@ -142,9 +143,12 @@ open_state() {
 
 # review_is_placeholder <val>: 0 if empty or a placeholder (none, skipped, n/a, -, todo, tbd, pending,
 # self-review (with or without trailing text), bare no/not, or no/not followed by review/done/run/yet/applicable/needed).
+# Leading list markers (ITEM's grammar) are stripped first, so a value of only markers ("1)") is empty.
 review_is_placeholder() {
   local v
-  v="$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | tr '\n\r\t' '   ' | tr -d '()*`' | sed -E 's/[[:space:]]+/ /g; s/^ +| +$//g')"
+  v="$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C tr '\n\r\t' '   ' | LC_ALL=C tr -d '*`' \
+    | LC_ALL=C sed -E -e 's/[[:space:]]+/ /g; s/^ +| +$//g' -e ':a' -e 's/^([-+]|•|[0-9]+[.)])( +|$)//' -e 'ta' \
+    | LC_ALL=C tr -d '()' | LC_ALL=C sed -E 's/^ +| +$//g')"
   [ -n "$v" ] || return 0
   grep -qE '^(none|skipped|skip|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self-review(ed)?|self)([^[:alnum:]_-].*)?$|^(no|not)[.]?$|^(no|not) (review|reviews|reviewed|reviewer|done|run|yet|applicable|needed|required)([^[:alnum:]_-].*)?$' <<<"$v"
 }
@@ -175,6 +179,8 @@ entries_state() {
       return t
     }
     function add(t) {
+      # A code fence delimiter (``` or ~~~, with any info string) is presentation, not an entry.
+      if (t ~ /^[[:space:]]*(```|~~~)/) return
       t = norm(t)
       if (t == "") return
       texts++

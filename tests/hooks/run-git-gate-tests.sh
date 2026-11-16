@@ -391,6 +391,36 @@ reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}  -}"
 expect "R4: only empty bullets (commit): blocks" block "placeholder"
 reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - N/A}")"
 expect "R4: nested placeholders with INCOMPLETE (commit): passes" pass
+# R5: bullet-dot items, code fences, and a Review of only list markers (commit mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+REV_GIT="Review: bp:code-reviewer — Ready to merge: Yes"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: • none}"
+expect "R5: inline bullet-dot none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• N/A}"
+expect "R5: bullet-dot N/A on next line (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}• none}"
+expect "R5: blank then bullet-dot none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• none${NL}  • n/a}"
+expect "R5: nested bullet-dot placeholders (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${FENCE}text${NL}none${NL}${FENCE}}"
+expect "R5: fence with info string holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}~~~${NL}N/A${NL}~~~}"
+expect "R5: tilde fence holding N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${NL}${FENCE}${NL}- none${NL}${FENCE}}"
+expect "R5: bold key, fence holding a none bullet (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• test_x failed, then passed}"
+expect "R5: bullet-dot evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${FENCE}text${NL}test_x failed, then passed${NL}${FENCE}}"
+expect "R5: fence holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1)}"
+expect "R5: Review blank then bare 1) (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}•}"
+expect "R5: Review bare bullet-dot (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1)${NL}  -}"
+expect "R5: Review nested bare markers (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1) bp:code-reviewer — Ready to merge: Yes}"
+expect "R5: Review numbered evidence (commit): passes" pass
 
 # M-f: missing-receipt error lists what commits require and does not ask for Not checked.
 reset; stage src/ui/button.py; gate "Fix button label"

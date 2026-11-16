@@ -1292,6 +1292,36 @@ reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF
 expect "R4: only empty bullets (stop): missing" block "invalid Failing first:"
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${E_RENAME/$FF_RISK/Failing first:${NL}- none${NL}  - N/A}")"
 expect "R4: nested placeholders with INCOMPLETE (stop): allow" allow
+# R5: bullet-dot items, code fences, and a Review of only list markers (Stop mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+FF_RISK="Failing first: none, behavior preserved; test_tax and test_invoice_total pin it"
+REV_RISK="Review: bp:code-reviewer — Ready to merge: Yes"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first: • none}"
+expect "R5: inline bullet-dot none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}• N/A}"
+expect "R5: bullet-dot N/A on next line (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${NL}• none}"
+expect "R5: blank then bullet-dot none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}• none${NL}  • n/a}"
+expect "R5: nested bullet-dot placeholders (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${FENCE}text${NL}none${NL}${FENCE}}"
+expect "R5: fence with info string holding none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}~~~${NL}N/A${NL}~~~}"
+expect "R5: tilde fence holding N/A (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:**${NL}${FENCE}${NL}- none${NL}${FENCE}}"
+expect "R5: bold key, fence holding a none bullet (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}• test_x failed, then passed}"
+expect "R5: bullet-dot evidence (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${FENCE}text${NL}test_x failed, then passed${NL}${FENCE}}"
+expect "R5: fence holding evidence (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$REV_RISK/Review:${NL}${NL}1)}"
+expect "R5: Review blank then bare 1) (stop): blocks" block "Review"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$REV_RISK/Review:${NL}•}"
+expect "R5: Review bare bullet-dot (stop): blocks" block "Review"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$REV_RISK/Review:${NL}${NL}1)${NL}  -}"
+expect "R5: Review nested bare markers (stop): blocks" block "Review"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$REV_RISK/Review:${NL}${NL}1) bp:code-reviewer — Ready to merge: Yes}"
+expect "R5: Review numbered evidence (stop): allow" allow
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"

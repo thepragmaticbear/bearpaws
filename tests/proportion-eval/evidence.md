@@ -325,11 +325,13 @@ and the git commit-msg gate, unless some entry is more than a placeholder (N/A, 
 needed, not needed, -, —, TBD, todo, not applicable). One normalizer, `entries_state`, serves both
 the Stop-mode presence check and this classification: the entries are the inline value and each
 following line up to the next receipt key or a blank line (blank lines before the first list item
-are skipped); each entry has Markdown delimiters removed, then list markers (`-`, `*`, `+`, `1.`,
-`1)`, nested and indented), then parentheses, case and a trailing period. So `**Failing first:** -
+are skipped); each entry has Markdown delimiters removed, then list markers (`-`, `*`, `+`, `•`, `1.`,
+`1)`, nested and indented), then parentheses, case and a trailing period; code fence delimiter lines
+(```` ``` ````, ```` ```lang ````, `~~~`) are not entries. So `**Failing first:** -
 none`, nested `- none` / `  - N/A`, and an empty parent bullet over `- none` block, while `- none` /
 `- behavior preserved; pinned by test_tax` passes. field_raw's blank-line lookahead uses the same
-list grammar, so a blank line then `1) test_x failed` counts as present in Stop mode too. The hook cannot judge the rest of the line; the
+list grammar, so a blank line then `1) test_x failed` counts as present in Stop mode too. A `Review:` value made
+only of list markers (a blank line then a bare `1)`) counts as a placeholder in both modes. The hook cannot judge the rest of the line; the
 review, `Pinned:` against the log, and this scorer are the backstop against a real fix called
 behavior-preserving.
 
