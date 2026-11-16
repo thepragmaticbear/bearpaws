@@ -12,7 +12,7 @@ description: Use when implementing any feature or bugfix, before writing impleme
   <triggers>
     <rule>Use when implementing any new feature, before writing implementation code.</rule>
     <rule>Use when fixing any bug — write a failing test that reproduces it first.</rule>
-    <rule>Use when refactoring or changing behavior in existing code.</rule>
+    <rule>Use when changing behavior in existing code, including during a refactor.</rule>
   </triggers>
 
   <warning level="hard">
@@ -22,29 +22,18 @@ description: Use when implementing any feature or bugfix, before writing impleme
   <rules>
     <rule>Test-first is non-negotiable. RED before GREEN.</rule>
     <rule>Wrote code before the test? Delete it. Don't keep it as "reference", don't "adapt" it, don't look at it. Delete means delete. Implement fresh from tests.</rule>
-    <rule>Exceptions (ask your human partner first): throwaway prototypes, generated code, configuration files.</rule>
+    <rule>Exceptions (ask your human partner first): throwaway prototypes, generated code.</rule>
+    <rule>**Exempt, no new test or permission needed:** docs and comments that shape no agent's or tool's behavior; behavior-preserving typo, format, rename and refactor changes; config no caller or user can observe (lint, formatter). Overrides the warning, tables, Red Flags and checklist for these only. Code/config: run existing tests and check uncovered behavior directly (run it, compare output), before and after; if you can't, end `Status: INCOMPLETE` naming it. Docs: name what you checked. Never exempt: elevated-risk work, even a pure rename; a changed runtime default, limit, flag or timeout, in any file; prompts or Markdown that shape agent or model behavior (test them with an eval or the project's prompt-content test).</rule>
   </rules>
 
   <process>
     <step>**RED** — Write one minimal failing test showing what should happen. One behavior, clear name, real code (no mocks unless unavoidable).</step>
-    <step>**Verify RED** — Run `npm test path/to/test.test.ts`. Confirm: test *fails* (not errors), failure message is expected, fails because feature is missing (not typos). Test passes immediately? You're testing existing behavior — fix the test.</step>
+    <step>**Verify RED** — Run the test alone, before any code edit, never in the same command. Confirm: test *fails* (not errors), failure message is expected, fails because feature is missing (not typos). Test passes immediately? You're testing existing behavior — fix the test.</step>
     <step>**GREEN** — Write the simplest code to pass the test. Don't add features, refactor other code, or "improve" beyond the test.</step>
     <step>**Verify GREEN** — Run tests. Confirm: test passes, *all other* tests still pass, output is pristine (no errors, warnings). Test fails? Fix code, not test. Other tests fail? Fix now.</step>
     <step>**REFACTOR** — After green only: remove duplication, improve names, extract helpers. Keep tests green. Don't add behavior.</step>
     <step>**Repeat** — Next failing test for next behavior.</step>
   </process>
-
-  <flow format="dot">
-    ```dot
-    digraph tdd_cycle {
-      rankdir=LR;
-      red [label="RED\nFailing test", shape=box, style=filled, fillcolor="#ffcccc"];
-      green [label="GREEN\nMinimal code", shape=box, style=filled, fillcolor="#ccffcc"];
-      refactor [label="REFACTOR\nClean up", shape=box, style=filled, fillcolor="#ccccff"];
-      red -> green -> refactor -> red;
-    }
-    ```
-  </flow>
 
   <example type="good">
     **RED** — Bug: empty email accepted
@@ -64,27 +53,13 @@ description: Use when implementing any feature or bugfix, before writing impleme
     }
     ```
     **Verify GREEN** — `PASS`
-
-    **REFACTOR** — Extract validation for multiple fields if needed.
   </example>
-
-  <example type="bad">
-    Writing production code first, then writing tests that pass immediately. Passing immediately proves nothing — you never saw the test catch the bug.
-  </example>
-
-  <antipattern>
-    "I'll write tests after to verify it works" — Tests-after answer "What does this do?" Tests-first answer "What *should* this do?" Tests-after are biased by your implementation. You test what you built, not what's required.
-  </antipattern>
-
-  <antipattern>
-    "Keep as reference, write tests first" — You'll adapt it. That's testing after. Delete means delete.
-  </antipattern>
 
   ## Common Rationalizations
 
   | Excuse | Reality |
   |--------|---------|
-  | "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
+  | "Too simple to test" (changed behavior) | Simple code breaks. Test takes 30 seconds. |
   | "I'll test after" | Tests passing immediately prove nothing. |
   | "Already manually tested" | Ad-hoc != systematic. No record, can't re-run. |
   | "Deleting X hours is wasteful" | Sunk cost fallacy. Keeping unverified code is tech debt. |
@@ -116,13 +91,11 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
   Before marking work complete:
 
-  - [ ] Every new function/method has a test
-  - [ ] Watched each test fail before implementing
-  - [ ] Each test failed for expected reason (feature missing, not typo)
-  - [ ] Wrote minimal code to pass each test
-  - [ ] All tests pass with pristine output
-  - [ ] Tests use real code (mocks only if unavoidable)
-  - [ ] Edge cases and errors covered
+  - [ ] Each changed behavior has a test; extend an existing test file or reuse a reproducing test first
+  - [ ] Each test pins a user-visible behavior and fails if it breaks slightly, not that a framework works or an argument exists (a prompt-content test may assert required text)
+  - [ ] Before review: broke the code each test you added or rewrote covers, then restored it; a test that still passed is fixed or deleted
+  - [ ] Watched each test fail for the expected reason before implementing
+  - [ ] Removed a pre-existing assertion only when your human partner's requirement made it untrue, never to get green; each named in the receipt
 
   Can't check all boxes? You skipped TDD. Start over.
 

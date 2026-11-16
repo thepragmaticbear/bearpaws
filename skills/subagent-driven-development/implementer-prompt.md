@@ -30,7 +30,12 @@ Agent tool (general-purpose):
 
     Once you're clear on requirements:
     1. Implement exactly what the task specifies
-    2. Write tests (following TDD if task says to)
+    2. Per bp:test-driven-development, changed behavior and elevated-risk work get a test run
+       alone and seen failing before the edit. No new test for docs that shape no agent or
+       tool, behavior-preserving renames and refactors, or unobservable config (never if
+       elevated). Code/config: run existing tests and check uncovered behavior directly, before
+       and after; if you can't, report DONE_WITH_CONCERNS naming it. Docs: name what you checked.
+       Runtime defaults, limits, flags, timeouts and prompt files are behavior.
     3. Verify implementation works
     4. Commit your work
     5. Self-review (see below)
@@ -38,13 +43,8 @@ Agent tool (general-purpose):
 
     Work from: [directory]
 
-    **While you work:** If you encounter something unexpected or unclear, **ask questions**.
-    It's always OK to pause and clarify. Don't guess or make assumptions.
-
     ## Code Organization
 
-    You reason best about code you can hold in context at once, and your edits are more
-    reliable when files are focused. Keep this in mind:
     - Follow the file structure defined in the plan
     - Each file should have one clear responsibility with a well-defined interface
     - If a file you're creating is growing beyond the plan's intent, stop and report
@@ -93,7 +93,7 @@ Agent tool (general-purpose):
     **Testing:**
     - Do tests actually verify behavior (not just mock behavior)?
     - Did I follow TDD if required?
-    - Are tests comprehensive?
+    - Does coverage pin required behavior without redundant cases?
 
     If you find issues during self-review, fix them now before reporting.
 
@@ -102,7 +102,7 @@ Agent tool (general-purpose):
     When done, report:
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - What you implemented (or what you attempted, if blocked)
-    - What you tested and test results
+    - What you tested and test results; Not checked: what you did not verify, or none
     - Files changed
     - Assumptions you relied on (what you took as true without verifying)
     - Self-review findings (if any)

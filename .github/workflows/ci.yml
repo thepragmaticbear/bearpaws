@@ -118,6 +118,7 @@ jobs:
       - run: python3 tests/fixloop-eval/test_score.py
       - run: python3 tests/builder-eval/test_score.py
       - run: python3 tests/diagnose-eval/test_score.py
+      - run: python3 tests/proportion-eval/test_score.py
       - run: python3 tests/reuse-eval/test_score.py
       - run: python3 tests/risk-eval/test_score.py
       - run: bash tests/claude-code/test-native-plan-static.sh
