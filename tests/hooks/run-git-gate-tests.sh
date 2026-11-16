@@ -350,6 +350,47 @@ reset; stage src/ui/button.py; gate $'Fix button label\n\nRisk: routine\nFailing
 expect "FF: routine commit with Failing first: N/A unaffected" pass
 reset; stage src/authz.py; gate "$(grep -v '^Failing first:' <<<"$ELEVATED")"
 expect "FF: elevated commit without a Failing first line is unchanged (passes)" pass
+# R4: Failing first is normalized entry by entry (Markdown, then list markers), in commit mode.
+CR=$'\r'; TAB=$'\t'
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:** - none}"
+expect "R4: bold key, marker after closing bold (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${NL}- N/A}"
+expect "R4: bold key, N/A bullet on next line (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:** - **none**}"
+expect "R4: bold key, bold placeholder in a bullet (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - N/A}"
+expect "R4: nested placeholders join (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}  - none}"
+expect "R4: empty parent bullet, nested none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${NL}    * N/A}"
+expect "R4: empty parent bullet with space, nested N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}1) none${NL}   - TBD${NL}   - not needed}"
+expect "R4: numbered then nested placeholders (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${CR}${NL}- none${CR}${NL}  - n/a${CR}}"
+expect "R4: bold key, nested placeholders, CRLF (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}${TAB}- none}"
+expect "R4: tab-indented nested placeholder (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}- behavior preserved; pinned by test_tax}"
+expect "R4: placeholder then evidence bullet (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - behavior preserved; pinned by test_tax}"
+expect "R4: nested evidence under none (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${CR}${NL}- test_tax failed before the fix, passed after${CR}}"
+expect "R4: bold key, evidence, CRLF (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}1) test_x failed, then passed}"
+expect "R4: blank then 1) failing test (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}-${NL}  1) test_x failed, then passed}"
+expect "R4: blank then nested 1) under empty bullet (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: 1.5x slower test_x failed first}"
+expect "R4: numeric prose is not a marker (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}1) none}"
+expect "R4: blank then 1) none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:}"
+expect "R4: empty value, nothing after (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}  -}"
+expect "R4: only empty bullets (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - N/A}")"
+expect "R4: nested placeholders with INCOMPLETE (commit): passes" pass
 
 # M-f: missing-receipt error lists what commits require and does not ask for Not checked.
 reset; stage src/ui/button.py; gate "Fix button label"

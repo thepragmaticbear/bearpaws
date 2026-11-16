@@ -320,13 +320,16 @@ does not count it. With the pointer rule, the earlier texts still show it in 1 o
 only if behavior changes, all 6 Opus runs wrote the preserved form (round-2: all 3 "none, behavior preserved; pinned by the tests above"
 with `Pinned:` naming the tests; final: 2 pointers, 1 with names), and none wrote the ImportError form.
 
-Hooks: `lib-receipt` rejects a bare placeholder `Failing first:` (N/A, na, n.a., none, none needed,
-not needed, -, —, TBD, todo, not applicable; any case, markdown or parentheses, trailing period) on
-an elevated COMPLETE receipt, in risk-gate and the git commit-msg gate. The value includes wrapped
-continuation lines up to the next receipt key or a blank line, so "none" followed by an indented
-"behavior preserved; pinned by test_tax" passes; with an empty inline value, blank lines before
-bullets are skipped (as the other fields do). Bullet and number markers are stripped first, so
-`Failing first:` over "- none" or "1) N/A" still blocks. The hook cannot judge the rest of the line; the
+Hooks: `lib-receipt` rejects a `Failing first:` block on an elevated COMPLETE receipt, in risk-gate
+and the git commit-msg gate, unless some entry is more than a placeholder (N/A, na, n.a., none, none
+needed, not needed, -, —, TBD, todo, not applicable). One normalizer, `entries_state`, serves both
+the Stop-mode presence check and this classification: the entries are the inline value and each
+following line up to the next receipt key or a blank line (blank lines before the first list item
+are skipped); each entry has Markdown delimiters removed, then list markers (`-`, `*`, `+`, `1.`,
+`1)`, nested and indented), then parentheses, case and a trailing period. So `**Failing first:** -
+none`, nested `- none` / `  - N/A`, and an empty parent bullet over `- none` block, while `- none` /
+`- behavior preserved; pinned by test_tax` passes. field_raw's blank-line lookahead uses the same
+list grammar, so a blank line then `1) test_x failed` counts as present in Stop mode too. The hook cannot judge the rest of the line; the
 review, `Pinned:` against the log, and this scorer are the backstop against a real fix called
 behavior-preserving.
 

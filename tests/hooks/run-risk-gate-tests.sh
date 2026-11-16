@@ -1251,6 +1251,47 @@ stop "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${E_RENAME/Failing firs
 expect "FF: placeholder Failing first with INCOMPLETE: allow" allow
 reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nFailing first: N/A\nVerified: git diff — only the label changed\nNot checked: none\nStatus: COMPLETE'
 expect "FF: routine receipt with Failing first: N/A unaffected" allow
+# R4: Failing first is normalized entry by entry (Markdown, then list markers), in Stop mode.
+CR=$'\r'; TAB=$'\t'
+FF_RISK="Failing first: none, behavior preserved; test_tax and test_invoice_total pin it"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:** - none}"
+expect "R4: bold key, marker after closing bold (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:**${NL}- N/A}"
+expect "R4: bold key, N/A bullet on next line (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:** - **none**}"
+expect "R4: bold key, bold placeholder in a bullet (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- none${NL}  - N/A}"
+expect "R4: nested placeholders join (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}-${NL}  - none}"
+expect "R4: empty parent bullet, nested none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- ${NL}    * N/A}"
+expect "R4: empty parent bullet with space, nested N/A (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}1) none${NL}   - TBD${NL}   - not needed}"
+expect "R4: numbered then nested placeholders (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:**${CR}${NL}- none${CR}${NL}  - n/a${CR}}"
+expect "R4: bold key, nested placeholders, CRLF (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}-${NL}${TAB}- none}"
+expect "R4: tab-indented nested placeholder (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- none${NL}- behavior preserved; pinned by test_tax}"
+expect "R4: placeholder then evidence bullet (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- none${NL}  - behavior preserved; pinned by test_tax}"
+expect "R4: nested evidence under none (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/**Failing first:**${CR}${NL}- test_tax failed before the fix, passed after${CR}}"
+expect "R4: bold key, evidence, CRLF (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${NL}1) test_x failed, then passed}"
+expect "R4: blank then 1) failing test (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${NL}-${NL}  1) test_x failed, then passed}"
+expect "R4: blank then nested 1) under empty bullet (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first: 1.5x slower test_x failed first}"
+expect "R4: numeric prose is not a marker (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}${NL}1) none}"
+expect "R4: blank then 1) none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:}"
+expect "R4: empty value, nothing after (stop): missing" block "invalid Failing first:"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}-${NL}  -}"
+expect "R4: only empty bullets (stop): missing" block "invalid Failing first:"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${E_RENAME/$FF_RISK/Failing first:${NL}- none${NL}  - N/A}")"
+expect "R4: nested placeholders with INCOMPLETE (stop): allow" allow
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"
