@@ -307,6 +307,135 @@ for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/toke
   reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on benign $p passes silently" pass
 done
 
+# FF: Failing first on elevated COMPLETE, where present, is never a bare placeholder. A behavior-preserving
+# change says so and names the pinning tests. INCOMPLETE, routine and an absent line are unaffected.
+FF_OK='none, behavior preserved; test_tax and test_invoice_total pin it'
+for v in "N/A" "n/a" "none" "None." "-" "—" "TBD" "**N/A**" "(n/a)" "na" "n.a." "todo" "not applicable"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $FF_OK}"
+expect "FF: behavior-preserving Failing first naming pinning tests passes" pass
+NL=$'\n'
+for v in "none needed" "none." "not needed"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+# A populated first line that wraps (trailers or body): the continuation lines are part of the value.
+for v in $'none\n  behavior preserved; pinned by test_tax' $'none\n- behavior preserved; pinned by test_tax' \
+  $'none needed\n  behavior preserved; pinned by test_tax' "none needed: behavior preserved; pinned by test_tax"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: Failing first '${v//$NL/ / }' with an explanation passes" pass
+done
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: none}"
+expect "FF: none followed by the next key still blocks" block "Failing first"
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: none${NL}${NL}behavior preserved; pinned by test_tax}"
+expect "FF: text after a blank line is not part of the value" block "Failing first"
+# Empty inline value with bullets (after an optional blank line): the bullets are the value.
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+for v in "${NL}${NL}- test_tax failed before the fix, passed after" "${NL}- test_tax failed before the fix, passed after" \
+  "${NL}- none${NL}- behavior preserved; pinned by test_tax" "${NL}${NL}1. none, behavior preserved; pinned by test_tax"; do
+  reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:$v}"
+  expect "FF: bullet Failing first '${v//$NL/ / }' passes" pass
+done
+# A placeholder inside a bullet or numbered item is still a placeholder.
+for v in "${NL}- none" "${NL}- N/A" "${NL}- none needed" "${NL}${NL}* n/a" "${NL}+ TBD" "${NL}1. none" "${NL}1) N/A" " - none"; do
+  reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:$v}"
+  expect "FF: bullet placeholder Failing first '${v//$NL/ / }' blocks" block "Failing first"
+done
+reset; stage src/authz.py; gate "$ELEVATED"; expect "FF: normal failing-test Failing first passes" pass
+reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: N/A}")"
+expect "FF: placeholder Failing first with INCOMPLETE passes" pass
+reset; stage src/ui/button.py; gate $'Fix button label\n\nRisk: routine\nFailing first: N/A\nVerified: pytest — 12 passed\nStatus: COMPLETE'
+expect "FF: routine commit with Failing first: N/A unaffected" pass
+reset; stage src/authz.py; gate "$(grep -v '^Failing first:' <<<"$ELEVATED")"
+expect "FF: elevated commit without a Failing first line is unchanged (passes)" pass
+# R4: Failing first is normalized entry by entry (Markdown, then list markers), in commit mode.
+CR=$'\r'; TAB=$'\t'
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:** - none}"
+expect "R4: bold key, marker after closing bold (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${NL}- N/A}"
+expect "R4: bold key, N/A bullet on next line (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:** - **none**}"
+expect "R4: bold key, bold placeholder in a bullet (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - N/A}"
+expect "R4: nested placeholders join (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}  - none}"
+expect "R4: empty parent bullet, nested none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${NL}    * N/A}"
+expect "R4: empty parent bullet with space, nested N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}1) none${NL}   - TBD${NL}   - not needed}"
+expect "R4: numbered then nested placeholders (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${CR}${NL}- none${CR}${NL}  - n/a${CR}}"
+expect "R4: bold key, nested placeholders, CRLF (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}${TAB}- none}"
+expect "R4: tab-indented nested placeholder (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}- behavior preserved; pinned by test_tax}"
+expect "R4: placeholder then evidence bullet (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - behavior preserved; pinned by test_tax}"
+expect "R4: nested evidence under none (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${CR}${NL}- test_tax failed before the fix, passed after${CR}}"
+expect "R4: bold key, evidence, CRLF (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}1) test_x failed, then passed}"
+expect "R4: blank then 1) failing test (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}-${NL}  1) test_x failed, then passed}"
+expect "R4: blank then nested 1) under empty bullet (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: 1.5x slower test_x failed first}"
+expect "R4: numeric prose is not a marker (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}1) none}"
+expect "R4: blank then 1) none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:}"
+expect "R4: empty value, nothing after (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}-${NL}  -}"
+expect "R4: only empty bullets (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/$FF_GIT/Failing first:${NL}- none${NL}  - N/A}")"
+expect "R4: nested placeholders with INCOMPLETE (commit): passes" pass
+# R5: bullet-dot items, code fences, and a Review of only list markers (commit mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+FF_GIT="Failing first: test_cross_org_denied failed, then passed"
+REV_GIT="Review: bp:code-reviewer — Ready to merge: Yes"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: • none}"
+expect "R5: inline bullet-dot none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• N/A}"
+expect "R5: bullet-dot N/A on next line (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${NL}• none}"
+expect "R5: blank then bullet-dot none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• none${NL}  • n/a}"
+expect "R5: nested bullet-dot placeholders (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${FENCE}text${NL}none${NL}${FENCE}}"
+expect "R5: fence with info string holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}~~~${NL}N/A${NL}~~~}"
+expect "R5: tilde fence holding N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/**Failing first:**${NL}${FENCE}${NL}- none${NL}${FENCE}}"
+expect "R5: bold key, fence holding a none bullet (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}• test_x failed, then passed}"
+expect "R5: bullet-dot evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}${FENCE}text${NL}test_x failed, then passed${NL}${FENCE}}"
+expect "R5: fence holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1)}"
+expect "R5: Review blank then bare 1) (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}•}"
+expect "R5: Review bare bullet-dot (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1)${NL}  -}"
+expect "R5: Review nested bare markers (commit): blocks" block "Review"
+reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1) bp:code-reviewer — Ready to merge: Yes}"
+expect "R5: Review numbered evidence (commit): passes" pass
+# R6: list markers are stripped before the fence check; a same-line ``` span is content (commit mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}text${NL}  none${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}1) ~~~${NL}   N/A${NL}   ~~~}"
+expect "R6: numbered tilde fence holding N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: ${FENCE}none${FENCE}}"
+expect "R6: same-line span holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: ${FENCE}test_café failed${FENCE}}"
+expect "R6: same-line span holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}test_x failed, then passed${FENCE}}"
+expect "R6: bullet same-line span holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}text${NL}  test_x failed, then passed${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding evidence (commit): passes" pass
+
 # M-f: missing-receipt error lists what commits require and does not ask for Not checked.
 reset; stage src/ui/button.py; gate "Fix button label"
 if [ "$(cat "$TMP_ROOT/rc")" = 1 ] && ! grep -qF "Not checked" "$TMP_ROOT/err" && grep -qF "Verified" "$TMP_ROOT/err" && grep -qF "Status" "$TMP_ROOT/err"; then

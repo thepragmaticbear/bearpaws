@@ -453,11 +453,55 @@ def receipt(text, field):
     return re.sub(r"[*`]", "", vals[-1]).strip() if vals else None
 
 
+def receipt_block(text, field):
+    """Like receipt(), plus wrapped lines up to a blank line or the next `Key:` line."""
+    lines = (text or "").splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(rf"(?i)^\W*{re.escape(field)}\W*:", line):
+            start = i
+    if start is None:
+        return None
+    parts = [re.sub(rf"(?i)^\W*{re.escape(field)}\W*:\s*", "", lines[start])]
+    for line in lines[start + 1:]:
+        if not line.strip() or re.match(r"^\W*[A-Za-z][\w ]{0,30}:(\s|$)", line):
+            break
+        parts.append(line.strip())
+    return re.sub(r"[*`]", "", " ".join(parts)).strip()
+
+
 def names_a_check(text):
     """A Verified: line (or an implementer report's Testing:/Tested: line) that names something
     checked (docs and typo edits)."""
     v = receipt(text, "Verified") or receipt(text, "Testing") or receipt(text, "Tested")
     return bool(v) and not re.match(r"(?i)(none|n/?a|nothing|-)\b", v)
+
+
+# A behavior-preserving elevated change has nothing new to fail: its Failing first: line says behavior
+# is preserved and names the tests that pin it.
+PRESERVED = re.compile(r"(?i)\bbehaviou?r\W+(?:is\W+|was\W+)?(?:preserved|unchanged)|\bbehaviou?r-preserving|"
+                       r"\bpreserv\w*\W+(?:the\W+|all\W+)?behaviou?r|\bno\W+behaviou?r\W+change|"
+                       r"\b(?:doesn't|does not|didn't|did not)\W+(?:alter|change)\W+(?:any\W+)?behaviou?r|"
+                       r"\bbehaviou?r\W+(?:doesn't|does not|didn't|did not)\W+change")
+RED_CLAIM = re.compile(r"(?i)\bfailed\b|\b(?:saw|see|watched)\b[^.;]{0,30}\bfail\b")
+NAMES_TEST = re.compile(r"\btest_\w+|\btests?/[\w./-]+|\bTest[A-Z]\w*")
+
+
+# A pointer to the receipt's Pinned: line ("pinned by the tests above") instead of the names.
+POINTS_AT_PINNED = re.compile(r"(?i)\b(?:above|pinned:?\s+(?:line|field|list)|(?:in|see|under)\W+pinned\b|"
+                              r"the\s+pinned\s+tests|listed\s+(?:above|under|in))")
+
+
+def preserved_receipt(text):
+    """Failing first: says behavior is preserved, names a pinning test (or points at a Pinned: line
+    that names one), and claims no red run (a renamed test failing on import is not a test for the
+    risk). A pointer whose Pinned: line names no test is unresolved and fails."""
+    v = receipt_block(text, "Failing first")
+    if not v or not PRESERVED.search(v) or RED_CLAIM.search(v):
+        return False
+    if NAMES_TEST.search(v):
+        return True
+    return bool(POINTS_AT_PINNED.search(v)) and bool(NAMES_TEST.search(receipt(text, "Pinned") or ""))
 
 
 def claims_exemption(text):
@@ -797,7 +841,8 @@ def expected(scenario, r):
     if scenario == "deletion":
         return r["assertions_removed"] == 0 and r["mutants_killed"] is True and not r["weak_tests"]
     if scenario == "money-rename":
-        return r["pinned_before_edit"] and r["review_dispatched"] and not r["claims_exemption"]
+        return (r["pinned_before_edit"] and r["review_dispatched"] and not r["claims_exemption"]
+                and r["failing_first_preserved"])
     raise ValueError(scenario)
 
 
@@ -864,7 +909,8 @@ def score(log, work, label, scenario, run):
         r["pinned_before_edit"] = before
         r["review_dispatched"] = reviews > 0
         r["claims_exemption"] = claims_exemption(final)
-        r["failing_first_receipt"] = receipt(final, "Failing first")  # informational: policy open
+        r["failing_first_receipt"] = receipt(final, "Failing first")
+        r["failing_first_preserved"] = preserved_receipt(final)
     r["expected"] = expected(scenario, r)
     r["full_rule"] = r["expected"] and r["verified"]
     return r

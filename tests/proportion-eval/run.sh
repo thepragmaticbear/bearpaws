@@ -91,7 +91,7 @@ for (label, s), rows in sorted(g.items()):
     rows.sort(key=lambda r: r["run"]); n = len(rows)
     count = lambda k: f"{k} {sum(bool(r.get(k)) for r in rows)}/{n}"
     keys = [k for k in ("expected", "correct", "verified", "failing_first", "pinned_before_edit",
-                        "review_dispatched", "claims_exemption", "plan_new_tests", "plan_failing_step") if k in rows[0]]
+                        "review_dispatched", "claims_exemption", "failing_first_preserved", "plan_new_tests", "plan_failing_step") if k in rows[0]]
     print(f"{label} {s:9}: " + "  ".join(count(k) for k in keys)
           + f"  test-files {[r.get('test_files_added') for r in rows]}  mean ${sum(r['cost'] for r in rows)/n:.3f}")
 PY

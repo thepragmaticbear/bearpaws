@@ -278,12 +278,60 @@ class Score(unittest.TestCase):
         # Not exempt, said plainly, is not a claim.
         r = self.run_score("money-rename", self.rename_money, pinned + edit("b", "src/tax.py") + after
                            + agent("d", "review", "bp:code-reviewer")
-                           + reply("Money code is not exempt.\nRisk: elevated (money)\nStatus: COMPLETE"))
+                           + reply("Money code is not exempt.\nRisk: elevated (money)\nFailing first: none, behavior "
+                                   "preserved; pinned by tests/test_tax.py\nStatus: COMPLETE"))
         self.assertEqual((r["claims_exemption"], r["expected"]), (False, True))
         # No pinned run before the edit.
         r = self.run_score("money-rename", self.rename_money, edit("b", "src/tax.py") + after
                            + agent("d", "Code review") + good)
         self.assertFalse(r["expected"])
+
+    def test_money_rename_failing_first_says_preserved_and_names_tests(self):
+        run = (bash("a", "python3 -m unittest discover -s tests -t .", GREEN_OUT) + edit("b", "src/tax.py")
+               + bash("c", "python3 -m unittest discover -s tests -t .", GREEN_OUT) + agent("d", "Code review"))
+        receipt = lambda ff: reply(f"Renamed.\nRisk: elevated (money)\nPinned: test_tax passed\nFailing first: {ff}\nStatus: COMPLETE")
+        for ff in ("none: behavior preserved; test_tax and test_invoice_total pin it",
+                   "no failing test, the rename is behavior-preserving; pinned by tests/test_tax.py",
+                   "None. Behaviour is unchanged, so nothing new can fail; TestInvoice pins it",
+                   "none: the behavior doesn't change; tests/test_tax.py::test_rounds_half_up pins it"):
+            r = self.run_score("money-rename", self.rename_money, run + receipt(ff))
+            self.assertEqual((r["failing_first_preserved"], r["expected"]), (True, True), ff)
+        # The named test wrapped onto the next line still counts; the next key ends the value.
+        r = self.run_score("money-rename", self.rename_money,
+                           run + receipt("none, behavior preserved; pinned by\n  tests/test_tax.py"))
+        self.assertEqual((r["failing_first_preserved"], r["expected"]), (True, True))
+        # A bare placeholder, a reason with no named test, a red run of a renamed test (not a test for
+        # the risk), and no line at all.
+        for ff in ("N/A", "not applicable, since the change doesn't alter behavior.",
+                   "tests/test_tax.py switched to the new name failed with ImportError",
+                   "none, no behavior change; the 8 existing tests pin it",
+                   "tests/test_tax.py on the new name failed with ImportError. The behavior doesn't change.",
+                   "none, behavior preserved; I switched tests/test_tax.py first and saw it fail with ImportError", None):
+            text = "Renamed.\nRisk: elevated (money)\nStatus: COMPLETE" if ff is None else None
+            r = self.run_score("money-rename", self.rename_money, run + (reply(text) if text else receipt(ff)))
+            self.assertEqual((r["failing_first_preserved"], r["expected"]), (False, False), ff)
+
+    def test_money_rename_failing_first_may_point_at_a_pinned_line_that_names_tests(self):
+        run = (bash("a", "python3 -m unittest discover -s tests -t .", GREEN_OUT) + edit("b", "src/tax.py")
+               + bash("c", "python3 -m unittest discover -s tests -t .", GREEN_OUT) + agent("d", "Code review"))
+        receipt = lambda pinned, ff: reply(f"Renamed.\nRisk: elevated (money)\nPinned: {pinned}\n"
+                                           f"Failing first: {ff}\nStatus: COMPLETE")
+        named = "test_rounds_half_up and test_total_with_tax passed before the edit"
+        for ff in ("none, behavior preserved; pinned by the tests above",
+                   "none, behavior preserved (see Pinned)", "none; behavior unchanged, the tests listed above pin it"):
+            r = self.run_score("money-rename", self.rename_money, run + receipt(named, ff))
+            self.assertEqual((r["failing_first_preserved"], r["expected"]), (True, True), ff)
+        # Unresolved: the Pinned: line names no test, or there is none, or no pointer at all.
+        for pinned, ff in (("the 8 existing tests passed before the edit", "none, behavior preserved; pinned by the tests above"),
+                           (named, "none, behavior preserved"),
+                           (named, "none, behavior preserved; pinned by the existing suite"),
+                           (named, "tests above failed with ImportError; behavior preserved")):
+            r = self.run_score("money-rename", self.rename_money, run + receipt(pinned, ff))
+            self.assertEqual((r["failing_first_preserved"], r["expected"]), (False, False), (pinned, ff))
+        r = self.run_score("money-rename", self.rename_money,
+                           run + reply("Renamed.\nRisk: elevated (money)\nFailing first: none, behavior preserved; "
+                                       "pinned by the tests above\nStatus: COMPLETE"))
+        self.assertFalse(r["failing_first_preserved"])
 
     # --- plan arm ---
 
