@@ -1202,6 +1202,27 @@ for st in fork Fork; do
   stop "$ELEVATED"; expect "M-d: $st agent with Review description does not count" block "independent review"
 done
 
+# Failing first on elevated COMPLETE: a bare placeholder blocks; a behavior-preserving change says so
+# and names the pinning tests (Pinned is still checked against the log); INCOMPLETE and routine are unaffected.
+E_RENAME=$'Renamed.\n\nRisk: elevated (money)\nPinned: test_tax, test_invoice_total passed before edit\nFailing first: none, behavior preserved; test_tax and test_invoice_total pin it\nReview: bp:code-reviewer — Ready to merge: Yes\nOpen: none\nAssumptions: nothing outside the repo imports calc_tax\nVerified: pytest — 8 passed\nNot checked: none\nStatus: COMPLETE'
+for v in "N/A" "n/a" "none" "None." "-" "—" "TBD" "**N/A**" "\`none\`" "(n/a)" "na" "n.a." "todo" "not applicable"; do
+  reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "$E_RENAME"
+expect "FF: behavior-preserving Failing first naming pinning tests: allow" allow
+reset; edit src/tax.py; ran "pytest"; review; stop "$E_RENAME"
+expect "FF: behavior-preserving form still needs a Pinned run before the edit" block "Pinned"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; stop "$E_RENAME"
+expect "FF: behavior-preserving form still needs the review" block "independent review"
+reset; ran "pytest"; edit src/authz.py; ran "pytest"; review; stop "$E_TESTED"
+expect "FF: normal failing-test Failing first: allow" allow
+reset; edit src/tax.py; stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: N/A}"
+stop "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: N/A}")"
+expect "FF: placeholder Failing first with INCOMPLETE: allow" allow
+reset; edit src/ui/button.py; stop $'Done.\n\nRisk: routine\nFailing first: N/A\nVerified: git diff — only the label changed\nNot checked: none\nStatus: COMPLETE'
+expect "FF: routine receipt with Failing first: N/A unaffected" allow
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"
   exit 1

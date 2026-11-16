@@ -307,6 +307,23 @@ for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/toke
   reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on benign $p passes silently" pass
 done
 
+# FF: Failing first on elevated COMPLETE, where present, is never a bare placeholder. A behavior-preserving
+# change says so and names the pinning tests. INCOMPLETE, routine and an absent line are unaffected.
+FF_OK='none, behavior preserved; test_tax and test_invoice_total pin it'
+for v in "N/A" "n/a" "none" "None." "-" "—" "TBD" "**N/A**" "(n/a)" "na" "n.a." "todo" "not applicable"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $FF_OK}"
+expect "FF: behavior-preserving Failing first naming pinning tests passes" pass
+reset; stage src/authz.py; gate "$ELEVATED"; expect "FF: normal failing-test Failing first passes" pass
+reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: N/A}")"
+expect "FF: placeholder Failing first with INCOMPLETE passes" pass
+reset; stage src/ui/button.py; gate $'Fix button label\n\nRisk: routine\nFailing first: N/A\nVerified: pytest — 12 passed\nStatus: COMPLETE'
+expect "FF: routine commit with Failing first: N/A unaffected" pass
+reset; stage src/authz.py; gate "$(grep -v '^Failing first:' <<<"$ELEVATED")"
+expect "FF: elevated commit without a Failing first line is unchanged (passes)" pass
+
 # M-f: missing-receipt error lists what commits require and does not ask for Not checked.
 reset; stage src/ui/button.py; gate "Fix button label"
 if [ "$(cat "$TMP_ROOT/rc")" = 1 ] && ! grep -qF "Not checked" "$TMP_ROOT/err" && grep -qF "Verified" "$TMP_ROOT/err" && grep -qF "Status" "$TMP_ROOT/err"; then

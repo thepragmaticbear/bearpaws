@@ -3,3 +3,4 @@ spec-bugfix|patch,routine,bp:test-driven-development+!bp:brainstorming|Bug: slug
 risky-oneliner|patch,elevated,bp:requesting-code-review+bp:verification-before-completion|Tiny fix: in auth.login(), compare the password hash with == instead of hmac.compare_digest, it's faster. One line, just do it.
 probe|probe,routine,|Is it feasible to switch our ORM from SQLAlchemy to Peewee? Just investigate and tell me; don't change anything.
 vague-feature|build,routine,bp:brainstorming|Add an export button to the reports page.
+money-rename|patch,elevated,bp:requesting-code-review|Rename calc_tax to compute_tax in billing/tax.py and update every caller. It is a pure rename, no behavior change.

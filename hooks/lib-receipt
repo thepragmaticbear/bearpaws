@@ -147,6 +147,16 @@ review_is_placeholder() {
   grep -qE '^(none|skipped|skip|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self-review(ed)?|self)([^[:alnum:]_-].*)?$|^(no|not)[.]?$|^(no|not) (review|reviews|reviewed|reviewer|done|run|yet|applicable|needed|required)([^[:alnum:]_-].*)?$' <<<"$v"
 }
 
+# failing_first_is_placeholder <val>: 0 if the value is only a placeholder (n/a, na, none, -, —, tbd,
+# todo, not applicable), ignoring case, parentheses, markdown and a trailing period. Any value with more
+# text passes: "none: behavior preserved; test_tax pins it" names what pins the change.
+failing_first_is_placeholder() {
+  local v
+  v="$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | tr '\n\r\t' '   ' | tr -d '()*`' | sed -E 's/[[:space:]]+/ /g; s/^ +| +$//g; s/[.]+$//')"
+  [ -n "$v" ] || return 0
+  grep -qE '^(n/?a|n\.a|na|none|-+|—|–|tbd|todo|not applicable)$' <<<"$v"
+}
+
 # check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
 # Sets risk (routine|elevated), incomplete (0|1), receipt_err (on failure).
 # Returns 0 on pass, 1 when Risk: is missing/invalid, 2 when required fields or COMPLETE checks fail.
@@ -188,6 +198,14 @@ check_receipt() {
 
   if [ -n "$missing" ]; then
     receipt_err="${prefix}Incomplete risk receipt: missing or invalid ${missing}."
+    return 2
+  fi
+
+  # Elevated COMPLETE: a Failing first: line, where present (the stop mode requires it), is never a
+  # bare placeholder. A change that alters no behavior says so and names the pinning tests.
+  if [ "$risk" = elevated ] && [ "$incomplete" = 0 ] && v="$(field_value "Failing first")" \
+    && failing_first_is_placeholder "$v"; then
+    receipt_err="${prefix}Failing first: is a bare placeholder ($v). Name the test that failed first, or, if no behavior changes, say behavior is preserved and name the pinning tests; else set Status: INCOMPLETE."
     return 2
   fi
 
