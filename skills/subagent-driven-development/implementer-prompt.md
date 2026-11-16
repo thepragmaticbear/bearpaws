@@ -31,10 +31,11 @@ Agent tool (general-purpose):
     Once you're clear on requirements:
     1. Implement exactly what the task specifies
     2. Per bp:test-driven-development, changed behavior and elevated-risk work get a test run
-       alone and seen failing before the edit. No new test for docs that shape no agent,
-       behavior-preserving renames and refactors, or unobservable config (never if elevated):
-       run existing tests before and after; name uncovered code in Not checked. Runtime
-       defaults, limits, flags, timeouts and prompt files are behavior.
+       alone and seen failing before the edit. No new test for docs that shape no agent or
+       tool, behavior-preserving renames and refactors, or unobservable config (never if
+       elevated). Code/config: run existing tests and check uncovered behavior directly, before
+       and after; if you can't, report DONE_WITH_CONCERNS naming it. Docs: name what you checked.
+       Runtime defaults, limits, flags, timeouts and prompt files are behavior.
     3. Verify implementation works
     4. Commit your work
     5. Self-review (see below)
@@ -101,7 +102,7 @@ Agent tool (general-purpose):
     When done, report:
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - What you implemented (or what you attempted, if blocked)
-    - What you tested and test results
+    - What you tested and test results; Not checked: what you did not verify, or none
     - Files changed
     - Assumptions you relied on (what you took as true without verifying)
     - Self-review findings (if any)

@@ -11,6 +11,18 @@ def calc_tax(amount_cents, rate):
     """Tax on an amount in cents, rounded half up to the cent."""
     return int(amount_cents * rate + 0.5)
 PY
+cat > src/text.py <<'PY'
+def clean_name(name):
+    """'  ada   LOVELACE ' -> 'Ada Lovelace'."""
+    return " ".join(name.split()).title()
+PY
+cat > src/greeting.py <<'PY'
+from src.text import clean_name
+
+
+def greeting(name):
+    return f"Hello, {clean_name(name)}!"
+PY
 cat > src/invoice.py <<'PY'
 from src.tax import calc_tax
 
@@ -70,6 +82,19 @@ class TaxTest(unittest.TestCase):
     def test_rounds_half_up(self):
         self.assertEqual(calc_tax(1000, 0.0825), 83)
         self.assertEqual(calc_tax(0, 0.2), 0)
+PY
+cat > tests/test_text.py <<'PY'
+import unittest
+from src.greeting import greeting
+from src.text import clean_name
+
+
+class TextTest(unittest.TestCase):
+    def test_clean_name(self):
+        self.assertEqual(clean_name("  ada   LOVELACE "), "Ada Lovelace")
+
+    def test_greeting(self):
+        self.assertEqual(greeting("grace hopper"), "Hello, Grace Hopper!")
 PY
 cat > tests/test_invoice.py <<'PY'
 import unittest

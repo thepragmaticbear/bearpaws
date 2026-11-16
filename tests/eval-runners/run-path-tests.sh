@@ -43,6 +43,7 @@ check drift-eval        lbl-1.json      "$ROOT/tests/drift-eval/run.sh" "$skill"
 check fixloop-eval      lbl-1.jsonl     "$ROOT/tests/fixloop-eval/run.sh" "$ROOT/skills/subagent-driven-development/SKILL.md" lbl 1 out
 check proportion-eval   lbl-typo-1.jsonl "$ROOT/tests/proportion-eval/run.sh" lbl 1 out
 check proportion-eval-implementer lbl-docs-1.jsonl env VIA=implementer SCENARIOS=docs "$ROOT/tests/proportion-eval/run.sh" lbl 1 out
+check proportion-eval-plan lbl-plan-docs-1.jsonl env VIA=plan SCENARIOS=docs "$ROOT/tests/proportion-eval/run.sh" lbl 1 out
 check resume-eval       lbl-1.json      "$ROOT/tests/resume-eval/run.sh" "$skill" lbl 1 out
 check reuse-eval        lbl-1.jsonl     "$ROOT/tests/reuse-eval/run.sh" lbl 1 out
 check review-eval       lbl-1.jsonl     "$ROOT/tests/review-eval/run.sh" "$ROOT/skills/requesting-code-review/code-reviewer.md" lbl 1 out

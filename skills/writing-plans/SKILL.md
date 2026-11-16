@@ -26,7 +26,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
   <process>
     <step>**Map file structure** — which files will be created or modified, what each is responsible for. Design units with clear boundaries. Prefer smaller focused files. Files that change together should live together.</step>
-    <step>**Define tasks** — each task produces self-contained changes and names its check. Each step is one action (2-5 min): write failing test, run it, implement minimal code, run tests, commit. Exempt tasks (bp:test-driven-development) skip the failing test.</step>
+    <step>**Define tasks** — each task produces self-contained changes and names its check. Each step is one action (2-5 min): write failing test, run it, implement minimal code, run tests, commit.</step>
     <step>**Self-review** — (1) spec coverage: can you point to a task for every requirement? (2) placeholder scan: no TBD/TODO/vague steps. (3) type consistency: names in later tasks match definitions in earlier tasks. Fix inline.</step>
     <step>**Execution handoff** — offer choice: **Subagent-Driven** (bp:subagent-driven-development, recommended) or **Inline** (bp:executing-plans).</step>
     <step>**After native plan approval** — follow the native-approval gate below instead of offering a choice.</step>
@@ -60,7 +60,7 @@ description: Use when you have a spec or requirements for a multi-step task, bef
   - Modify: `exact/path/to/existing.py:123-145`
   - Test: `tests/exact/path/to/test.py`
 
-  - [ ] **Step 1: Write the failing test**
+  - [ ] **Step 1: Write the failing test** (non-exempt tasks; an exempt task per bp:test-driven-development runs the existing tests here and skips Step 2)
 
   ```python
   def test_specific_behavior():

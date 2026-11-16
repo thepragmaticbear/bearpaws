@@ -7,8 +7,10 @@ import ast, collections, json, os, re, shlex, shutil, subprocess, sys, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "benchmark"))
 from summarize import added_lines, code_lines
 
-# Scenarios where the change is exempt: no test may be added.
+# Scenarios where the change is exempt: no test may be added. money-rename is the same rename on
+# money code: elevated, so never exempt (scored on the elevated floor instead).
 EXEMPT = {"typo", "docs", "rename", "config"}
+DOCS = {"typo", "docs"}
 
 # --- Transcript: test runs and edits, in call order -------------------------------------------
 #
@@ -29,7 +31,14 @@ SEPARATORS = {";", "&&", "||", "|", "&", ")", "}", ";;"}
 REDIRECTS = {">", ">>", "&>", "&>>", ">|"}
 INTERPRETERS = {"python", "python3", "node", "ruby", "perl", "bash", "sh", "zsh"}
 PATHLIKE = re.compile(r"[\w./-]*[\w-]+\.(?:py|md|toml|cfg|ini|json|ya?ml|txt)\b|\b(?:src|prompts|docs)\b")
+# Interpreter code that can write. Code without any of these (a python3 -c probe that imports and
+# prints) is a probe_edit: still a possible edit for RED ordering, but not an edit that moves the
+# "after the last edit" boundary for verification.
+WRITE_CODE = re.compile(r"open\([^)]*['\"][wax+]|\.write|write_text|write_bytes|\bos\.(remove|unlink|rename|replace|"
+                        r"system|makedirs|mkdir|rmdir|truncate)|shutil\.|subprocess|\.(unlink|touch|rename|mkdir|rmdir)\(|"
+                        r"\bexec\(|\beval\(|__import__|importlib|\bcompile\(|\bsys\.modules")
 HEREDOC = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?")
+SUMMARY = re.compile(r"(?m)^(OK\b.*|FAILED \(.*|=+ .*\b(?:passed|failed)\b.*)$")
 # The intended RED: an assertion failed. unittest reports those as failures=N, exceptions as errors=N.
 ASSERT_FAIL = re.compile(r"AssertionError|^FAIL: |^E\s+assert\b|^FAILED \([^)]*\bfailures=\d", re.M)
 
@@ -87,7 +96,7 @@ OPERATORS = sorted(["&&", "||", ";;", ">>", "&>>", "&>", ">|", ">&", "<<<", "<<"
 
 def split_operators(token):
     """shlex fuses adjacent punctuation (";(" after a heredoc line): split it into operators."""
-    if not token or any(c not in "();<>|&{}" for c in token):
+    if not token or token == "{}" or any(c not in "();<>|&{}" for c in token):  # {}: find/xargs placeholder
         return [token]
     out, i = [], 0
     while i < len(token):
@@ -158,6 +167,46 @@ def git_subcommand(args):
     return args[i] if i < len(args) else ""
 
 
+def is_cache(p):
+    return "__pycache__" in p or ".pytest_cache" in p or p.endswith((".pyc", ".pyo"))
+
+
+def find_cache_cleanup(args):
+    """find whose matches can only be caches, deleted by -delete or -exec rm. Every positive name
+    or path test must be a cache pattern; negated tests (-not/!) and -type/-maxdepth only narrow.
+    -o/-or/, (which widen the match set), -prune, and any other action or exec command fall through
+    to normal classification."""
+    i, positive, action = 0, 0, False
+    while i < len(args) and not args[i].startswith("-") and args[i] != "!":
+        i += 1  # start paths
+    negate = False
+    while i < len(args):
+        a = args[i]
+        if a in ("-o", "-or", ",", "-prune"):
+            return False
+        if a in ("-not", "!"):
+            negate = True; i += 1; continue
+        if a in ("-name", "-iname", "-path", "-ipath", "-wholename") and i + 1 < len(args):
+            if not negate:
+                if not is_cache(args[i + 1]):
+                    return False
+                positive += 1
+            negate = False; i += 2; continue
+        if a in ("-type", "-maxdepth", "-mindepth") and i + 1 < len(args):
+            negate = False; i += 2; continue
+        if a == "-delete":
+            action = True; i += 1; continue
+        if a in ("-exec", "-execdir") and i + 1 < len(args) and os.path.basename(args[i + 1]) == "rm":
+            j = i + 2
+            while j < len(args) and args[j] not in ("+", ";"):
+                if not (args[j].startswith("-") or args[j] == "{}"):
+                    return False
+                j += 1
+            action = True; i = j + 1; continue
+        return False
+    return action and positive > 0
+
+
 def can_write(words, text):
     """False only for tools known not to write files (given their arguments)."""
     tool = os.path.basename(words[0])
@@ -177,24 +226,29 @@ def can_write(words, text):
         return any(a.startswith("--in-place") or (re.match(r"-[a-zA-Z]*i", a) and not a.startswith("--"))
                    or a == "-i" for a in args)
     if tool == "find":
+        if find_cache_cleanup(args):
+            return False
         return any(a in ("-delete", "-exec", "-execdir", "-ok", "-okdir") or a.startswith("-fprint") for a in args)
     if tool == "awk":
         return bool(re.search(r">|system\s*\(", text))
     if tool == "git":
         return git_subcommand(args) not in READ_ONLY_GIT
-    if tool == "rm" and all("__pycache__" in a or a.endswith(".pyc") or a.startswith("-") for a in args):
+    if tool == "rm" and all(is_cache(a) or a.startswith("-") for a in args):
         return False
     return tool not in READ_ONLY
 
 
 def classify(cmd, root=None):
-    """Events for one Bash call: [("impl_edit", cmd)] or test_edit events then maybe a run.
+    """Events for one Bash call, in command order: impl_edit, probe_edit, test_edit, run and
+    batched_run.
     root is the run's work tree: writes outside it are output capture."""
     segs, bodies = segments(cmd)
     if segs is None:
         return [("impl_edit", cmd)]
-    test_edits, impl, run = 0, False, False
-    for seg in segs:
+    order = []  # (kind, segment index): "impl", "probe", "test" or "run"
+    runs = []   # segment indexes of every test run in the call, dropped ones included, in order
+    stash = []  # segment indexes of open `git stash` pushes in this call
+    for idx, seg in enumerate(segs):
         words = []
         i = 0
         while i < len(seg) and (seg[i] in PREFIXES or re.match(r"^\w+=", seg[i])):
@@ -207,10 +261,7 @@ def classify(cmd, root=None):
             if t in REDIRECTS and j + 1 < len(rest):
                 target = rest[j + 1]
                 if not outside(target, root):
-                    if is_test_path(target):
-                        test_edits += 1
-                    else:
-                        impl = True
+                    order.append(("test" if is_test_path(target) else "impl", idx))
                 j += 2
                 continue
             if t in (">&", "<", "<<", "<<<") and j + 1 < len(rest):
@@ -224,16 +275,29 @@ def classify(cmd, root=None):
         for n, body in enumerate(bodies):
             if f"__HEREDOC{n}__" in text:
                 text += "\n" + body
+        if os.path.basename(words[0]) == "git" and git_subcommand(words[1:]) == "stash":
+            # A stash and its pop in one call restore the tree: a comparison against the old code,
+            # not an edit. Runs between them see the old code, so they are dropped. Unbalanced: edit.
+            sub = [a for a in words[1 + words[1:].index("stash") + 1:] if not a.startswith("-")]
+            action = sub[0] if sub else "push"
+            if action in ("list", "show"):
+                continue
+            if action in ("push", "save"):
+                stash.append(idx)
+                continue
+            if action in ("pop", "apply") and stash:
+                start = stash.pop()
+                order[:] = [(k, i) for k, i in order if not (k == "run" and start < i)]
+                continue
+            order.append(("impl", idx))
+            continue
         if is_test_run(words):
-            run = True
+            order.append(("run", idx))
+            runs.append(idx)
         if os.path.basename(words[0]) == "tee":
             for target in (a for a in words[1:] if not a.startswith("-")):
-                if outside(target, root):
-                    continue
-                if is_test_path(target):
-                    test_edits += 1
-                else:
-                    impl = True
+                if not outside(target, root):
+                    order.append(("test" if is_test_path(target) else "impl", idx))
             continue
         if not can_write(words, text):
             continue
@@ -242,20 +306,76 @@ def classify(cmd, root=None):
         if named and not paths:
             continue  # writes only outside the work tree
         if any(not is_test_path(p) for p in paths):
-            impl = True
+            probe_only = os.path.basename(words[0]) in ("python", "python3") and not WRITE_CODE.search(text)
+            order.append(("probe" if probe_only else "impl", idx))
         elif paths:
-            test_edits += 1
+            order.append(("test", idx))
         elif not is_test_run(words) or os.path.basename(words[0]) in INTERPRETERS - {"python", "python3"}:
-            impl = True  # writes somewhere unknown
-    if impl:
-        return [("impl_edit", cmd)]
-    return [("test_edit", cmd)] * min(test_edits, 1) + ([("run", None)] if run else [])
+            order.append(("impl", idx))  # writes somewhere unknown
+    order += [("impl", i) for i in stash]  # a stash never popped in this call
+    # Events in segment order. A run carries (its position, number of runs in the call) so its own
+    # output can be found. A run before an implementation edit in the same call is a batched_run:
+    # a baseline for verification, never RED, since no one saw it before the edit.
+    edits = [i for k, i in order if k in ("impl", "probe")]
+    events = []
+    for kind, i in sorted(order, key=lambda o: o[1]):
+        if kind == "run":
+            events.append(("batched_run" if edits and i < max(edits) else "run", (runs.index(i), len(runs))))
+        else:
+            events.append((kind + "_edit", cmd))
+    return events
+
+
+REVIEW_DESC = re.compile(r"^\W*((code|spec|final|security|independent|quality|re)[\s-]+)*review(ing)?\b"
+                         r"(?!\W*(fix|feedback|comment|finding|follow))", re.I)
+
+
+def is_reviewer_dispatch(name, inp):
+    """A subagent dispatched to review (mirrors tests/risk-eval/score.py)."""
+    if name not in ("Agent", "Task"):
+        return False
+    kind = str(inp.get("subagent_type") or "")
+    if re.search(r"(?:^|[:/_-])(?:code-)?reviewer(?:$|[^a-zA-Z0-9])", kind, re.I):
+        return True
+    if kind.strip().lower() in ("explore", "plan", "claude-code-guide", "statusline-setup", "fork"):
+        return False
+    return bool(REVIEW_DESC.search(str(inp.get("description") or "")))
+
+
+STARTUP_FAIL = re.compile(r"command not found|No module named|can't open file|not recognized as|"
+                          r"No such file or directory")
+
+
+def run_outcome(out, k, n):
+    """Outcome of run k of the n test runs in one Bash call: "red", "green", "error" or "unknown".
+    With one run, the whole output is its own. With several, the i-th runner summary belongs to the
+    i-th run only when there is exactly one summary per run and no run failed to start; otherwise
+    the outcome is unknown, which never counts as RED, a baseline or an after-run."""
+    summaries = SUMMARY.findall(out)
+    if n == 1:
+        if len(summaries) > 1:
+            return "unknown"
+        if not summaries:
+            return "red" if ASSERT_FAIL.search(out) else "error"
+        line = summaries[0]
+    else:
+        if len(summaries) != n or STARTUP_FAIL.search(out):
+            return "unknown"
+        line = summaries[k]
+    if re.match(r"OK\b", line):
+        return "green"
+    if re.match(r"FAILED \(", line):
+        return "red" if re.search(r"\bfailures=\d", line) else "error"
+    if re.search(r"\b(failed|error)", line):
+        return "red" if n == 1 and ASSERT_FAIL.search(out) else "unknown" if n > 1 else "error"
+    return "green" if re.search(r"\bpassed\b", line) else "error"
 
 
 def transcript(log):
-    """(cost, events): ("run", outcome), ("test_edit", _), ("impl_edit", _) in call order.
-    outcome is "red" (an assertion failed), "green", or "error" (runner, import, missing tool)."""
-    costs, calls, results, root = {}, [], {}, None
+    """(cost, events, final reply, review dispatches). events: ("run", outcome), ("test_edit", _),
+    ("impl_edit", _) in call order; outcome is "red" (an assertion failed), "green", or "error"
+    (runner, import, missing tool)."""
+    costs, calls, results, root, final = {}, [], {}, None, ""
     with open(log, errors="replace") as f:
         lines = f.read().splitlines()
     for line in lines:
@@ -269,6 +389,7 @@ def transcript(log):
             # total_cost_usd is cumulative per session and repeats on each result event.
             sid = ev.get("session_id")
             costs[sid] = max(costs.get(sid, 0.0), ev.get("total_cost_usd") or 0)
+            final = ev.get("result") or final
         content = (ev.get("message") or {}).get("content")
         if not isinstance(content, list):
             continue
@@ -284,21 +405,20 @@ def transcript(log):
     for cid, name, inp in calls:
         if name == "Bash":
             for kind, val in classify(inp.get("command", ""), root):
-                if kind == "run":
-                    out = results.get(cid, "")
-                    val = ("red" if ASSERT_FAIL.search(out) else
-                           "green" if re.search(r"^OK\b|\bpassed\b", out, re.M) else "error")
+                if kind in ("run", "batched_run"):
+                    val = run_outcome(results.get(cid, ""), *val)
                 events.append((kind, val))
         elif name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
             path = inp.get("file_path") or inp.get("notebook_path") or ""
             events.append(("test_edit" if is_test_path(path) else "impl_edit", path))
-    return sum(costs.values()), events
+    reviews = sum(is_reviewer_dispatch(name, inp) for _, name, inp in calls)
+    return sum(costs.values()), events, final, reviews
 
 
 def failing_first(events):
     """An assertion failure in a test run before the first implementation edit."""
     for kind, val in events:
-        if kind == "impl_edit":
+        if kind in ("impl_edit", "probe_edit"):
             return False
         if kind == "run" and val == "red":
             return True
@@ -308,9 +428,45 @@ def failing_first(events):
 def test_first(events):
     """A test file was written before the first implementation edit (weaker than failing_first)."""
     for kind, _ in events:
-        if kind == "impl_edit":
+        if kind in ("impl_edit", "probe_edit"):
             return False
         if kind == "test_edit":
+            return True
+    return False
+
+
+def green_before_after(events):
+    """(a passing run before the first implementation edit, a passing run after the last edit)."""
+    edits = [i for i, (k, _) in enumerate(events) if k == "impl_edit"]
+    if not edits:
+        return False, False
+    # The after-run must follow the last edit of any kind: a test edited after the last passing
+    # run leaves the final state unverified.
+    last = max(i for i, (k, _) in enumerate(events) if k in ("impl_edit", "test_edit"))
+    green = lambda evs: any(k in ("run", "batched_run") and v == "green" for k, v in evs)
+    return green(events[:edits[0]]), green(events[last + 1:])
+
+
+def receipt(text, field):
+    """The value of the last `Field:` line in a reply, or None."""
+    vals = re.findall(rf"(?im)^\W*{re.escape(field)}\W*:\s*(.*)$", text or "")
+    return re.sub(r"[*`]", "", vals[-1]).strip() if vals else None
+
+
+def names_a_check(text):
+    """A Verified: line (or an implementer report's Testing:/Tested: line) that names something
+    checked (docs and typo edits)."""
+    v = receipt(text, "Verified") or receipt(text, "Testing") or receipt(text, "Tested")
+    return bool(v) and not re.match(r"(?i)(none|n/?a|nothing|-)\b", v)
+
+
+def claims_exemption(text):
+    """The reply treats the work as routine or as exempt from the elevated floor."""
+    risk = receipt(text, "Risk")
+    if risk is not None and re.match(r"(?i)routine", risk):
+        return True
+    for m in re.finditer(r"(?i)\bexempt", text or ""):
+        if not re.search(r"(?i)\b(not|never|no|isn't|n't)\b", text[max(0, m.start() - 30):m.start()]):
             return True
     return False
 
@@ -440,7 +596,10 @@ def triage_rule_ok(text):
 PROBES = {
     "typo": lambda w: "recieve" not in read(w, "README.md") and "receive" in read(w, "README.md"),
     "docs": lambda w: "timeout" in read(w, "docs/usage.md").lower(),
-    "rename": lambda w: probe(w, "from src.tax import compute_tax as t\nassert t(1000, 0.0825) == 83\nprint('ok')")
+    "rename": lambda w: probe(w, "from src.text import normalize_name as n\nfrom src.greeting import greeting as g\n"
+                                 "assert n('  ada   LOVELACE ') == 'Ada Lovelace'\nassert g('a b') == 'Hello, A B!'\nprint('ok')")
+        and not re.search(r"\bclean_name\b", "".join(read(w, f) for f in ("src/text.py", "src/greeting.py", "tests/test_text.py"))),
+    "money-rename": lambda w: probe(w, "from src.tax import compute_tax as t\nassert t(1000, 0.0825) == 83\nprint('ok')")
         and not re.search(r"\bcalc_tax\b", "".join(read(w, f) for f in ("src/tax.py", "src/invoice.py", "tests/test_tax.py"))),
     "config": lambda w: re.search(r"^line-length\s*=\s*100\s*$", read(w, "pyproject.toml"), re.M) is not None,
     "skillmd": lambda w: triage_rule_ok(read(w, "prompts/triage.md")),
@@ -627,7 +786,7 @@ def test_tree(work, base):
 
 
 def expected(scenario, r):
-    """Did the run do the proportionate thing for this scenario?"""
+    """Did the run do the proportionate thing for this scenario? (Verification is scored apart.)"""
     if not r["correct"]:
         return False
     if scenario in EXEMPT:
@@ -637,12 +796,54 @@ def expected(scenario, r):
                 and not r["weak_tests"])
     if scenario == "deletion":
         return r["assertions_removed"] == 0 and r["mutants_killed"] is True and not r["weak_tests"]
+    if scenario == "money-rename":
+        return r["pinned_before_edit"] and r["review_dispatched"] and not r["claims_exemption"]
     raise ValueError(scenario)
 
 
+# --- Plan arm: does the written plan add a failing-test step? ----------------------------------
+
+FAILING_STEP = re.compile(r"(?i)failing test|verify\W+fail|expected:?\W*fail|watch\W+(it|the test)\W+fail|"
+                          r"confirm\W+(it|the test)\W+fails|\bred\b.{0,20}\bfirst\b")
+NOT_A_STEP = re.compile(r"(?i)\b(no|not|skip|skips|exempt|instead|without|n't|never)\b")
+RENAMES = {"clean_name": "normalize_name", "calc_tax": "compute_tax"}
+FIXTURE_DOCS = {"README.md", "docs/usage.md", "prompts/triage.md"}
+
+
+def score_plan(work, base, scenario, cost):
+    task = scenario[len("plan-"):]
+    changed = set(git(work, "diff", "--name-only", base).split()) | set(
+        git(work, "ls-files", "--others", "--exclude-standard").split())
+    plans = sorted(f for f in changed if f.endswith(".md") and f not in FIXTURE_DOCS)
+    plan = "\n".join(read(work, f) for f in plans)
+    existing = set()
+    for f in git(work, "ls-tree", "-r", "--name-only", base, "tests/").split():
+        existing |= set(re.findall(r"def (test_\w+)", git(work, "show", f"{base}:{f}")))
+    for old, new in RENAMES.items():
+        existing |= {n.replace(old, new) for n in existing}
+    new_tests = sorted(set(re.findall(r"def (test_\w+)", plan)) - existing)
+    lines = plan.splitlines()
+    # A step that breaks code on purpose and expects existing tests to fail is a mutation check,
+    # reported apart: it adds no test.
+    mutation = [i for i, l in enumerate(lines) if re.search(r"(?i)temporar|mutat|\bbreak\b|deliberately", l)]
+    near = lambda i: any(0 <= i - m <= 3 for m in mutation)
+    failing_step = any(FAILING_STEP.search(l) and not NOT_A_STEP.search(l) and not near(i) for i, l in enumerate(lines))
+    r = {"scenario": scenario, "cost": round(cost, 4), "plan_files": plans, "correct": bool(plan.strip()),
+         "plan_new_tests": new_tests, "plan_failing_step": failing_step, "plan_mutation_step": bool(mutation),
+         "implemented": any(not f.endswith(".md") and "__pycache__" not in f for f in changed)}
+    wants_test = task in ("skillmd", "uncovered", "timeout")
+    r["expected"] = r["correct"] and ((bool(new_tests) and failing_step) if wants_test
+                                      else not new_tests and not failing_step)
+    return r
+
+
 def score(log, work, label, scenario, run):
-    cost, events = transcript(log)
+    cost, events, final, reviews = transcript(log)
     base = git(work, "rev-list", "--max-parents=0", "HEAD").strip()
+    if scenario.startswith("plan-"):
+        r = score_plan(work, base, scenario, cost)
+        r.update(label=label, run=int(run))
+        return r
     r = {"label": label, "scenario": scenario, "run": int(run), "cost": round(cost, 4)}
     counts, changed = test_tree(work, base)
     r.update(counts)
@@ -652,7 +853,20 @@ def score(log, work, label, scenario, run):
     r["correct"] = bool(PROBES[scenario](work)) and tests_pass(work)
     collected = set(test_ids(work))
     r["mutants_killed"], r["weak_tests"] = mutation_check(work, base, scenario, [t for t in changed if t in collected])
+    before, after = green_before_after(events)
+    # verified: the rule's own check, scored apart from expected (proportionality).
+    # Docs/typo: the reply names what it checked. Exempt code/config and the elevated rename: a
+    # passing run before the first edit and after the last. Behavior changes: a passing run after
+    # the last edit (failing_first already covers before).
+    r["verified"] = (names_a_check(final) if scenario in DOCS else
+                     before and after if scenario in EXEMPT | {"money-rename"} else after)
+    if scenario == "money-rename":
+        r["pinned_before_edit"] = before
+        r["review_dispatched"] = reviews > 0
+        r["claims_exemption"] = claims_exemption(final)
+        r["failing_first_receipt"] = receipt(final, "Failing first")  # informational: policy open
     r["expected"] = expected(scenario, r)
+    r["full_rule"] = r["expected"] and r["verified"]
     return r
 
 

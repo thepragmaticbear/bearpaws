@@ -139,7 +139,7 @@ tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  
 tests/fixloop-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # controller stops after fix round 5: INCOMPLETE, no round 6
 DESIGN=elevated tests/builder-eval/run.sh skills/brainstorming/SKILL.md <label>  # builder check runs for elevated designs only (DESIGN=routine: none)
 tests/diagnose-eval/run.sh skills/diagnosing-bearpaws/SKILL.md <label>          # diagnosis finds a masked test failure and an ignored finding, cites path:line (none: RED)
-tests/proportion-eval/run.sh <label>                                         # no new test for exempt changes; failing test first for behavior, prompt files, defaults (SKILL_ROOT=<checkout>; VIA=implementer: SDD implementer prompt)
+tests/proportion-eval/run.sh <label>                                         # no new test for exempt changes; failing test first for behavior, prompt files, defaults (SKILL_ROOT=<checkout>; VIA=implementer: SDD implementer prompt; VIA=plan: writing-plans plan only)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)

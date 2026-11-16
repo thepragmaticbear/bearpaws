@@ -23,7 +23,7 @@ description: Use when implementing any feature or bugfix, before writing impleme
     <rule>Test-first is non-negotiable. RED before GREEN.</rule>
     <rule>Wrote code before the test? Delete it. Don't keep it as "reference", don't "adapt" it, don't look at it. Delete means delete. Implement fresh from tests.</rule>
     <rule>Exceptions (ask your human partner first): throwaway prototypes, generated code.</rule>
-    <rule>**Exempt, no new test or permission needed:** docs and comments that shape no agent's behavior; behavior-preserving typo, format, rename and refactor changes; config no caller or user can observe (lint, formatter). Overrides the warning, tables and checklist for these only. Run existing tests before and after; name uncovered changed code in `Not checked:`, or for docs what you checked. Never exempt: elevated-risk work; a changed runtime default, limit, flag or timeout, in any file; prompts or Markdown that shape agent or model behavior.</rule>
+    <rule>**Exempt, no new test or permission needed:** docs and comments that shape no agent's or tool's behavior; behavior-preserving typo, format, rename and refactor changes; config no caller or user can observe (lint, formatter). Overrides the warning, tables, Red Flags and checklist for these only. Code/config: run existing tests and check uncovered behavior directly (run it, compare output), before and after; if you can't, end `Status: INCOMPLETE` naming it. Docs: name what you checked. Never exempt: elevated-risk work, even a pure rename; a changed runtime default, limit, flag or timeout, in any file; prompts or Markdown that shape agent or model behavior (test them with an eval or the project's prompt-content test).</rule>
   </rules>
 
   <process>
@@ -92,11 +92,10 @@ description: Use when implementing any feature or bugfix, before writing impleme
   Before marking work complete:
 
   - [ ] Each changed behavior has a test; extend an existing test file or reuse a reproducing test first
-  - [ ] Each test pins a user-visible behavior and fails if it breaks slightly, not that a framework works or an argument or field exists
-  - [ ] Pruned: broke the code each test covers; one that still passed is fixed or deleted
+  - [ ] Each test pins a user-visible behavior and fails if it breaks slightly, not that a framework works or an argument exists (a prompt-content test may assert required text)
+  - [ ] Before review: broke the code each test you added or rewrote covers, then restored it; a test that still passed is fixed or deleted
   - [ ] Watched each test fail for the expected reason before implementing
-  - [ ] Minimal code; all tests pass, output pristine; mocks only if unavoidable
-  - [ ] Removed an assertion only when the requirement made it untrue, never to get green; each named in the receipt
+  - [ ] Removed a pre-existing assertion only when your human partner's requirement made it untrue, never to get green; each named in the receipt
 
   Can't check all boxes? You skipped TDD. Start over.
 

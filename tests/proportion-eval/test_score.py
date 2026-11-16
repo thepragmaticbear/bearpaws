@@ -20,11 +20,22 @@ def bash(cmd_id, command, output=""):
     ]
 
 
+def agent(cmd_id, description, subagent_type="general-purpose"):
+    return [{"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": cmd_id, "name": "Agent",
+         "input": {"description": description, "subagent_type": subagent_type, "prompt": "..."}}]}}]
+
+
+def reply(text):
+    return [{"type": "result", "session_id": "s", "result": text, "total_cost_usd": 0}]
+
+
 def edit(cmd_id, path):
     return [{"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": cmd_id, "name": "Edit", "input": {"file_path": path}}]}}]
 
 
+GREEN_OUT = "Ran 8 tests in 0.001s\n\nOK"
 RED_OUT = "FAIL: test_x (tests.test_x.T.test_x)\nAssertionError: 5 != 30\nFAILED (failures=1)"
 TIMEOUT_TEST = "\n    def test_default_timeout(self):\n        self.assertEqual(request_options()['timeout'], 30)\n"
 TRIAGE_RULE = "- For billing tickets, ask for the customer's order number before anything else.\n"
@@ -83,14 +94,236 @@ class Score(unittest.TestCase):
         self.assertEqual((r["test_files_added"], r["test_funcs_added"], r["assertions_added"]), (1, 1, 1))
         self.assertFalse(r["expected"])
 
+    def rename_text(self, w):
+        for rel in ("src/text.py", "src/greeting.py", "tests/test_text.py"):
+            self.write(w, rel, self.read(w, rel).replace("clean_name", "normalize_name"))
+
+    def rename_money(self, w):
+        for rel in ("src/tax.py", "src/invoice.py", "tests/test_tax.py"):
+            self.write(w, rel, self.read(w, rel).replace("calc_tax", "compute_tax"))
+
     def test_rename_keeps_its_assertions(self):
-        def change(w):
-            for rel in ("src/tax.py", "src/invoice.py", "tests/test_tax.py"):
-                self.write(w, rel, self.read(w, rel).replace("calc_tax", "compute_tax"))
-        r = self.run_score("rename", change, [])
+        r = self.run_score("rename", self.rename_text, [])
         self.assertTrue(r["correct"])
         self.assertEqual((r["assertions_added"], r["assertions_removed"]), (0, 0))
         self.assertTrue(r["expected"])
+        self.assertFalse(r["verified"])  # no test run seen
+        self.assertFalse(r["full_rule"])
+
+    def test_rename_verified_before_and_after(self):
+        events = (bash("a", "python3 -m unittest discover -s tests -t . 2>&1 | tail -3", GREEN_OUT)
+                  + edit("b", "src/text.py")
+                  + bash("c", "python3 -m unittest discover -s tests -t . 2>&1 | tail -3", GREEN_OUT))
+        r = self.run_score("rename", self.rename_text, events)
+        self.assertTrue(r["verified"])
+        self.assertTrue(r["full_rule"])
+        # Only after: not verified (no baseline).
+        r = self.run_score("rename", self.rename_text, edit("b", "src/text.py") + bash("c", "python3 -m unittest", GREEN_OUT))
+        self.assertTrue(r["expected"])
+        self.assertFalse(r["verified"])
+
+    def test_run_after_a_batched_edit_counts_as_after(self):
+        import score
+        self.assertEqual([k for k, _ in score.classify("sed -i '' 's/a/b/' src/text.py && python3 -m unittest")],
+                         ["impl_edit", "run"])
+        self.assertEqual([k for k, _ in score.classify("python3 -m unittest; sed -i '' 's/a/b/' src/text.py")],
+                         ["batched_run", "impl_edit"])  # a baseline, never RED
+
+    def test_batched_runs_are_attributed_only_when_unambiguous(self):
+        # Two runs, one summary (grep ate the first run's): which run passed is unknown.
+        cmd = ("python3 -m unittest tests.test_slug 2>&1 | grep AssertionError; sed -i '' 's/x/y/' src/slug.py && "
+               "python3 -m unittest 2>&1 | tail -3 && git diff")
+        def change(w):
+            self.write(w, "tests/test_slug.py", "import unittest\nfrom src.slug import slugify\n\n\nclass T(unittest.TestCase):\n"
+                       "    def test_lowercase(self):\n        self.assertEqual(slugify('Hello World'), 'hello-world')\n")
+            self.sub(w, "src/slug.py", '.strip("-")', '.strip("-").lower()')
+        out = "AssertionError: 'Hello-World' != 'hello-world'\n----\nRan 9 tests in 0.0s\n\nOK\n"
+        r = self.run_score("uncovered", change, edit("a", "tests/test_slug.py") + bash("b", "python3 -m unittest", RED_OUT)
+                           + bash("c", cmd, out))
+        self.assertTrue(r["failing_first"])
+        self.assertFalse(r["verified"])
+        # One summary per run, in order: the second (after the edit) is its own and passed.
+        cmd2 = ("python3 -m unittest tests.test_slug 2>&1 | tail -1; sed -i '' 's/x/y/' src/slug.py && "
+                "python3 -m unittest 2>&1 | tail -3")
+        r = self.run_score("uncovered", change, edit("a", "tests/test_slug.py") + bash("b", "python3 -m unittest", RED_OUT)
+                           + bash("c", cmd2, "FAILED (failures=1)\nRan 9 tests in 0.0s\n\nOK\n"))
+        self.assertTrue(r["verified"])
+        r = self.run_score("uncovered", change, edit("a", "tests/test_slug.py") + bash("b", "python3 -m unittest", RED_OUT)
+                           + bash("c", cmd2, "OK\nRan 9 tests\n\nFAILED (failures=1)\n"))
+        self.assertFalse(r["verified"])
+
+    def test_run_outcome_attribution(self):
+        import score
+        # A run that never started: its neighbour's OK is not its own.
+        out = "Ran 8 tests in 0.0s\n\nOK\n(eval):1: command not found: python\n"
+        self.assertEqual((score.run_outcome(out, 0, 2), score.run_outcome(out, 1, 2)), ("unknown", "unknown"))
+        out = "Ran 8 tests\n\nOK\n/usr/bin/python3: No module named pytest\n"
+        self.assertEqual(score.run_outcome(out, 1, 2), "unknown")
+        # Reversed: the startup failure comes first.
+        out = "(eval):1: command not found: python\nRan 8 tests in 0.0s\n\nOK\n"
+        self.assertEqual((score.run_outcome(out, 0, 2), score.run_outcome(out, 1, 2)), ("unknown", "unknown"))
+        self.assertEqual(score.run_outcome("(eval):1: command not found: python\n", 0, 1), "error")
+        self.assertEqual(score.run_outcome("Ran 2\n\nFAILED (failures=1)\nRan 2\n\nOK\n", 0, 2), "red")
+        self.assertEqual(score.run_outcome("Ran 2\n\nFAILED (failures=1)\nRan 2\n\nOK\n", 1, 2), "green")
+
+    def test_baseline_and_after_from_the_reported_repro(self):
+        # python3 OK; edit; python (missing): the OK is the baseline's, not the after-run's.
+        cmd = "python3 -m unittest 2>&1 | tail -3; sed -i '' 's/clean_name/normalize_name/g' src/text.py src/greeting.py tests/test_text.py; python -m unittest"
+        r = self.run_score("rename", self.rename_text, bash("a", cmd, "Ran 8 tests in 0.0s\n\nOK\n(eval):1: command not found: python\n"))
+        self.assertFalse(r["verified"])
+
+    def test_stash_run_output_is_not_a_surviving_red(self):
+        # Current tree passes; the stashed (old) tree fails. Only the first run survives, and with
+        # two runs in the call its outcome must come from its own summary.
+        cmd = "python3 -m unittest tests.test_client 2>&1 | tail -3; git stash -q; python3 -m unittest tests.test_client 2>&1 | tail -3; git stash pop -q"
+        events = edit("a", "tests/test_client.py") + bash("b", cmd, "Ran 2 tests\n\nOK\nRan 2 tests\n\nFAILED (failures=1)\n") + edit("c", "src/config.py")
+        r = self.run_score("timeout", self.timeout_change, events)
+        self.assertFalse(r["failing_first"])
+        # And the same output without per-run summaries is unknown, not RED.
+        events = edit("a", "tests/test_client.py") + bash("b", cmd, "OK\nAssertionError: 5 != 30\n") + edit("c", "src/config.py")
+        self.assertFalse(self.run_score("timeout", self.timeout_change, events)["failing_first"])
+
+    def test_test_edit_after_the_last_green_run_is_not_verified(self):
+        events = (bash("a", "python3 -m unittest", GREEN_OUT) + edit("b", "src/text.py")
+                  + bash("c", "python3 -m unittest", GREEN_OUT) + edit("d", "tests/test_text.py"))
+        self.assertFalse(self.run_score("rename", self.rename_text, events)["verified"])
+        events += bash("e", "python3 -m unittest", GREEN_OUT)
+        self.assertTrue(self.run_score("rename", self.rename_text, events)["verified"])
+
+    def test_batched_baseline_counts_for_verification_not_red(self):
+        import score
+        cmd = ("python3 -m unittest 2>&1 | tail -3 && sed -i '' 's/clean_name/normalize_name/g' src/text.py "
+               "src/greeting.py tests/test_text.py; python3 -m unittest 2>&1 | tail -3")
+        self.assertEqual([k for k, _ in score.classify(cmd)], ["batched_run", "impl_edit", "run"])
+        r = self.run_score("rename", self.rename_text, bash("a", cmd, "Ran 8 tests\n\nOK\n...\nRan 8 tests\n\nOK"))
+        self.assertTrue(r["verified"])
+        # A failing baseline in the same call as the fix is not RED.
+        r = self.run_score("timeout", self.timeout_change, edit("a", "tests/test_client.py")
+                           + bash("b", "python3 -m unittest 2>&1 | tail -3; sed -i '' 's/5/30/' src/config.py; python3 -m unittest",
+                                  "AssertionError\nFAILED (failures=1)\nRan 8\n\nOK"))
+        self.assertFalse(r["failing_first"])
+        self.assertTrue(r["verified"])
+
+    def test_git_stash_round_trip_is_not_an_edit(self):
+        import score
+        kinds = lambda c: [k for k, _ in score.classify(c)]
+        self.assertEqual(kinds("python3 -m unittest; git stash -q; python3 -m unittest tests.test_invoice; git stash pop -q"), ["run"])
+        self.assertEqual(kinds("grep -rn tax src; git diff --stat; git stash list"), [])
+        self.assertEqual(kinds("git stash -q; python3 -m unittest"), ["impl_edit", "run"])  # never popped: an edit
+        self.assertEqual(kinds("git stash pop"), ["impl_edit"])  # pops an earlier call's stash
+        self.assertEqual(kinds("git stash push src/config.py -q"), ["impl_edit"])
+
+    def test_cache_cleanup_is_narrow(self):
+        import score
+        kinds = lambda c: [k for k, _ in score.classify(c)]
+        for cmd in ("find . -name __pycache__ -o -path ./src/config.py -delete",
+                    "find . -name '*.pyc' -o -name '*.py' -delete",
+                    "find . -name __pycache__ -exec sed -i '' 's/a/b/' {} +",
+                    "find . -name __pycache__ -prune -o -name '*.py' -exec rm {} +",
+                    "find src -type f -delete"):
+            self.assertEqual(kinds(cmd), ["impl_edit"], cmd)
+        for cmd in ("find . -name .pytest_cache -type d -exec rm -rf {} +",
+                    "find . -type d -name __pycache__ -not -path './.git/*' -exec rm -r {} +",
+                    "rm -rf .pytest_cache src/__pycache__"):
+            self.assertEqual(kinds(cmd), [], cmd)
+
+    def test_cache_cleanup_is_not_an_edit(self):
+        import score
+        for cmd in ("find . -name __pycache__ -not -path './.git/*' -exec rm -rf {} +; git status --short",
+                    "find . -name '*.pyc' -delete"):
+            self.assertEqual([k for k, _ in score.classify(cmd)], [], cmd)
+        self.assertEqual([k for k, _ in score.classify("find src -name '*.py' -exec sed -i '' 's/a/b/' {} +")], ["impl_edit"])
+
+    def test_python_probe_blocks_red_but_not_verification(self):
+        import score
+        probe = 'python3 -c "from src.invoice import invoice_total as t; print(t([(1000, 1)], 0.1, 200))"'
+        self.assertEqual([k for k, _ in score.classify(probe)], ["probe_edit"])
+        self.assertEqual([k for k, _ in score.classify("python3 -c \"open('src/x.py','w').write('')\"")], ["impl_edit"])
+        fix = lambda w: self.sub(w, "src/invoice.py",
+                                 "    total = subtotal + calc_tax(subtotal, rate)\n    return max(total - discount_cents, 0)\n",
+                                 "    taxable = max(subtotal - discount_cents, 0)\n    return taxable + calc_tax(taxable, rate)\n")
+        # A probe before the RED run still erases RED.
+        r = self.run_score("deletion", fix, bash("a", probe, "900") + bash("b", "python3 -m unittest", RED_OUT)
+                           + edit("c", "src/invoice.py"))
+        self.assertFalse(r["failing_first"])
+        # A probe after the passing run does not undo verification.
+        r = self.run_score("deletion", fix, bash("a", "python3 -m unittest", RED_OUT) + edit("b", "src/invoice.py")
+                           + bash("c", "python3 -m unittest", GREEN_OUT) + bash("d", probe, "880"))
+        self.assertTrue(r["failing_first"])
+        self.assertTrue(r["verified"])
+
+    def test_docs_verified_by_naming_a_check(self):
+        change = lambda w: self.write(w, "docs/usage.md", "\n## Configuration\nTimeout: DEFAULT_TIMEOUT.\n", "a")
+        r = self.run_score("docs", change, reply("Done.\n\nRisk: routine\nVerified: re-read docs/usage.md against src/client.py\n"))
+        self.assertTrue((r["expected"], r["verified"], r["full_rule"]) == (True, True, True))
+        for v in ("none", "N/A (docs only)"):
+            r = self.run_score("docs", change, reply(f"Done.\nVerified: {v}\nStatus: COMPLETE"))
+            self.assertFalse(r["verified"], v)
+
+    def test_money_rename_needs_pinned_run_and_review_and_no_exemption(self):
+        pinned = bash("a", "python3 -m unittest discover -s tests -t .", GREEN_OUT)
+        after = bash("c", "python3 -m unittest discover -s tests -t .", GREEN_OUT)
+        good = reply("Renamed.\n\nRisk: elevated (money)\nVerified: 8 tests OK\nPinned: test_tax\n"
+                     "Failing first: none, behavior-preserving rename; test_tax pins it\nReview: OK\nStatus: COMPLETE")
+        r = self.run_score("money-rename", self.rename_money,
+                           pinned + edit("b", "src/tax.py") + after + agent("d", "Code review of the rename") + good)
+        self.assertTrue(r["correct"])
+        self.assertEqual((r["pinned_before_edit"], r["review_dispatched"], r["claims_exemption"]), (True, True, False))
+        self.assertIn("test_tax pins it", r["failing_first_receipt"])
+        self.assertTrue(r["expected"])
+        # The saved-run failure: no review, and the receipt treats the rename as exempt routine work.
+        bad = reply("Renamed.\n\nRisk: routine\nVerified: tests OK\nFailing first: N/A (exempt rename)\nStatus: COMPLETE")
+        r = self.run_score("money-rename", self.rename_money, pinned + edit("b", "src/tax.py") + after + bad)
+        self.assertEqual((r["review_dispatched"], r["claims_exemption"], r["expected"]), (False, True, False))
+        # Not exempt, said plainly, is not a claim.
+        r = self.run_score("money-rename", self.rename_money, pinned + edit("b", "src/tax.py") + after
+                           + agent("d", "review", "bp:code-reviewer")
+                           + reply("Money code is not exempt.\nRisk: elevated (money)\nStatus: COMPLETE"))
+        self.assertEqual((r["claims_exemption"], r["expected"]), (False, True))
+        # No pinned run before the edit.
+        r = self.run_score("money-rename", self.rename_money, edit("b", "src/tax.py") + after
+                           + agent("d", "Code review") + good)
+        self.assertFalse(r["expected"])
+
+    # --- plan arm ---
+
+    def plan_run(self, task, text, implement=False):
+        def change(w):
+            self.write(w, "plan.md", text)
+            if implement:
+                self.write(w, "src/config.py", "DEFAULT_TIMEOUT = 30\nRETRIES = 2\n")
+        return self.run_score("plan-" + task, change, [])
+
+    def test_plan_for_exempt_task_without_a_failing_test_is_expected(self):
+        r = self.plan_run("rename", "### Task 1: Rename\n- [ ] Step 1: Run the existing tests (exempt task; no failing test)\n"
+                          "- [ ] Step 2: Rename clean_name to normalize_name\n```python\ndef test_normalize_name(self):\n```\n"
+                          "- [ ] Step 3: Run tests, expect OK\n")
+        self.assertEqual((r["plan_new_tests"], r["plan_failing_step"]), ([], False))
+        self.assertTrue(r["expected"])
+        self.assertFalse(r["implemented"])
+
+    def test_plan_mutation_check_is_not_a_failing_test_step(self):
+        r = self.plan_run("rename", "- [ ] Step 1: Run the existing tests (exempt task)\n- [ ] Step 2: Rename\n"
+                          "Temporarily change the body of normalize_name to `return name`.\nRun the tests.\n"
+                          "Expected: FAIL in both tests. Restore the body.\n")
+        self.assertEqual((r["plan_failing_step"], r["plan_mutation_step"]), (False, True))
+        self.assertTrue(r["expected"])
+
+    def test_plan_with_failing_test_for_exempt_task_is_not_expected(self):
+        r = self.plan_run("config", "### Task 1\n- [ ] Step 1: Write the failing test\n```python\n"
+                          "def test_line_length():\n    assert 'line-length = 100' in open('pyproject.toml').read()\n```\n"
+                          "- [ ] Step 2: Run test, verify FAIL\n")
+        self.assertEqual((r["plan_new_tests"], r["plan_failing_step"]), (["test_line_length"], True))
+        self.assertFalse(r["expected"])
+
+    def test_plan_for_timeout_needs_a_failing_test(self):
+        good = self.plan_run("timeout", "- [ ] Step 1: Write the failing test\n```python\n"
+                             "def test_default_timeout_is_30(self):\n```\n- [ ] Step 2: Run it, verify FAIL\n", implement=True)
+        self.assertTrue(good["expected"])
+        self.assertTrue(good["implemented"])
+        bad = self.plan_run("timeout", "- [ ] Step 1: Change DEFAULT_TIMEOUT to 30 and run the existing tests\n")
+        self.assertFalse(bad["expected"])
+        self.assertFalse(self.run_score("plan-timeout", lambda w: None, [])["correct"])
 
     # --- assertion removal ---
 
@@ -179,7 +412,7 @@ class Score(unittest.TestCase):
         events = bash("a", "cat >> tests/test_client.py <<'EOF'\nx\nEOF\nsed -i '' 's/5/30/' src/config.py\n"
                            "python3 -m unittest", RED_OUT)
         r = self.run_score("timeout", self.timeout_change, events)
-        self.assertFalse(r["test_first"])
+        self.assertTrue(r["test_first"])  # the test write comes first in the command
         self.assertFalse(r["failing_first"])
 
     def test_runner_or_import_failure_is_not_red(self):
@@ -399,8 +632,8 @@ class Score(unittest.TestCase):
         self.assertEqual(kinds("ls | xargs -I {} sed -i '' 's/a/b/' {}"), ["impl_edit"])
         # Absolute paths: outside the run's work tree is capture, inside is an edit.
         self.assertEqual(kinds("python3 -m unittest > /work/out/red.txt", "/other"), ["run"])
-        self.assertEqual(kinds("python3 -m unittest; echo x > /work/src/config.py", "/work"), ["impl_edit"])
-        self.assertEqual(kinds("python3 -m unittest | tee /work/tests/log.txt", "/work"), ["test_edit", "run"])
+        self.assertEqual(kinds("python3 -m unittest; echo x > /work/src/config.py", "/work"), ["batched_run", "impl_edit"])
+        self.assertEqual(kinds("python3 -m unittest | tee /work/tests/log.txt", "/work"), ["run", "test_edit"])
         self.assertEqual(kinds("python3 -m unittest | tee /tmp/tests/red.log", "/work"), ["run"])
 
     def test_red_captured_to_a_file_is_red(self):
