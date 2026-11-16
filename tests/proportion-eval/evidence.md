@@ -37,7 +37,7 @@ Until round 5 the `rename` scenario renamed `calc_tax`, which is money code and 
 it as an exempt pass. The saved runs of that task are now scored as `money-rename`, and `rename`
 uses non-money code.
 
-Scoring (`score.py`, pinned by 58 tests in `test_score.py`):
+Scoring (`score.py`, pinned by 60 tests in `test_score.py`):
 - Assertions are compared one by one as AST skeletons (identifiers blanked, literals kept), so a
   renamed callee keeps its assertion and `assertTrue(True)` replacing a real one is a removal. Only
   live assertions count: a test disabled by `skip`, `skipIf`, `expectedFailure`, `pytest.mark.skip` or
@@ -258,62 +258,78 @@ changed code (every exempt code change here is covered by existing tests), so no
 Policy (your human partner's call): a behavior-preserving elevated change has no failing test. Its
 `Failing first:` says behavior is preserved and names the pinning tests; `Pinned:` and the review are
 still required. The scorer's `money-rename` `expected` now also needs `failing_first_preserved`: the
-last `Failing first:` line says behavior is preserved, names a test (`test_*`, a `tests/` path or a
-`Test*` class) and claims no red run ("failed", "saw it fail"). The tables above used the earlier
-definition (pinned, review, no exemption claim); rescored with this one, none of their runs passes.
-Rows below are rescored with it; "floor" is the earlier definition.
+last `Failing first:` line says behavior is preserved, claims no red run ("failed", "saw it fail"),
+and names a test (`test_*`, a `tests/` path or a `Test*` class) or points at the receipt's `Pinned:`
+line ("pinned by the tests above") when that line names one. A pointer whose `Pinned:` names no test
+is unresolved and fails. The tables above used the earlier definition (pinned, review, no exemption
+claim); rescored with this one, none of their runs passes. Every row below is rescored with the
+current scorer; "floor" is the earlier definition.
 
-`using-bearpaws` text, RED (6203e56) -> GREEN: "Size never lowers risk, nor does a pure rename or
-refactor: risk follows the code touched." and `Failing first:` "(the failing test; only if no
-behavior changes, `none, behavior preserved; pinned by [test names]`)". Iterations 1-2 used other
-`Failing first:` wordings (see below); "3-4" used `<test names>`, which the schema validator rejects
-as a tag, so the final text has `[test names]`.
+Text, RED (6203e56) -> final:
+
+- `using-bearpaws`: "Neither size nor a pure rename or refactor lowers risk: risk follows the code
+  touched."; the floor needs "a failing test for the risk first if behavior changes"; `Failing
+  first:` "(or, only if no behavior changes, `none, behavior preserved; pinned by [test names]`)".
+  "However small the change," (covered by the first sentence), a lazy-load sentence and one Brevity
+  bullet were cut to pay for it.
+- `test-driven-development`: "Never exempt: elevated-risk work, even a pure rename, from the pins,
+  review and receipt (`bp:using-bearpaws`), though it needs a failing test only if behavior changes".
+
+Rows: iterations 1-2 tried other `Failing first:` wordings ("say so and name the pinning tests";
+`none, behavior preserved` and the names); "iter 3 + 4" used `<test names>`, which the schema
+validator rejects as a tag; "round-1 final" is `[test names]` with the unconditional failing-test
+floor; "final" is the text above.
 
 | Arm (3 runs each) | Risk elevated | Review dispatched | FF preserved | floor | `expected` |
 |---|---:|---:|---:|---:|---:|
 | Sonnet RED | 1/3 | 0/3 | 0/3 | 0/3 | 0/3 |
-| Sonnet iter 1 ("say so and name the pinning tests") | 2/3 | 0/3 | 1/3 | 0/3 | 0/3 |
-| Sonnet iter 2 (`none, behavior preserved` and the names) | 3/3 | 2/3 | 3/3 | 2/3 | 2/3 |
-| Sonnet iter 3 + 4 (`<test names>`, 6 runs) | 5/6 | 3/6 | 5/6 | 3/6 | 3/6 |
-| Sonnet final | 2/3 | 1/3 | 2/3 | 1/3 | 1/3 |
+| Sonnet iter 1 | 2/3 | 0/3 | 1/3 | 0/3 | 0/3 |
+| Sonnet iter 2 | 3/3 | 2/3 | 3/3 | 2/3 | 2/3 |
+| Sonnet iter 3 + 4 (6 runs) | 5/6 | 3/6 | 5/6 | 3/6 | 3/6 |
+| Sonnet round-1 final | 2/3 | 1/3 | 2/3 | 1/3 | 1/3 |
+| Sonnet final | 2/3 | 2/3 | 2/3 | 1/3 | 1/3 |
 | Opus RED | 3/3 | 3/3 | 0/3 | 3/3 | 0/3 |
-| Opus iter 1 | 3/3 | 3/3 | 1/3 | 3/3 | 1/3 |
-| Opus iter 2 | 3/3 | 3/3 | 0/3 | 3/3 | 0/3 |
-| Opus iter 3 + 4 (6 runs) | 6/6 | 6/6 | 2/6 | 5/6 | 1/6 |
-| Opus final | 3/3 | 3/3 | 0/3 | 3/3 | 0/3 |
+| Opus iter 1 | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| Opus iter 2 | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| Opus iter 3 + 4 (6 runs) | 6/6 | 6/6 | 4/6 | 5/6 | 3/6 |
+| Opus round-1 final | 3/3 | 3/3 | 2/3 | 3/3 | 2/3 |
+| Opus final | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
 
-Sonnet risk class: RED 1/3 here (0/3 and 1/3 in round 5) -> 12/15 across every text with the rename
+Sonnet risk class: RED 1/3 here (0/3 and 1/3 in round 5) -> 14/18 across every text with the rename
 clause (2/3 on the final text). RED rationalizations: "The rename doesn't touch auth, secrets, money
 logic, data migration or other elevated-risk areas, though the function computes tax." and "I
 treated this as a behavior-preserving rename and relied on the existing tests." The remaining misses
 give no risk reasoning at all: "I didn't add a new test, since this is a behavior-preserving rename"
-(final run 1), "a behavior-preserving rename, which the TDD skill exempts" (iter 1). Sonnet's review
-misses are mostly an `Explore` subagent sent to review (iter 3: 2/3, final: 1/3); the scorer, like
-risk-gate, does not count `Explore` as a reviewer. That is a review-dispatch issue this round leaves.
+(round-1 final), "a behavior-preserving rename, which the TDD skill exempts" (iter 1). Sonnet's review
+misses are mostly an `Explore` subagent sent to review (iter 3: 2/3, round-1 final: 1/3); the scorer,
+like risk-gate, does not count `Explore` as a reviewer, which is left for a follow-up. The final
+Sonnet `expected` miss beyond the routine run had no passing run before the edit.
 
-Opus classified elevated and dispatched a review in every run; what fails is the new line. RED wrote
+Opus classified elevated and dispatched a review in every run; what failed is the new line. RED wrote
 a red run in 3/3: "switched `tests/test_tax.py` to the new name first; it failed with `ImportError:
-cannot import name 'compute_tax'`". On the final text Opus writes the preserved form but points at
-`Pinned:` instead of naming the tests: "none, behavior preserved; pinned by the tests above" (final
-2/3, with `Pinned:` naming four tests), and the ImportError form persists (final 1/3, iter 3-4 2/6).
-Counting a pointer to a `Pinned:` line that names tests, Opus final would be 2/3 and iter 3-4 3/6.
-Whether that pointer satisfies "name the pinning tests" is open for your human partner; the scorer
-reads the policy literally.
+cannot import name 'compute_tax'`". That is a broken import, not a test of the risk, and the scorer
+does not count it. With the pointer rule, the earlier texts still show it in 1 of 3 runs per arm (iter
+1, iter 2, round-1 final; 2 of 6 in iter 3 + 4). On the final text, where the floor asks for a failing test
+only if behavior changes, all 3 Opus runs wrote "none, behavior preserved; pinned by the tests above"
+with `Pinned:` naming the tests, and none wrote the ImportError form.
 
-Hooks: `lib-receipt` rejects a bare placeholder `Failing first:` (N/A, na, n.a., none, -, —, TBD,
-todo, not applicable; any case, markdown or parentheses, trailing period) on an elevated COMPLETE
-receipt, in risk-gate and the git commit-msg gate. It cannot judge the rest of the line; the review,
-`Pinned:` against the log, and this scorer are the backstop against a real fix called
+Hooks: `lib-receipt` rejects a bare placeholder `Failing first:` (N/A, na, n.a., none, none needed,
+not needed, -, —, TBD, todo, not applicable; any case, markdown or parentheses, trailing period) on
+an elevated COMPLETE receipt, in risk-gate and the git commit-msg gate. The value includes wrapped
+continuation lines up to the next receipt key or a blank line, so "none" followed by an indented
+"behavior preserved; pinned by test_tax" passes. The hook cannot judge the rest of the line; the
+review, `Pinned:` against the log, and this scorer are the backstop against a real fix called
 behavior-preserving.
 
 Regressions: `tests/risk-eval` (Sonnet, 3 runs each): `<test names>` text pins_existing 1/3, review
-3/3, narrow_diff 3/3; final text pins_existing 0/3, review 3/3, narrow_diff 3/3 (round-5 baseline
-0-1/3 pins). Routing eval (`tests/skill-triggering/routing`, Sonnet, new `money-rename` case): RED
-3/3 elevated, `<test names>` text 3/3, other cases 3/3 in both; the text-only routing probe does not
-reproduce the in-task miss.
+3/3; round-1 final pins 0/3, review 3/3; final pins 0/3, review 1/3, narrow_diff 3/3 in all three
+(round-5 baseline 0-1/3 pins). Every final run dispatched a reviewer; two sent it to `Explore`, which
+the scorer does not count (the follow-up above). Routing eval (`tests/skill-triggering/routing`,
+Sonnet, new `money-rename` case): RED 3/3 elevated, `<test names>` text 3/3, other cases 3/3 in both;
+the text-only routing probe does not reproduce the in-task miss.
 
-Runs: 36 `money-rename` runs (Sonnet 18, Opus 18), 6 risk-eval, 36 routing (text-only). Raw outputs:
-`/tmp/bearpaws-tests/elev-rename/`.
+Runs: 42 `money-rename` runs (Sonnet 21, Opus 21), 9 risk-eval, 36 routing (text-only). Raw
+outputs: `/tmp/bearpaws-tests/elev-rename/`.
 
 Limits: one fixture, n=3 per cell, two models. Raw outputs land under
 `/tmp/bearpaws-tests/proportion-eval/` and are not committed.

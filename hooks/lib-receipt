@@ -147,14 +147,39 @@ review_is_placeholder() {
   grep -qE '^(none|skipped|skip|n/?a|n\.a\.?|na|-|—|todo|tbd|pending|self-review(ed)?|self)([^[:alnum:]_-].*)?$|^(no|not)[.]?$|^(no|not) (review|reviews|reviewed|reviewer|done|run|yet|applicable|needed|required)([^[:alnum:]_-].*)?$' <<<"$v"
 }
 
-# failing_first_is_placeholder <val>: 0 if the value is only a placeholder (n/a, na, none, -, —, tbd,
-# todo, not applicable), ignoring case, parentheses, markdown and a trailing period. Any value with more
-# text passes: "none: behavior preserved; test_tax pins it" names what pins the change.
+# field_block <key>: like field_raw, but the value always includes the lines that follow the last
+# <key>: line, up to the next receipt key, a quoted line or a blank line, so a populated first line
+# that wraps ("none" then "  behavior preserved; pinned by test_tax") is read whole. Returns 1 if absent.
+field_block() {
+  LEAD="$LEAD" TRAIL="$TRAIL" ALL_KEYS="$ALL_KEYS" KEY="$1" LC_ALL=C awk '
+    BEGIN {
+      key_re = tolower(ENVIRON["LEAD"] ENVIRON["KEY"] ENVIRON["TRAIL"] ":")
+      all_re = tolower(ENVIRON["LEAD"] ENVIRON["ALL_KEYS"] ENVIRON["TRAIL"] ":")
+    }
+    { lines[NR] = $0; if (tolower($0) ~ key_re) last = NR }
+    END {
+      if (!last) exit 1
+      out = lines[last]
+      sub(/^[^:]*:/, "", out)
+      for (i = last + 1; i <= NR; i++) {
+        ln = lines[i]
+        if (tolower(ln) ~ all_re || ln ~ /^[[:space:]]*>/ || ln ~ /^[[:space:]]*$/) break
+        out = out " " ln
+      }
+      gsub(/[*`_]/, "", out); sub(/^[[:space:]]+/, "", out); sub(/[[:space:]]+$/, "", out)
+      print out
+    }' <<<"$msg"
+}
+
+# failing_first_is_placeholder <val>: 0 if the value is only a placeholder (n/a, na, none, none needed,
+# not needed, -, —, tbd, todo, not applicable), ignoring case, parentheses, markdown and a trailing
+# period. Any value with more text passes: "none: behavior preserved; test_tax pins it" names what pins
+# the change.
 failing_first_is_placeholder() {
   local v
   v="$(printf '%s' "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' | tr '\n\r\t' '   ' | tr -d '()*`' | sed -E 's/[[:space:]]+/ /g; s/^ +| +$//g; s/[.]+$//')"
   [ -n "$v" ] || return 0
-  grep -qE '^(n/?a|n\.a|na|none|-+|—|–|tbd|todo|not applicable)$' <<<"$v"
+  grep -qE '^(n/?a|n\.a|na|none|none needed|not needed|-+|—|–|tbd|todo|not applicable)$' <<<"$v"
 }
 
 # check_receipt <mode>: shared receipt acceptance rules for "stop" (risk-gate) and "commit" (git-commit-msg).
@@ -203,7 +228,7 @@ check_receipt() {
 
   # Elevated COMPLETE: a Failing first: line, where present (the stop mode requires it), is never a
   # bare placeholder. A change that alters no behavior says so and names the pinning tests.
-  if [ "$risk" = elevated ] && [ "$incomplete" = 0 ] && v="$(field_value "Failing first")" \
+  if [ "$risk" = elevated ] && [ "$incomplete" = 0 ] && v="$(field_block "Failing first")" \
     && failing_first_is_placeholder "$v"; then
     receipt_err="${prefix}Failing first: is a bare placeholder ($v). Name the test that failed first, or, if no behavior changes, say behavior is preserved and name the pinning tests; else set Status: INCOMPLETE."
     return 2

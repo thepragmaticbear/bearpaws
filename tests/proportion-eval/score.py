@@ -470,11 +470,21 @@ RED_CLAIM = re.compile(r"(?i)\bfailed\b|\b(?:saw|see|watched)\b[^.;]{0,30}\bfail
 NAMES_TEST = re.compile(r"\btest_\w+|\btests?/[\w./-]+|\bTest[A-Z]\w*")
 
 
+# A pointer to the receipt's Pinned: line ("pinned by the tests above") instead of the names.
+POINTS_AT_PINNED = re.compile(r"(?i)\b(?:above|pinned:?\s+(?:line|field|list)|(?:in|see|under)\W+pinned\b|"
+                              r"the\s+pinned\s+tests|listed\s+(?:above|under|in))")
+
+
 def preserved_receipt(text):
-    """Failing first: says behavior is preserved and names a pinning test, and claims no red run (a
-    renamed test failing on import is not a test for the risk)."""
+    """Failing first: says behavior is preserved, names a pinning test (or points at a Pinned: line
+    that names one), and claims no red run (a renamed test failing on import is not a test for the
+    risk). A pointer whose Pinned: line names no test is unresolved and fails."""
     v = receipt(text, "Failing first")
-    return bool(v) and bool(PRESERVED.search(v)) and bool(NAMES_TEST.search(v)) and not RED_CLAIM.search(v)
+    if not v or not PRESERVED.search(v) or RED_CLAIM.search(v):
+        return False
+    if NAMES_TEST.search(v):
+        return True
+    return bool(POINTS_AT_PINNED.search(v)) and bool(NAMES_TEST.search(receipt(text, "Pinned") or ""))
 
 
 def claims_exemption(text):

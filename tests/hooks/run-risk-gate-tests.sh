@@ -1211,6 +1211,23 @@ for v in "N/A" "n/a" "none" "None." "-" "—" "TBD" "**N/A**" "\`none\`" "(n/a)"
 done
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "$E_RENAME"
 expect "FF: behavior-preserving Failing first naming pinning tests: allow" allow
+NL=$'\n'
+for v in "none needed" "none." "not needed"; do
+  reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+# A populated first line that wraps: the continuation lines are part of the value.
+for v in $'none\n  behavior preserved; pinned by test_tax' $'none\n- behavior preserved; pinned by test_tax' \
+  $'none needed\n  behavior preserved; pinned by test_tax' "none needed: behavior preserved; pinned by test_tax"; do
+  reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: $v}"
+  expect "FF: Failing first '${v//$NL/ / }' with an explanation: allow" allow
+done
+# The next receipt key, or a blank line, ends the value.
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: none}"
+expect "FF: none followed by the next key still blocks" block "Failing first"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review
+stop "${E_RENAME/Failing first: none, behavior preserved; test_tax and test_invoice_total pin it/Failing first: none${NL}${NL}behavior preserved; pinned by test_tax}"
+expect "FF: text after a blank line is not part of the value" block "Failing first"
 reset; edit src/tax.py; ran "pytest"; review; stop "$E_RENAME"
 expect "FF: behavior-preserving form still needs a Pinned run before the edit" block "Pinned"
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; stop "$E_RENAME"

@@ -316,6 +316,21 @@ for v in "N/A" "n/a" "none" "None." "-" "—" "TBD" "**N/A**" "(n/a)" "na" "n.a.
 done
 reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $FF_OK}"
 expect "FF: behavior-preserving Failing first naming pinning tests passes" pass
+NL=$'\n'
+for v in "none needed" "none." "not needed"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: elevated COMPLETE with placeholder Failing first '$v' blocks" block "Failing first"
+done
+# A populated first line that wraps (trailers or body): the continuation lines are part of the value.
+for v in $'none\n  behavior preserved; pinned by test_tax' $'none\n- behavior preserved; pinned by test_tax' \
+  $'none needed\n  behavior preserved; pinned by test_tax' "none needed: behavior preserved; pinned by test_tax"; do
+  reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: $v}"
+  expect "FF: Failing first '${v//$NL/ / }' with an explanation passes" pass
+done
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: none}"
+expect "FF: none followed by the next key still blocks" block "Failing first"
+reset; stage src/tax.py; gate "${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: none${NL}${NL}behavior preserved; pinned by test_tax}"
+expect "FF: text after a blank line is not part of the value" block "Failing first"
 reset; stage src/authz.py; gate "$ELEVATED"; expect "FF: normal failing-test Failing first passes" pass
 reset; stage src/tax.py; gate "$(sed 's/Status: COMPLETE/Status: INCOMPLETE/' <<<"${ELEVATED/Failing first: test_cross_org_denied failed, then passed/Failing first: N/A}")"
 expect "FF: placeholder Failing first with INCOMPLETE passes" pass
