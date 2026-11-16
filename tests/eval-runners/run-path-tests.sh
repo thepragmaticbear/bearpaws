@@ -28,7 +28,7 @@ check() {
   local name="$1" want="$2" cwd; shift 2
   cwd="$(mktemp -d "$TMP_ROOT/cwd.XXXXXX")"
   # Unset caller env that changes runner behaviour, so only the defaults are checked.
-  (unset PLUGIN_DIR SKILL_ROOT FIXTURE AGENT_PROMPT PRESSURE SUMMARY CLEAN DESIGN BENCH_MODEL
+  (unset PLUGIN_DIR SKILL_ROOT FIXTURE AGENT_PROMPT PRESSURE SUMMARY CLEAN DESIGN BENCH_MODEL SCENARIOS VIA
    cd "$cwd" && PATH="$TMP_ROOT/bin:$PATH" VARIANTS=skip "$@" >"$cwd/log" 2>&1)
   # The stub's reply in the transcript proves the runner called claude and kept its output there.
   if grep -q '"result":"stub"' "$cwd/out/$want" 2>/dev/null; then echo "PASS: $name writes out/$want under the caller's cwd"
@@ -41,6 +41,8 @@ check context-eval      lbl-1.json      "$ROOT/tests/context-eval/run.sh" lbl 1 
 check diagnose-eval    lbl-1.jsonl     "$ROOT/tests/diagnose-eval/run.sh" none lbl 1 out
 check drift-eval        lbl-1.json      "$ROOT/tests/drift-eval/run.sh" "$skill" lbl 1 out
 check fixloop-eval      lbl-1.jsonl     "$ROOT/tests/fixloop-eval/run.sh" "$ROOT/skills/subagent-driven-development/SKILL.md" lbl 1 out
+check proportion-eval   lbl-typo-1.jsonl "$ROOT/tests/proportion-eval/run.sh" lbl 1 out
+check proportion-eval-implementer lbl-docs-1.jsonl env VIA=implementer SCENARIOS=docs "$ROOT/tests/proportion-eval/run.sh" lbl 1 out
 check resume-eval       lbl-1.json      "$ROOT/tests/resume-eval/run.sh" "$skill" lbl 1 out
 check reuse-eval        lbl-1.jsonl     "$ROOT/tests/reuse-eval/run.sh" lbl 1 out
 check review-eval       lbl-1.jsonl     "$ROOT/tests/review-eval/run.sh" "$ROOT/skills/requesting-code-review/code-reviewer.md" lbl 1 out

@@ -31,7 +31,7 @@ Skills cover TDD, debugging, planning, code review, and parallel execution, plus
 - [tests/claude-code/](tests/claude-code/) — behavioral tests that shell out to the `claude` CLI.
 - [tests/skill-triggering/](tests/skill-triggering/) — naive-prompt tests that verify skills auto-trigger.
 - [tests/benchmark/](tests/benchmark/) — full-session benchmark; primary metric is cost per accepted task, scored by held-out acceptance tests.
-- `tests/*-eval/`, [tests/codex/](tests/codex/) — RED/GREEN behavior evals for skill changes, and the Codex conformance smoke. Each eval has a `run.sh` (model runs, manual) and, where it has a scorer, a model-free `test_score.py` in CI: [tests/review-eval/](tests/review-eval/) (including the scoped re-review fixture), [tests/fixloop-eval/](tests/fixloop-eval/) (SDD fix-loop cap), [tests/builder-eval/](tests/builder-eval/) (brainstorming builder check), [tests/diagnose-eval/](tests/diagnose-eval/) (`diagnosing-bearpaws` citations), plus drift, resume, reuse, risk, verification and context evals. Each new eval records its numbers in an `evidence.md`.
+- `tests/*-eval/`, [tests/codex/](tests/codex/) — RED/GREEN behavior evals for skill changes, and the Codex conformance smoke. Each eval has a `run.sh` (model runs, manual) and, where it has a scorer, a model-free `test_score.py` in CI: [tests/review-eval/](tests/review-eval/) (including the scoped re-review fixture), [tests/fixloop-eval/](tests/fixloop-eval/) (SDD fix-loop cap), [tests/builder-eval/](tests/builder-eval/) (brainstorming builder check), [tests/diagnose-eval/](tests/diagnose-eval/) (`diagnosing-bearpaws` citations), [tests/proportion-eval/](tests/proportion-eval/) (TDD test proportionality), plus drift, resume, reuse, risk, verification and context evals. Each new eval records its numbers in an `evidence.md`.
 - [tests/eval-runners/](tests/eval-runners/) — model-free path checks: every eval runner, run from another cwd with a stub `claude`, writes its transcript under a relative out-dir.
 - [docs/skill-structure.md](docs/skill-structure.md) — descriptive contract for current skill shape.
 - [docs/agent-support.md](docs/agent-support.md) — current support tiers and evidence by agent.
@@ -118,6 +118,7 @@ python3 tests/drift-eval/test_score.py                                        # 
 python3 tests/fixloop-eval/test_score.py                                      # fixloop-eval scorer tests (Status, Open, no round 6)
 python3 tests/builder-eval/test_score.py                                      # builder-eval scorer tests (dispatch, builder prompt, single-use question)
 python3 tests/diagnose-eval/test_score.py                                     # diagnose-eval scorer tests (citations, planted lines, read-only)
+python3 tests/proportion-eval/test_score.py                                  # proportion-eval scorer (test counts, assertion removals, failing-first order)
 python3 tests/reuse-eval/test_score.py                                        # reuse-eval scorer cost (each session counted once)
 python3 tests/risk-eval/test_score.py                                         # risk-eval scorer cost (each session counted once)
 tests/claude-code/run-skill-tests.sh                                          # fast Claude skill-content tests (~2 min)
@@ -138,6 +139,7 @@ tests/drift-eval/run.sh skills/finishing-a-development-branch/SKILL.md <label>  
 tests/fixloop-eval/run.sh skills/subagent-driven-development/SKILL.md <label>   # controller stops after fix round 5: INCOMPLETE, no round 6
 DESIGN=elevated tests/builder-eval/run.sh skills/brainstorming/SKILL.md <label>  # builder check runs for elevated designs only (DESIGN=routine: none)
 tests/diagnose-eval/run.sh skills/diagnosing-bearpaws/SKILL.md <label>          # diagnosis finds a masked test failure and an ignored finding, cites path:line (none: RED)
+tests/proportion-eval/run.sh <label>                                         # no new test for exempt changes; failing test first for behavior, prompt files, defaults (SKILL_ROOT=<checkout>; VIA=implementer: SDD implementer prompt)
 tests/reuse-eval/run.sh <label>                                              # routine feature: reuse an existing helper, no speculative guards (SKILL_ROOT=<checkout>)
 tests/context-eval/run.sh <label>                                             # controller passes onboarding facts to implementers
 tests/codex/run-conformance.sh                                                # Codex adapter conformance, repo-level (exit 2 = blocked, not failed)
