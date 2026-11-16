@@ -1322,6 +1322,20 @@ reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$RE
 expect "R5: Review nested bare markers (stop): blocks" block "Review"
 reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$REV_RISK/Review:${NL}${NL}1) bp:code-reviewer — Ready to merge: Yes}"
 expect "R5: Review numbered evidence (stop): allow" allow
+# R6: list markers are stripped before the fence check; a same-line ``` span is content (Stop mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- ${FENCE}text${NL}  none${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}1) ~~~${NL}   N/A${NL}   ~~~}"
+expect "R6: numbered tilde fence holding N/A (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first: ${FENCE}none${FENCE}}"
+expect "R6: same-line span holding none (stop): blocks" block "placeholder"
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first: ${FENCE}test_café failed${FENCE}}"
+expect "R6: same-line span holding evidence (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- ${FENCE}test_x failed, then passed${FENCE}}"
+expect "R6: bullet same-line span holding evidence (stop): allow" allow
+reset; ran "pytest"; edit src/tax.py; ran "pytest"; review; stop "${E_RENAME/$FF_RISK/Failing first:${NL}- ${FENCE}text${NL}  test_x failed, then passed${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding evidence (stop): allow" allow
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures risk-gate test(s) failed"

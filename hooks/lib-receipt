@@ -178,9 +178,14 @@ entries_state() {
       sub(/[.]+$/, "", t)
       return t
     }
-    function add(t) {
-      # A code fence delimiter (``` or ~~~, with any info string) is presentation, not an entry.
-      if (t ~ /^[[:space:]]*(```|~~~)/) return
+    function add(t,   f) {
+      # A code fence delimiter (``` or ~~~, with any info string, after any list markers) is
+      # presentation, not an entry. A line that also closes the span (```x``` on one line) is content.
+      f = t
+      while (f ~ item) sub(item, "", f)
+      sub(/^[[:space:]]+/, "", f)
+      if (f ~ /^```/ && substr(f, 4) !~ /```/) return
+      if (f ~ /^~~~/ && substr(f, 4) !~ /~~~/) return
       t = norm(t)
       if (t == "") return
       texts++

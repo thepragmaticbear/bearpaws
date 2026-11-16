@@ -421,6 +421,20 @@ reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1)${NL}  -}"
 expect "R5: Review nested bare markers (commit): blocks" block "Review"
 reset; stage src/tax.py; gate "${ELEVATED/$REV_GIT/Review:${NL}${NL}1) bp:code-reviewer — Ready to merge: Yes}"
 expect "R5: Review numbered evidence (commit): passes" pass
+# R6: list markers are stripped before the fence check; a same-line ``` span is content (commit mode).
+FENCE='```'  # backticks inside double quotes would run a command substitution
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}text${NL}  none${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}1) ~~~${NL}   N/A${NL}   ~~~}"
+expect "R6: numbered tilde fence holding N/A (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: ${FENCE}none${FENCE}}"
+expect "R6: same-line span holding none (commit): blocks" block "placeholder"
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first: ${FENCE}test_café failed${FENCE}}"
+expect "R6: same-line span holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}test_x failed, then passed${FENCE}}"
+expect "R6: bullet same-line span holding evidence (commit): passes" pass
+reset; stage src/tax.py; gate "${ELEVATED/$FF_GIT/Failing first:${NL}- ${FENCE}text${NL}  test_x failed, then passed${NL}  ${FENCE}}"
+expect "R6: list-wrapped fence holding evidence (commit): passes" pass
 
 # M-f: missing-receipt error lists what commits require and does not ask for Not checked.
 reset; stage src/ui/button.py; gate "Fix button label"
