@@ -12,27 +12,8 @@ description: Use when executing implementation plans with independent tasks in t
   <triggers>
     <rule>Use when you have an implementation plan and the user chose subagent-driven execution.</rule>
     <rule>Use when tasks are mostly independent and you're staying in this session.</rule>
+    <rule>No plan, or tightly coupled tasks: use bp:brainstorming first. Executing in a separate session: use bp:executing-plans.</rule>
   </triggers>
-
-  <flow format="dot">
-    ```dot
-    digraph when_to_use {
-      "Have plan?" [shape=diamond];
-      "Tasks independent?" [shape=diamond];
-      "Stay in session?" [shape=diamond];
-      "subagent-driven-dev" [shape=box];
-      "executing-plans" [shape=box];
-      "brainstorm first" [shape=box];
-
-      "Have plan?" -> "Tasks independent?" [label="yes"];
-      "Have plan?" -> "brainstorm first" [label="no"];
-      "Tasks independent?" -> "Stay in session?" [label="yes"];
-      "Tasks independent?" -> "brainstorm first" [label="tightly coupled"];
-      "Stay in session?" -> "subagent-driven-dev" [label="yes"];
-      "Stay in session?" -> "executing-plans" [label="parallel session"];
-    }
-    ```
-  </flow>
 
   <process>
     <step>**Setup** — Read the plan once, extract all tasks with full text, note context, track progress with the plan's checkboxes (and a task-tracking tool if one is available). Set up workspace with bp:using-git-worktrees. If the approved plan exists only in the session (native plan mode), save it under `docs/bearpaws/plans/` in that workspace before dispatching the first implementer.</step>
