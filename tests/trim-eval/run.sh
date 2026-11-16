@@ -33,7 +33,7 @@ try:
 except (OSError, ValueError):
     d = {}
 t = d.get("result") or ""
-m = re.search(r"NEXT:\s*`?(bp:[\w-]+)", t)
+m = re.fullmatch(r"\s*NEXT:\s*`?(bp:[\w-]+)`?\.?\s*", t)  # whole reply: one line, one choice
 got = m.group(1) if m else "?"
 print(json.dumps({"label": label, "case": name, "got": got, "pass": got in expect.split(","),
                   "cost": d.get("total_cost_usd") or 0}))
