@@ -296,6 +296,10 @@ class Score(unittest.TestCase):
                    "none: the behavior doesn't change; tests/test_tax.py::test_rounds_half_up pins it"):
             r = self.run_score("money-rename", self.rename_money, run + receipt(ff))
             self.assertEqual((r["failing_first_preserved"], r["expected"]), (True, True), ff)
+        # The named test wrapped onto the next line still counts; the next key ends the value.
+        r = self.run_score("money-rename", self.rename_money,
+                           run + receipt("none, behavior preserved; pinned by\n  tests/test_tax.py"))
+        self.assertEqual((r["failing_first_preserved"], r["expected"]), (True, True))
         # A bare placeholder, a reason with no named test, a red run of a renamed test (not a test for
         # the risk), and no line at all.
         for ff in ("N/A", "not applicable, since the change doesn't alter behavior.",

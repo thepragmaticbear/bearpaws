@@ -453,6 +453,23 @@ def receipt(text, field):
     return re.sub(r"[*`]", "", vals[-1]).strip() if vals else None
 
 
+def receipt_block(text, field):
+    """Like receipt(), plus wrapped lines up to a blank line or the next `Key:` line."""
+    lines = (text or "").splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(rf"(?i)^\W*{re.escape(field)}\W*:", line):
+            start = i
+    if start is None:
+        return None
+    parts = [re.sub(rf"(?i)^\W*{re.escape(field)}\W*:\s*", "", lines[start])]
+    for line in lines[start + 1:]:
+        if not line.strip() or re.match(r"^\W*[A-Za-z][\w ]{0,30}:(\s|$)", line):
+            break
+        parts.append(line.strip())
+    return re.sub(r"[*`]", "", " ".join(parts)).strip()
+
+
 def names_a_check(text):
     """A Verified: line (or an implementer report's Testing:/Tested: line) that names something
     checked (docs and typo edits)."""
@@ -479,7 +496,7 @@ def preserved_receipt(text):
     """Failing first: says behavior is preserved, names a pinning test (or points at a Pinned: line
     that names one), and claims no red run (a renamed test failing on import is not a test for the
     risk). A pointer whose Pinned: line names no test is unresolved and fails."""
-    v = receipt(text, "Failing first")
+    v = receipt_block(text, "Failing first")
     if not v or not PRESERVED.search(v) or RED_CLAIM.search(v):
         return False
     if NAMES_TEST.search(v):
