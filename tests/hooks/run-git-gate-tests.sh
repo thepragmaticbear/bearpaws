@@ -88,19 +88,21 @@ stage_in b.py; printf '%s\n' "$ROUTINE" >"$TMP_ROOT/msg"; rc=0; (cd "$R2" && bas
 # Run from a subdirectory: paths are still repo-relative.
 reset; stage src/auth/login.py; printf '%s\n' "$ROUTINE" >"$TMP_ROOT/msg"; rc=0; (cd "$R/src" && bash "$GATE" "$TMP_ROOT/msg") 2>"$TMP_ROOT/err" || rc=$?
 [ "$rc" = 0 ] && grep -qF src/auth/login.py "$TMP_ROOT/err" && echo "OK: warning from a subdirectory" || fail "subdir run: rc=$rc err=$(cat "$TMP_ROOT/err")"
-# session, token, schema and price match anywhere in a path, except inside a BENIGN word like tokenizer.
+# session, token, schema and refund match anywhere in a path, except inside a BENIGN word like tokenizer.
 reset; stage src/tokenizer.py; gate "$ROUTINE"; expect "routine on tokenizer.py does not warn" pass
 reset; stage src/session.py; gate "$ROUTINE"; expect "routine on session.py still warns" warn "src/session.py"
 reset; stage src/sessionManager.ts; gate "$ROUTINE"; expect "routine on sessionManager.ts warns" warn "src/sessionManager.ts"
 for p in src/session.py app/sessions/store.ts lib/userSession.ts auth/accessToken.ts tokens.json db/schema.sql \
-  schemas/user.json pricing/price_list.py prices.csv login.py migrations/001.sql src/auth/x.go a/passwd \
-  CREDENTIALS.md secret.txt crypto.go permission.rb acl.c policy.yml payment.py billing.ts invoice.py money.go query.sql \
-  src/sessionManager.ts auth/TokenStore.ts lib/tokenService.ts db/schemaRegistry.ts src/PriceCalculator.ts pricing.ts \
-  ui/sessionStorage-polyfill.js src/tokenstore.go src/sessionstore.go src/tokenvalidator.go src/pricecalc.go pricelist.py \
-  src/schemaregistry.ts auth/login.py crypto/aes.py secrets.yaml payments/stripe.ts migrations/002_add_users.py src/userAcl.ts ACLManager.ts; do
+  schemas/user.json refunds/issue.py autorefund.ts login.py migrations/001.sql src/auth/x.go a/passwd \
+  CREDENTIALS.md secret.txt crypto.go permission.rb acl.c policy.yml payment.py billing.ts query.sql \
+  src/sessionManager.ts auth/TokenStore.ts lib/tokenService.ts db/schemaRegistry.ts src/RefundService.ts \
+  ui/sessionStorage-polyfill.js src/tokenstore.go src/sessionstore.go src/tokenvalidator.go \
+  src/schemaregistry.ts auth/login.py crypto/aes.py secrets.yaml payments/stripe.ts migrations/002_add_users.py src/userAcl.ts ACLManager.ts src/chargeback.py; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: sensitive_paths matches $p" || fail "sensitive_paths should match $p"
 done
 for p in src/tokenizer.py src/Tokenizer.ts docs/schematic.svg lib/priceless.md README.md \
+  pricing/price_list.py prices.csv src/PriceCalculator.ts money.go src/money.py src/cart.py \
+  src/charging_station.py src/supercharger.py src/discharge.py src/recharge.py src/surcharge.py \
   AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && fail "sensitive_paths should not match $p" || echo "OK: sensitive_paths does not match $p"
 done
@@ -298,11 +300,11 @@ for rv in none skipped "(skipped)" skip "skip for now" "n/a" "n.a." na "-" "—"
 done
 
 # I-B: restored unanchored sensitive stems and benign removals in sensitive_paths and git gate.
-for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/getprice.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py; do
+for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/autorefund.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py src/charges.py src/payouts.py src/ledger.py; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && echo "OK: I-B sensitive_paths matches $p" || fail "I-B sensitive_paths should match $p"
   reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on $p warns" warn "$p"
 done
-for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
+for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md src/charger.py src/invoice.py; do
   [ -n "$(. "$REPO_ROOT/hooks/lib-receipt"; sensitive_paths <<<"$p")" ] && fail "I-B sensitive_paths should not match $p" || echo "OK: I-B sensitive_paths does not match $p"
   reset; stage "$p"; gate "$ROUTINE"; expect "I-B: routine commit on benign $p passes silently" pass
 done

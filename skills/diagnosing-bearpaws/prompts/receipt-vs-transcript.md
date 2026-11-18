@@ -20,8 +20,9 @@ transcript is. These checks cover what the hook cannot see.
    finding not fixed by a later edit must appear in `Open:`, and any open one makes `Status:
    COMPLETE` false. Cite the line with the finding and the receipt line.
 5. **`Risk: routine` on sensitive paths.** Edited paths naming auth, login, session, token, password,
-   credential, secret, crypto, permission, ACL, policy, payment, billing, invoice, money, price,
-   pricing, migration, schema or SQL are elevated.
+   credential, secret, crypto, permission, ACL, policy, payment, billing, refund, charge,
+   payout, ledger, migration, schema or SQL suggest elevated work; check what the change does
+   before calling `Risk: routine` wrong.
 6. **Not a run.** A heredoc that writes a test file, a commit command, an `echo` of results, or a
    background launch (`run_in_background`, trailing `&`) is not a test run; a `Verified:` resting on
    one is unsupported.

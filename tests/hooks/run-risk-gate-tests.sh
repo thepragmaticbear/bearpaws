@@ -1169,10 +1169,10 @@ for rv in none skipped "(skipped)" skip "skip for now" "n/a" "n.a." na "-" "—"
 done
 
 # I-B: unanchored sensitive stems match restored paths; benign words stay quiet.
-for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/getprice.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py; do
+for p in src/adminlogin.php src/userpolicy.ts db/automigrate.go src/autorefund.js src/rolepermission.go src/hashcrypt.c src/postgresql_store.py src/charges.py src/payouts.py src/ledger.py; do
   reset; edit "$p"; stop "$ROUTINE"; expect "I-B: routine on $p nudges" block "$p"
 done
-for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md; do
+for p in src/police.py src/policeman.go src/cryptic.py lib/priceless.md src/tokenizer.py docs/schematic.svg AUTHORS.md docs/authoring.md oracle.py miracle.js src/regression.py src/compression.go docs/secretary.md src/charger.py src/invoice.py; do
   reset; edit "$p"; stop "$ROUTINE"; expect "I-B: routine on benign $p: no nudge" allow
 done
 
