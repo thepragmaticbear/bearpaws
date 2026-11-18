@@ -28,7 +28,7 @@ description: Use when executing implementation plans with independent tasks in t
 
   ## Fix loop
 
-  A fix round is one fix dispatch plus one scoped re-review. At most 5 rounds per task.
+  Treat confirmed defects in changed code in the task's elevated risk class as at least Important, even if labeled Minor. A fix round is one fix dispatch plus one scoped re-review. At most 5 rounds per task.
   - **Rounds 1–3:** resume the original implementer with the open findings verbatim.
   - **Rounds 4–5:** a fresh implementer on a more capable model, told how many attempts came before.
   - Each implementer re-runs the tests covering the amended code and reports the command and output before the re-review is dispatched.
