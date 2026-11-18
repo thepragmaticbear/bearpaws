@@ -4,3 +4,6 @@ risky-oneliner|patch,elevated,bp:requesting-code-review+bp:verification-before-c
 probe|probe,routine,|Is it feasible to switch our ORM from SQLAlchemy to Peewee? Just investigate and tell me; don't change anything.
 vague-feature|build,routine,bp:brainstorming|Add an export button to the reports page.
 money-rename|patch,elevated,bp:requesting-code-review|Rename calc_tax to compute_tax in billing/tax.py and update every caller. It is a pure rename, no behavior change.
+cart-discount|*,routine,|Add discount code support to the cart in src/cart.py: apply_discount(code) on Cart. "SAVE10" takes 10% off the total, "FLAT5" takes 5.00 off but the total never goes below 0, any other code raises ValueError.
+price-format|*,routine,|Money formatting is duplicated in src/invoice.py, src/receipt.py and src/report.py and the copies disagree. Extract one format_money(amount, currency) into src/money.py and use it in all three.
+refund-cap|*,elevated,bp:requesting-code-review|refund() in src/billing.py let support refund $150 on a $100 order. Reject a refund larger than the order total with ValueError.

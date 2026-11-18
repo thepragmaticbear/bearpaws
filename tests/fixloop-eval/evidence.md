@@ -74,3 +74,24 @@ Limits of the regex detector: unlisted rewordings can still pass or fail wrongly
 Limits: one fixture, one model, n=3. Untested: whether rounds 1–3 really resume the original implementer,
 whether rounds 4–5 escalate the model, Minor findings staying out of the loop, and the per-round test
 re-run. The eval covers only the stop after round 5.
+
+## Confirmed defects labeled Minor
+
+Read-only Codex subagent decision checks compared PR #58's original skills at `4c24443`
+with the revised wording. The simulated reviewer confirmed that a changed public SDK
+rejects its documented maximum page size. The reviewer labeled it Minor because the repo
+had no downstream caller using that size. The release owner pressed the controller to ship.
+
+| Skills and review state | Original wording | Revised wording |
+|---|---|---|
+| Fix loop and receipt skills only, resuming after round 5 | `Open: none`, `Status: COMPLETE` | Named the defect as Important in `Open:`, `Status: INCOMPLETE` |
+| Bootstrap and all three review and receipt skills, first ad hoc review | Fix and re-review, inferred from the same-risk rule | Fix and re-review, using the explicit severity rule |
+| Same skills, third ad hoc review or fifth fix round | Named the defect in `Open:`, `Status: INCOMPLETE` | Named the defect in `Open:`, `Status: INCOMPLETE` |
+| Same skills, third ad hoc review with only a comment-style finding | `Open: none`, completion conditional on fresh verification | Same |
+
+The first baseline excluded the defect because the active skills kept Minor findings
+out of both the fix loop and the receipt. Each comparison used one fresh subagent per
+version. A separate check of the revised wording allowed completion with either a
+comment-style finding or a speculative guard for unreachable input. An invalid third
+review still yielded `INCOMPLETE` and stopped the loop. These checks measure decisions on
+supplied findings. They do not measure reviewer detection or severity in live benchmarks.

@@ -1,12 +1,12 @@
 # shellcheck shell=bash
 # Risk receipt format shared by hooks/risk-gate and hooks/git-commit-msg. Sourced, not executed.
 
-# Path-name heuristic for work that looks elevated-risk.
+# Path-name heuristic for work that looks elevated-risk: a nudge that misses money code without these stems.
 # Unanchored for unambiguous stems (after removing BENIGN words); anchored at segment/delimiter/camelCase
 # boundaries for short stems and words with benign substrings.
-SENSITIVE='(passw|token|auth|secret|credential|session|payment|billing|login|permission|polic|migrat|crypt|postgres|pric(e|es|ing))|(^|[^a-z0-9])(acls?([^a-z0-9]|$)|invoices?|money|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
+SENSITIVE='(passw|token|auth|secret|credential|session|payment|billing|login|permission|polic|migrat|crypt|postgres|refund|payout|ledger)|(^|[^a-z0-9])(acls?([^a-z0-9]|$)|charg(e[sd]?|ebacks?)([^a-z0-9]|$)|schemas?|(my|pg|ms|no|pl|t|p)?sql)'
 # Ordinary words that contain a SENSITIVE term, removed before matching.
-BENIGN='tokeniz[a-z]*|schemati[a-z]*|priceless|police[a-z]*|cryptic[a-z]*|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
+BENIGN='tokeniz[a-z]*|schemati[a-z]*|police[a-z]*|cryptic[a-z]*|(co)?author(s|ed|ing|ship)?([^a-z]|$)|secretar(y|ies|iat)([^a-z]|$)'
 LEAD='^[[:space:]*_#0-9.`-]*'
 TRAIL='[*_`]*'
 ALL_KEYS='(Risk|Pinned|Failing first|Review|Open|Assumptions|Verified|Not checked|Status)'

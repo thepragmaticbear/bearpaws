@@ -54,7 +54,7 @@ description: Use when about to claim work is complete, fixed, or passing, or bef
   Status: COMPLETE                                    ← INCOMPLETE if any step is missing
   ```
 
-  Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. `Not checked:` names every check you did not run (CI jobs, linters, manual paths), or `none`. A missing step means `Status: INCOMPLETE`, never a softened line. `Open:` lists every Critical or Important review finding you did not fix; `COMPLETE` needs exactly `Open: none`, with no note after it; put notes (an optional Minor left undone) on another line. A finding your human partner deferred is still open.
+  Routine work needs only `Risk:`, `Verified:`, `Not checked:`, and `Status:`. `Not checked:` names every check you did not run (CI jobs, linters, manual paths), or `none`. A missing step means `Status: INCOMPLETE`, never a softened line. Treat confirmed defects in changed code in the task's elevated risk class as at least Important, even if labeled Minor. `Open:` lists every Critical or Important review finding you did not fix; `COMPLETE` needs exactly `Open: none`, with no note after it; put notes (an optional Minor left undone) on another line. A finding your human partner deferred is still open.
 
   When committing, put the same receipt lines in the commit message as trailers.
 
