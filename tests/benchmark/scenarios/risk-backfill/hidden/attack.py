@@ -12,6 +12,7 @@ class Attack(unittest.TestCase):
             "INSERT INTO users (first, last, display_name) VALUES (?, ?, ?)",
             [("Ann", "Lee", None), ("Ann", "Lee", "Annie"), ("Cy", None, None), ("Bo", "Kim", None)],
         )
+        self.conn.commit()
 
     def names(self):
         return self.conn.execute("SELECT display_name FROM users ORDER BY id").fetchall()

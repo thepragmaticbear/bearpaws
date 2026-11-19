@@ -1,1 +1,1 @@
-Password reset tokens in src/reset.py never expire. verify_reset_token should only accept a token for 1 hour after it was created (created_at); otherwise return None.
+Password reset tokens in src/reset.py never expire. verify_reset_token should only accept a token for 1 hour after it was created (created_at); otherwise return None. A token is single-use: once verify_reset_token accepts it, later calls with that token return None.
