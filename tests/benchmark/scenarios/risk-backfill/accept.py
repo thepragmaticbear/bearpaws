@@ -12,6 +12,7 @@ class Accept(unittest.TestCase):
             "INSERT INTO users (first, last, display_name) VALUES (?, ?, NULL)",
             [("Ann", "Lee"), ("Bo", "Kim")],
         )
+        self.conn.commit()
 
     def test_names_filled(self):
         backfill_display_name(self.conn)

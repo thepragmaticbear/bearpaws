@@ -1,0 +1,6 @@
+{
+  "name": "notegate",
+  "displayName": "Review note + risk gate",
+  "description": "Benchmark arm: the note arm's two sentences plus Bearpaws' risk-receipt paragraph, with the Bearpaws risk-gate hooks. No skills or agents.",
+  "version": "0.0.1"
+}
