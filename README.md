@@ -74,6 +74,19 @@ The same receipt can be required in commit messages, as trailers or in the body,
 
 ## Evidence
 
+**With and without Bearpaws** on Opus in Claude Code: the [latest run](docs/benchmarks/2026-11-18-opus-baseline.md#follow-up-note-arm-short-bootstrap-review-cap-vague-requests), 3 runs per scenario, scored by hidden acceptance tests. Bearpaws is v4.1.0 except for the review-severity rule, which shipped after these runs.
+
+| | Without Bearpaws | With Bearpaws |
+|---|---:|---:|
+| Everyday tasks (9 scenarios): accepted | 26/27 | 27/27 |
+| Everyday tasks: cost per accepted task | $0.152 | $0.266 (1.8×) |
+| Risky tasks (6 scenarios): accepted | 18/18 | 18/18 |
+| Risky tasks: defects that got through | 8/18 | **3/18** |
+| Risky tasks: cost per accepted task | $0.133 | $0.559 (4.2×) |
+| Independent reviews run | 0 | 29 on risky tasks, 7 on everyday tasks |
+
+In the same run, no plugin plus a two-sentence note asking for an independent review of risky changes also let 3/18 through, at about 40% lower cost than Bearpaws on risky tasks (16/18 accepted). `risk-reset-token` got through in every run of every arm. Before the 4.1.0 rule changes, Bearpaws cost 3.3× and 6.3× no plugin.
+
 The [escaped-defect benchmark](docs/benchmarks/2026-10-12-escaped-defects.md) was pre-registered: six elevated-risk tasks with hidden attack tests, 5 runs per task per arm, Sonnet in Claude Code.
 
 - **Escaped defects:** Bearpaws 9/30, no plugin 12/30, Superpowers 6.4.2 12/30. The difference is **not statistically significant** (Fisher exact p = 0.59). Counting one run that ended INCOMPLETE with the defect still present, Bearpaws' figure is 10/30.
